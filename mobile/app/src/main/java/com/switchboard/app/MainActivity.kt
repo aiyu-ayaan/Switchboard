@@ -99,6 +99,7 @@ fun SwitchboardApp(
 ) {
     val state by viewModel.uiState.collectAsState()
     val themeConfig by themePreferences.config.collectAsState()
+    val transferConfig by viewModel.transferPreferences.config.collectAsState()
 
     val scanner = rememberLauncherForScan { contents ->
         if (contents != null) viewModel.pair(contents) else viewModel.setScanning(false)
@@ -122,12 +123,15 @@ fun SwitchboardApp(
         currentScreen = AppScreen.Main
     }
 
-    val actions = remember(viewModel) {
+    val actions = remember(viewModel, transferConfig.rateUnit) {
         SectionActions(
             onBrightness = viewModel::setBrightness,
             onContrast = viewModel::setContrast,
             onVolume = viewModel::setVolume,
-            onMedia = viewModel::media
+            onMedia = viewModel::media,
+            onSendFile = viewModel::sendFile,
+            onTransferControl = viewModel::controlTransfer,
+            rateUnit = transferConfig.rateUnit
         )
     }
 
@@ -282,8 +286,11 @@ fun SwitchboardApp(
                     is AppScreen.Settings -> {
                         SettingsScreen(
                             themeConfig = themeConfig,
+                            transferConfig = transferConfig,
                             onSetThemeMode = themePreferences::setThemeMode,
                             onSetDynamicColor = themePreferences::setDynamicColor,
+                            onSetSaveDirectory = viewModel.transferPreferences::setSaveDirectory,
+                            onSetRateUnit = viewModel.transferPreferences::setRateUnit,
                             onBack = { currentScreen = AppScreen.Main }
                         )
                     }

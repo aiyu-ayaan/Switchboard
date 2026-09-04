@@ -1,6 +1,7 @@
 package com.switchboard.app
 
 import android.app.Application
+import android.net.Uri
 import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.compose.ui.graphics.ImageBitmap
@@ -8,6 +9,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.switchboard.app.data.HostStore
+import com.switchboard.app.data.TransferPreferences
 import com.switchboard.app.data.KnownHost
 import com.switchboard.app.net.Actions
 import com.switchboard.app.net.ConnectionEvent
@@ -20,7 +22,9 @@ import com.switchboard.app.net.Playback
 import com.switchboard.app.net.PairingPayload
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.SwitchboardJson
+import com.switchboard.app.net.FileProgress
 import com.switchboard.app.net.Volume
+import com.switchboard.app.transfer.TransferEngine
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +53,9 @@ data class UiState(
     /** Cover art for [HostState.media], decoded once per track. */
     val artwork: ImageBitmap? = null,
     val error: String? = null,
-    val scanning: Boolean = false
+    val scanning: Boolean = false,
+    /** Live transfers first, then the terminal ones the Files history shows. */
+    val transfers: List<FileProgress> = emptyList()
 ) {
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
@@ -63,6 +69,8 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private val store = HostStore(application)
+    private val transfers = TransferEngine.get(application)
+    val transferPreferences = TransferPreferences(application)
     private val client = SwitchboardClient(store.identity, "${Build.MANUFACTURER} ${Build.MODEL}")
 
     private val _uiState = MutableStateFlow(UiState(hosts = store.hosts()))
@@ -85,6 +93,10 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         last?.let(::connect)
 
         startLiveProbing()
+
+        viewModelScope.launch {
+            transfers.transfers.collect { list -> _uiState.update { it.copy(transfers = list) } }
+        }
     }
 
     fun setScanning(scanning: Boolean) = _uiState.update { it.copy(scanning = scanning, error = null) }
@@ -173,6 +185,9 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                             deviceId = event.deviceId,
                             lastConnected = System.currentTimeMillis()
                         )
+                        // The engine only learns how to reach the desktop here;
+                        // before the handshake there is no session to write to.
+                        transfers.bind { action, payload -> client.send(action, payload) }
                         store.save(saved)
                         store.lastHostId = saved.daemonId
                         _uiState.update {
@@ -199,7 +214,10 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                         }
                     }
 
-                    is ConnectionEvent.Failed ->
+                    is ConnectionEvent.FileFrame -> transfers.onFrame(event.action, event.payload)
+
+                    is ConnectionEvent.Failed -> {
+                        transfers.unbind()
                         _uiState.update {
                             it.copy(
                                 status = ConnectionStatus.Disconnected,
@@ -207,14 +225,17 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                                 error = event.reason
                             )
                         }
+                    }
 
-                    ConnectionEvent.Disconnected ->
+                    ConnectionEvent.Disconnected -> {
+                        transfers.unbind()
                         _uiState.update {
                             it.copy(
                                 status = ConnectionStatus.Disconnected,
                                 activeHost = null
                             )
                         }
+                    }
                 }
             }
         }
@@ -223,6 +244,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     fun disconnect() {
         connection?.cancel()
         connection = null
+        transfers.unbind()
         client.disconnect()
         _uiState.update { it.copy(status = ConnectionStatus.Disconnected, activeHost = null) }
         triggerLiveProbe()
@@ -368,6 +390,12 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         }
         client.send(Actions.MEDIA_COMMAND, MediaCommand(action))
     }
+
+    // ---- Files ----
+
+    fun sendFile(uri: Uri) = transfers.send(uri)
+
+    fun controlTransfer(transferId: String, action: String) = transfers.control(transferId, action)
 
     /** Requests cover art when the host moves to a track we have not seen. */
     private fun syncArtwork(id: String) {

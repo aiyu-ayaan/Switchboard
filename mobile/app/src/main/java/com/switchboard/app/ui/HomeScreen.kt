@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Monitor
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,17 +48,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.switchboard.app.UiState
+import android.net.Uri
 import com.switchboard.app.net.Display
+import com.switchboard.app.net.TransferStatus
+import com.switchboard.app.transfer.RateUnit
 
 enum class Section(val title: String, val icon: ImageVector) {
     Displays("Displays", Icons.Filled.Monitor),
     Audio("Audio", Icons.AutoMirrored.Filled.VolumeUp),
-    Media("Media", Icons.Filled.MusicNote);
+    Media("Media", Icons.Filled.MusicNote),
+    Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
         Displays -> state.canControlDisplay
         Audio -> state.canControlVolume
         Media -> state.canControlMedia
+        // Transfers need no host hardware, so this is offered on every desktop
+        // and a host that cannot take the file says so in its own words.
+        Files -> true
     }
 
     fun summaryOf(state: UiState): String = when (this) {
@@ -68,6 +76,11 @@ enum class Section(val title: String, val icon: ImageVector) {
         }
         Audio -> if (state.host.volume.muted) "Muted" else "${state.host.volume.level}%"
         Media -> state.host.media.summary
+        Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
+            0 -> "Send and receive files"
+            1 -> "1 transfer in progress"
+            else -> "$running transfers in progress"
+        }
     }
 }
 
@@ -75,7 +88,10 @@ class SectionActions(
     val onBrightness: (Display, Int) -> Unit,
     val onContrast: (Display, Int) -> Unit,
     val onVolume: (Int, Boolean) -> Unit,
-    val onMedia: (String) -> Unit
+    val onMedia: (String) -> Unit,
+    val onSendFile: (Uri) -> Unit,
+    val onTransferControl: (String, String) -> Unit,
+    val rateUnit: RateUnit
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -295,6 +311,13 @@ private fun SectionBody(
                     onMedia = actions.onMedia
                 )
             }
+
+            Section.Files -> FilesBody(
+                transfers = state.transfers,
+                rateUnit = actions.rateUnit,
+                onSendFile = actions.onSendFile,
+                onControl = actions.onTransferControl
+            )
         }
     }
 }

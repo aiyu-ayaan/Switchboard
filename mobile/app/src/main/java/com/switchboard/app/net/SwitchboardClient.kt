@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +31,14 @@ sealed interface ConnectionEvent {
     ) : ConnectionEvent
     data class State(val state: HostState) : ConnectionEvent
     data class Artwork(val artwork: MediaArtwork) : ConnectionEvent
+
+    /**
+     * Any `file.*` frame, handed over undecoded. Transfers are stateful and
+     * ordered, so the engine that owns that state decodes them; routing six
+     * more typed events through the UI layer would only widen the path they
+     * take to get there.
+     */
+    data class FileFrame(val action: String, val payload: JsonElement) : ConnectionEvent
     data class Failed(val reason: String) : ConnectionEvent
     data object Disconnected : ConnectionEvent
 }
@@ -256,6 +265,9 @@ class SwitchboardClient(
                                 )
                             )
                         )
+
+                        envelope.action.startsWith("file.") && payload != null ->
+                            trySend(ConnectionEvent.FileFrame(envelope.action, payload))
                     }
                 }.onFailure { Log.w(TAG, "dropping frame: ${it.message}") }
             }
@@ -308,6 +320,12 @@ class SwitchboardClient(
         is DisplaySet -> SwitchboardJson.encodeToJsonElement(DisplaySet.serializer(), payload)
         is Volume -> SwitchboardJson.encodeToJsonElement(Volume.serializer(), payload)
         is MediaCommand -> SwitchboardJson.encodeToJsonElement(MediaCommand.serializer(), payload)
+        is FileOffer -> SwitchboardJson.encodeToJsonElement(FileOffer.serializer(), payload)
+        is FileAccept -> SwitchboardJson.encodeToJsonElement(FileAccept.serializer(), payload)
+        is FileChunk -> SwitchboardJson.encodeToJsonElement(FileChunk.serializer(), payload)
+        is FileAck -> SwitchboardJson.encodeToJsonElement(FileAck.serializer(), payload)
+        is FileComplete -> SwitchboardJson.encodeToJsonElement(FileComplete.serializer(), payload)
+        is FileControl -> SwitchboardJson.encodeToJsonElement(FileControl.serializer(), payload)
         else -> throw IllegalArgumentException("unsupported payload ${payload::class}")
     }
 
