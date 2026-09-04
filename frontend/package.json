@@ -1,0 +1,20 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Switchboard Desktop Application (Electron + React + Tailwind CSS)",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "echo \"Start Electron + React dev server\"",
+    "build": "echo \"Build desktop app\""
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.4.0"
+  }
+}

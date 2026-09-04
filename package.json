@@ -1,0 +1,18 @@
+{
+  "name": "switchboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform system control and file transfer via mobile device",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:frontend": "pnpm --filter frontend build"
+  },
+  "keywords": [
+    "switchboard",
+    "remote-control",
+    "electron",
+    "android",
+    "go"
+  ],
+  "license": "MIT"
+}

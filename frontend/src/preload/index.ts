@@ -1,0 +1,2 @@
+// Electron Preload Script
+export {};

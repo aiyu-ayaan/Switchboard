@@ -1,0 +1,62 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+dist-electron/
+out/
+build/
+.next/
+.cache/
+
+# Go / Backend
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Android / Gradle / Kotlin
+.gradle/
+local.properties
+captures/
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+mobile/.gradle/
+mobile/app/build/
+mobile/build/
+
+# Logs & Temporary Files
+logs/
+*.log
+tmp/
+temp/
