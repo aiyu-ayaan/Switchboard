@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Switchboard connects to desktop hosts by raw LAN address (ws://192.168.x.x),
+  so there is no domain to pin and no CA that could vouch for a home network
+  address. Android's network security config cannot express "private address
+  ranges only", so cleartext is permitted at the transport level.
+
+  The connection is not unprotected. Every frame after the handshake is
+  AES-256-GCM under a key derived from an X25519 double Diffie-Hellman, the
+  host's identity key is pinned on first pairing and checked on every reconnect,
+  and both ends prove possession of the session key before any command is
+  accepted. TLS would add certificate handling without adding a guarantee the
+  handshake does not already provide.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
