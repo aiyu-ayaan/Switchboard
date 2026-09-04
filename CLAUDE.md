@@ -94,6 +94,8 @@ A commit message should consist of a short summary, a detailed description (if n
 - You can add a detailed description after the short summary if needed to provide additional context about the changes made in the commit.
 - After each commit, update the documentation in `@devdocs` (`development/devdocs/`) and `docs/docs/` with the relevant information.
 - When committing changes that touch the `development/` submodule, commits must be created in both the submodule repo and the main repo.
+- See [`development/Commit.md`](development/Commit.md) for complete guidelines on submodule detached HEAD prevention and commit rules.
+- See [`development/Release-Commit.md`](development/Release-Commit.md) for automated release triggers and documentation deploy markers (`!alpha`, `!beta`, `!docs`, etc.).
 
 ---
 

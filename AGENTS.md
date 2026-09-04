@@ -1,3 +1,1 @@
-# Switchboard
-
-Use @Claude.md
+CLAUDE.md
