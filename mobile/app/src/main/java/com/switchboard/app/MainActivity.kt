@@ -201,11 +201,7 @@ fun SwitchboardApp(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = if (state.status == ConnectionStatus.Connecting) {
-                                                "Connecting to ${state.activeHost?.hostName ?: "desktop"}…"
-                                            } else {
-                                                "Connected ${state.liveHostsCount}"
-                                            },
+                                            text = "Connected ${state.liveHostsCount}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontFamily = FontFamily.Monospace,
                                             color = if (state.liveHostsCount > 0) {
