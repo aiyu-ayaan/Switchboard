@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -52,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.switchboard.app.data.ThemePreferences
+import com.switchboard.app.ui.ConnectionInfoSheet
 import com.switchboard.app.ui.HomeScreen
 import com.switchboard.app.ui.PairingScreen
 import com.switchboard.app.ui.Section
@@ -105,10 +107,14 @@ fun SwitchboardApp(
     val connected = state.status == ConnectionStatus.Connected
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
+    var showConnectionInfo by remember { mutableStateOf(false) }
 
     LaunchedEffect(connected) {
-        if (!connected && currentScreen is AppScreen.Detail) {
-            currentScreen = AppScreen.Main
+        if (!connected) {
+            showConnectionInfo = false
+            if (currentScreen is AppScreen.Detail) {
+                currentScreen = AppScreen.Main
+            }
         }
     }
 
@@ -211,24 +217,24 @@ fun SwitchboardApp(
                     }
                 },
                 actions = {
-                    if (state.status == ConnectionStatus.Connecting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .padding(end = 4.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(10.dp))
-                    }
+                    if (currentScreen is AppScreen.Main) {
+                        if (state.status == ConnectionStatus.Connecting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .padding(end = 4.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(10.dp))
+                        }
 
-                    if (currentScreen !is AppScreen.Settings) {
                         if (connected) {
                             IconButton(
-                                onClick = { viewModel.disconnect() },
+                                onClick = { showConnectionInfo = true },
                                 modifier = Modifier.size(48.dp)
                             ) {
-                                Icon(Icons.Filled.SwapHoriz, contentDescription = "Switch desktop")
+                                Icon(Icons.Filled.Info, contentDescription = "Connection info")
                             }
                         } else {
                             IconButton(
@@ -237,13 +243,13 @@ fun SwitchboardApp(
                             ) {
                                 Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan pairing code")
                             }
-                        }
 
-                        IconButton(
-                            onClick = { currentScreen = AppScreen.Settings },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Open Settings")
+                            IconButton(
+                                onClick = { currentScreen = AppScreen.Settings },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Open Settings")
+                            }
                         }
                     }
                 },
@@ -309,6 +315,21 @@ fun SwitchboardApp(
                 }
             }
         }
+    }
+
+    if (showConnectionInfo && connected) {
+        ConnectionInfoSheet(
+            host = state.activeHost,
+            onDisconnect = {
+                showConnectionInfo = false
+                viewModel.disconnect()
+            },
+            onOpenSettings = {
+                showConnectionInfo = false
+                currentScreen = AppScreen.Settings
+            },
+            onDismiss = { showConnectionInfo = false }
+        )
     }
 }
 
