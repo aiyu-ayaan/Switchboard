@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased overflow-hidden;
+    /* Chrome is custom-drawn, so nothing in the shell should look selectable. */
+    user-select: none;
+  }
+
+  /* Keyboard focus must stay visible: the sliders are operable by arrow keys
+     and that is the required alternative to dragging. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-canvas rounded-sm;
+  }
+}
+
+@layer components {
+  /* A range input styled as a track + thumb without losing native keyboard
+     behaviour, which a div-based slider would have to reimplement. */
+  .level-slider {
+    @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-raised;
+  }
+
+  .level-slider::-webkit-slider-thumb {
+    @apply h-4 w-4 appearance-none rounded-full border-0 bg-level;
+    box-shadow: 0 0 0 3px rgba(26, 27, 38, 0.9);
+    transition: transform 150ms ease;
+  }
+
+  .level-slider:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
+  }
+
+  .level-slider:disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+
+  .app-drag {
+    -webkit-app-region: drag;
+  }
+
+  .app-no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

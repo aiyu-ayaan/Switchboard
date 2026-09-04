@@ -5,16 +5,31 @@
   "description": "Switchboard Desktop Application (Electron + React + Tailwind CSS)",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "echo \"Start Electron + React dev server\"",
-    "build": "echo \"Build desktop app\""
+    "dev": "concurrently -k -n vite,electron -c magenta,cyan \"vite\" \"pnpm dev:electron\"",
+    "dev:electron": "wait-on tcp:127.0.0.1:5273 && tsc -p tsconfig.node.json && cross-env SWITCHBOARD_DEV=1 electron .",
+    "build": "vite build && tsc -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
+    "lucide-react": "^0.454.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^22.7.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
     "electron": "^31.0.0",
+    "postcss": "^8.4.47",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vite": "^5.4.8",
+    "wait-on": "^8.0.1"
   }
 }
