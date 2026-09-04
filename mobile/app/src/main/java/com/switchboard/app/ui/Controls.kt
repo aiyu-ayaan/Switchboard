@@ -1,5 +1,11 @@
 package com.switchboard.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -549,12 +555,21 @@ fun TransportRow(playing: Boolean, onMedia: (String) -> Unit) {
                 .bouncyClickable { onMedia("toggle") }
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (playing) "Pause" else "Play",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(30.dp)
-                )
+                AnimatedContent(
+                    targetState = playing,
+                    transitionSpec = {
+                        (scaleIn(ExpressiveMotion.Bouncy) + fadeIn(tween(180)))
+                            .togetherWith(scaleOut(ExpressiveMotion.Snappy) + fadeOut(tween(180)))
+                    },
+                    label = "playPauseMorph"
+                ) { isPlaying ->
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
             }
         }
 

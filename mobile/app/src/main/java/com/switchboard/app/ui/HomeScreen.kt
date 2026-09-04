@@ -1,5 +1,10 @@
 package com.switchboard.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -55,16 +60,15 @@ import com.switchboard.app.transfer.RateUnit
 
 enum class Section(val title: String, val icon: ImageVector) {
     Displays("Displays", Icons.Filled.Monitor),
-    Audio("Audio", Icons.AutoMirrored.Filled.VolumeUp),
+    Audio("Audio & Media", Icons.AutoMirrored.Filled.VolumeUp),
     Media("Media", Icons.Filled.MusicNote),
     Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
         Displays -> state.canControlDisplay
-        Audio -> state.canControlVolume
-        Media -> state.canControlMedia
-        // Transfers need no host hardware, so this is offered on every desktop
-        // and a host that cannot take the file says so in its own words.
+        Audio -> state.canControlVolume || state.canControlMedia
+        // When media is active/playing or integrated into Audio, hide separate Media row if Audio is available
+        Media -> state.canControlMedia && !state.canControlVolume
         Files -> true
     }
 
@@ -74,7 +78,14 @@ enum class Section(val title: String, val icon: ImageVector) {
             1 -> state.host.displays.first().name
             else -> "$count panels"
         }
-        Audio -> if (state.host.volume.muted) "Muted" else "${state.host.volume.level}%"
+        Audio -> {
+            val volStr = if (state.host.volume.muted) "Muted" else "${state.host.volume.level}%"
+            if (state.host.media.active && state.host.media.title.isNotEmpty()) {
+                "$volStr • ${state.host.media.summary}"
+            } else {
+                volStr
+            }
+        }
         Media -> state.host.media.summary
         Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
             0 -> "Send and receive files"
@@ -185,14 +196,12 @@ private fun SectionRow(
         shape = RoundedCornerShape(24.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
+            .bouncyCombinedClickable(
                 onClick = onClick,
                 onLongClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onLongClick()
-                },
-                onClickLabel = "Open ${section.title}",
-                onLongClickLabel = "${section.title} quick controls"
+                }
             ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -295,16 +304,49 @@ private fun SectionBody(
             }
 
             Section.Audio -> {
-                VolumeCard(
-                    level = state.host.volume.level,
-                    muted = state.host.volume.muted,
-                    onVolume = actions.onVolume
-                )
+                if (state.canControlMedia && (state.host.media.active || state.host.media.title.isNotEmpty())) {
+                    SectionCard {
+                        NowPlaying(
+                            media = state.host.media,
+                            artwork = state.artwork,
+                            artSize = if (compact) 64.dp else 88.dp
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        TransportRow(
+                            playing = state.host.media.isPlaying,
+                            onMedia = actions.onMedia
+                        )
+                    }
+                }
+
+                if (state.canControlVolume) {
+                    VolumeCard(
+                        level = state.host.volume.level,
+                        muted = state.host.volume.muted,
+                        onVolume = actions.onVolume
+                    )
+                }
+
                 if (state.canControlMixer) {
                     MixerCard(
                         sessions = state.host.mixer,
                         onSessionVolume = actions.onMixerSession
                     )
+                }
+
+                if (state.canControlMedia && !state.host.media.active && state.host.media.title.isEmpty()) {
+                    SectionCard {
+                        NowPlaying(
+                            media = state.host.media,
+                            artwork = state.artwork,
+                            artSize = if (compact) 64.dp else 88.dp
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        TransportRow(
+                            playing = state.host.media.isPlaying,
+                            onMedia = actions.onMedia
+                        )
+                    }
                 }
             }
 
