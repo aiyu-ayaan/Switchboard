@@ -139,6 +139,7 @@ class SwitchboardClient(
             private var learnedHostKey = ""
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(TAG, "onMessage(text) in phase=$phase: $text")
                 runCatching {
                     when (phase) {
                         Phase.AWAITING_HELLO -> onHello(webSocket, text)
@@ -148,21 +149,19 @@ class SwitchboardClient(
                         Phase.READY -> Log.w(TAG, "ignoring unexpected plaintext frame")
                     }
                 }.onFailure { failure ->
+                    Log.e(TAG, "Error in onMessage handshake: ${failure.message}", failure)
                     trySend(ConnectionEvent.Failed(failure.message ?: "handshake failed"))
                     webSocket.cancel()
                 }
             }
 
             private fun onHello(webSocket: WebSocket, text: String) {
+                Log.i(TAG, "Received hello from server")
                 val hello = SwitchboardJson.decodeFromString(Hello.serializer(), text)
 
-                // When the key is already known (QR scan, or a stored host) it
-                // must match exactly. On manual entry there is nothing to
-                // compare against yet, and the pairing code carries the
-                // authentication instead; the key is pinned on success below.
                 if (expectedHostKey.isNotEmpty()) {
                     check(hello.identityKey == expectedHostKey) {
-                        "this host is not the paired device"
+                        "this host is not the paired device (expected=$expectedHostKey, got=${hello.identityKey})"
                     }
                 }
                 learnedHostKey = hello.identityKey
@@ -194,13 +193,16 @@ class SwitchboardClient(
                 pending = derived
                 daemonId = hello.daemonId
                 phase = Phase.AWAITING_RESULT
+                Log.i(TAG, "Sent auth to server, phase is now AWAITING_RESULT")
             }
 
             private fun onResult(webSocket: WebSocket, text: String) {
+                Log.i(TAG, "Received auth result from server: $text")
                 val result = SwitchboardJson.decodeFromString(AuthResult.serializer(), text)
                 val derived = checkNotNull(pending) { "no session in progress" }
 
                 if (!result.ok) {
+                    Log.e(TAG, "Server rejected auth: ${result.error}")
                     trySend(ConnectionEvent.Failed(result.error.ifEmpty { "pairing rejected" }))
                     webSocket.cancel()
                     return
@@ -217,6 +219,7 @@ class SwitchboardClient(
 
                 session = derived
                 phase = Phase.READY
+                Log.i(TAG, "Handshake complete! Emitting ConnectionEvent.Connected for ${result.hostName}")
                 trySend(
                     ConnectionEvent.Connected(
                         daemonId,
@@ -258,11 +261,13 @@ class SwitchboardClient(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.i(TAG, "WebSocket closed: code=$code, reason=$reason")
                 trySend(ConnectionEvent.Disconnected)
                 channel.close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.w(TAG, "WebSocket onFailure: phase=$phase, error=$t, response=$response")
                 if (phase == Phase.AWAITING_HELLO && startNextConnection()) {
                     Log.i(TAG, "Primary endpoint connection failed ($t), trying fallback endpoint")
                     return
@@ -317,9 +322,13 @@ class SwitchboardClient(
         private fun isEmulator(): Boolean {
             return (Build.FINGERPRINT.startsWith("generic")
                 || Build.FINGERPRINT.startsWith("unknown")
+                || Build.HARDWARE.contains("goldfish")
+                || Build.HARDWARE.contains("ranchu")
                 || Build.MODEL.contains("google_sdk")
                 || Build.MODEL.contains("Emulator")
+                || Build.MODEL.startsWith("sdk_")
                 || Build.MODEL.contains("Android SDK built for x86")
+                || Build.DEVICE.contains("emu")
                 || Build.MANUFACTURER.contains("Genymotion")
                 || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
                 || "google_sdk" == Build.PRODUCT)

@@ -140,7 +140,9 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         connection = viewModelScope.launch {
+            android.util.Log.i("SwitchboardVM", "Starting connection collect for credentials=$credentials")
             client.connect(credentials).collect { event ->
+                android.util.Log.i("SwitchboardVM", "Collected event: $event")
                 when (event) {
                     is ConnectionEvent.Connected -> {
                         // A manual pairing only knows a placeholder ID until the
