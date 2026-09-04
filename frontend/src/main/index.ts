@@ -49,6 +49,35 @@ function daemonPath(): string | null {
   return candidates.find(existsSync) ?? null;
 }
 
+/** Resolves the branded application icon. */
+function appIconPath(): string | undefined {
+  const icoCandidates = [
+    join(app.getAppPath(), 'resources', 'icon.ico'),
+    join(app.getAppPath(), 'dist', 'renderer', 'assets', 'icon.ico'),
+    join(__dirname, '..', 'renderer', 'assets', 'icon.ico'),
+    join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.ico')
+  ];
+  const pngCandidates = [
+    join(app.getAppPath(), 'resources', 'icon.png'),
+    join(app.getAppPath(), 'dist', 'renderer', 'assets', 'icon.png'),
+    join(__dirname, '..', 'renderer', 'assets', 'icon.png'),
+    join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.png')
+  ];
+  const candidates = process.platform === 'win32' ? [...icoCandidates, ...pngCandidates] : pngCandidates;
+  return candidates.find(existsSync);
+}
+
+/** Resolves the tray icon asset. */
+function trayIconPath(): string | undefined {
+  const candidates = [
+    join(app.getAppPath(), 'resources', 'tray.png'),
+    join(app.getAppPath(), 'dist', 'renderer', 'assets', 'tray.png'),
+    join(__dirname, '..', 'renderer', 'assets', 'tray.png'),
+    join(app.getAppPath(), 'src', 'renderer', 'assets', 'tray.png')
+  ];
+  return candidates.find(existsSync);
+}
+
 /** True when a daemon is already answering on the local API. */
 async function daemonRunning(): Promise<boolean> {
   try {
@@ -103,7 +132,9 @@ function showWindow(): void {
 function hideToTray(): void {
   mainWindow?.hide();
   if (!tray) {
-    tray = new Tray(nativeImage.createFromDataURL(TRAY_ICON));
+    const tIcon = trayIconPath();
+    const trayImg = tIcon ? nativeImage.createFromPath(tIcon) : nativeImage.createFromDataURL(TRAY_ICON);
+    tray = new Tray(trayImg);
     tray.setToolTip('Switchboard');
     tray.setContextMenu(
       Menu.buildFromTemplate([
@@ -130,6 +161,7 @@ function hideToTray(): void {
 }
 
 function createWindow(): void {
+  const iconPath = appIconPath();
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 720,
@@ -137,6 +169,7 @@ function createWindow(): void {
     minHeight: 520,
     show: false,
     frame: false,
+    icon: iconPath,
     backgroundColor: '#1a1b26',
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'index.js'),
@@ -145,6 +178,14 @@ function createWindow(): void {
       sandbox: false
     }
   });
+
+  if (iconPath) {
+    try {
+      mainWindow.setIcon(nativeImage.createFromPath(iconPath));
+    } catch {
+      // Ignore fallback
+    }
+  }
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
 
