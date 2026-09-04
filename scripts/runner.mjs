@@ -24,6 +24,7 @@ function log(prefix, message) {
     backend: '\x1b[36m', // Cyan
     frontend: '\x1b[35m', // Magenta
     android: '\x1b[32m', // Green
+    gateway: '\x1b[34m', // Blue
     system: '\x1b[33m', // Yellow
     reset: '\x1b[0m'
   };
@@ -172,9 +173,18 @@ function waitForPort(port, timeoutMs = 60000) {
   });
 }
 
-async function devAll() {
-  log('system', '=== Spinning Backend Daemon & Frontend UI ===');
+async function spinGateway() {
+  return runProcess('node', ['scripts/gateway.mjs'], {
+    cwd: rootDir,
+    name: 'gateway',
+    streamPrefix: true
+  });
+}
 
+async function devAll() {
+  log('system', '=== Spinning Backend Daemon, Frontend UI & Emulator Gateway ===');
+
+  const gateway = spinGateway().catch(err => log('gateway', `Gateway notice: ${err.message}`));
   const backend = spinBackend().catch(err => log('backend', `Backend notice: ${err.message}`));
 
   // Electron starts the daemon itself when none is answering, so the frontend
@@ -183,7 +193,7 @@ async function devAll() {
   if (!ready) log('backend', 'Daemon did not come up in time; starting the frontend anyway.');
 
   const frontend = spinFrontend().catch(err => log('frontend', `Frontend notice: ${err.message}`));
-  return Promise.allSettled([backend, frontend]);
+  return Promise.allSettled([backend, frontend, gateway]);
 }
 
 async function buildAll() {
@@ -221,6 +231,10 @@ switch (action) {
     break;
   case 'dev:frontend':
     spinFrontend().catch(() => {});
+    break;
+  case 'gateway':
+  case 'dev:gateway':
+    spinGateway().catch(() => {});
     break;
   case 'build':
   case 'build:all':

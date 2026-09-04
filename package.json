@@ -12,7 +12,8 @@
     "build:frontend": "pnpm --filter frontend build",
     "android:build": "node scripts/android.mjs assembleDebug",
     "android:run": "node scripts/android.mjs run",
-    "android:test": "node scripts/android.mjs testDebugUnitTest"
+    "android:test": "node scripts/android.mjs testDebugUnitTest",
+    "gateway": "node scripts/gateway.mjs"
   },
   "keywords": [
     "switchboard",

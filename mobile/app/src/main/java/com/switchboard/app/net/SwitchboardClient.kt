@@ -1,5 +1,6 @@
 package com.switchboard.app.net
 
+import android.os.Build
 import android.util.Log
 import com.switchboard.app.crypto.SessionCrypto
 import com.switchboard.app.data.KnownHost
@@ -89,10 +90,35 @@ class SwitchboardClient(
                 pairingCode = null
             }
         }
+
+        val endpoints = buildList {
+            add(endpoint)
+            if (isEmulator()) {
+                if (endpoint.contains("://127.0.0.1:")) {
+                    add(endpoint.replace("://127.0.0.1:", "://10.0.2.2:"))
+                } else if (endpoint.contains("://localhost:")) {
+                    add(endpoint.replace("://localhost:", "://10.0.2.2:"))
+                }
+            }
+        }
+
         val mode = if (credentials is Credentials.Pair) "pair" else "resume"
         val ephemeral = SessionCrypto.KeyPair.generate()
 
-        val listener = object : WebSocketListener() {
+        lateinit var listener: WebSocketListener
+
+        var endpointIndex = 0
+        fun startNextConnection(): Boolean {
+            if (endpointIndex < endpoints.size) {
+                val nextUrl = endpoints[endpointIndex++]
+                Log.i(TAG, "Connecting to host endpoint: $nextUrl")
+                socket = http.newWebSocket(Request.Builder().url(nextUrl).build(), listener)
+                return true
+            }
+            return false
+        }
+
+        listener = object : WebSocketListener() {
             /** hello -> auth sent -> authenticated. */
             private var phase = Phase.AWAITING_HELLO
             private var pending: SessionCrypto.Session? = null
@@ -224,12 +250,16 @@ class SwitchboardClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (phase == Phase.AWAITING_HELLO && startNextConnection()) {
+                    Log.i(TAG, "Primary endpoint connection failed ($t), trying fallback endpoint")
+                    return
+                }
                 trySend(ConnectionEvent.Failed(t.message ?: "connection failed"))
                 channel.close()
             }
         }
 
-        socket = http.newWebSocket(Request.Builder().url(endpoint).build(), listener)
+        startNextConnection()
 
         awaitClose {
             socket?.close(NORMAL_CLOSURE, null)
@@ -270,5 +300,16 @@ class SwitchboardClient(
     private companion object {
         const val TAG = "SwitchboardClient"
         const val NORMAL_CLOSURE = 1000
+
+        private fun isEmulator(): Boolean {
+            return (Build.FINGERPRINT.startsWith("generic")
+                || Build.FINGERPRINT.startsWith("unknown")
+                || Build.MODEL.contains("google_sdk")
+                || Build.MODEL.contains("Emulator")
+                || Build.MODEL.contains("Android SDK built for x86")
+                || Build.MANUFACTURER.contains("Genymotion")
+                || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+                || "google_sdk" == Build.PRODUCT)
+        }
     }
 }
