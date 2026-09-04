@@ -4,8 +4,14 @@
   "private": true,
   "description": "Cross-platform system control and file transfer via mobile device",
   "scripts": {
+    "dev": "node scripts/runner.mjs dev",
+    "dev:backend": "node scripts/runner.mjs dev:backend",
     "dev:frontend": "pnpm --filter frontend dev",
-    "build:frontend": "pnpm --filter frontend build"
+    "build": "node scripts/runner.mjs build",
+    "build:backend": "node scripts/runner.mjs build:backend",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:android": "node scripts/runner.mjs build:android",
+    "all": "node scripts/runner.mjs all"
   },
   "keywords": [
     "switchboard",
