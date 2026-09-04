@@ -1,4 +1,5 @@
 import {
+  AudioLines,
   Play,
   SkipBack,
   SkipForward,
@@ -7,9 +8,10 @@ import {
   VolumeX
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { LocalState, MediaAction } from '../../shared/types';
+import { useCallback } from 'react';
+import type { AudioSession, LocalState, MediaAction } from '../../shared/types';
 import { useThrottledCommit } from '../useHostState';
-import { Card, Pane, Sidebar, SidebarItem } from './Shell';
+import { Card, EmptyState, Pane, Sidebar, SidebarItem } from './Shell';
 import { LevelSlider } from './LevelSlider';
 
 interface AudioViewProps {
@@ -26,9 +28,10 @@ const TRANSPORT: Array<{ action: MediaAction; label: string; icon: LucideIcon; p
 ];
 
 export function AudioView({ state, patch, setPaused }: AudioViewProps) {
-  const { volume } = state.host;
+  const { volume, mixer } = state.host;
   const hasAudio = state.host.capabilities.includes('volume');
   const hasMedia = state.host.capabilities.includes('media');
+  const hasMixer = state.host.capabilities.includes('mixer');
 
   const sendVolume = useThrottledCommit((level: number) =>
     window.switchboard.setVolume(level, volume.muted)
@@ -36,6 +39,19 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
 
   const applyLocal = (level: number, muted: boolean) =>
     patch((draft) => ({ ...draft, host: { ...draft.host, volume: { level, muted } } }));
+
+  const applySession = useCallback(
+    (id: string, level: number, muted: boolean) => {
+      patch((draft) => ({
+        ...draft,
+        host: {
+          ...draft.host,
+          mixer: draft.host.mixer.map((s) => (s.id === id ? { ...s, level, muted } : s))
+        }
+      }));
+    },
+    [patch]
+  );
 
   const toggleMute = async () => {
     const next = !volume.muted;
@@ -55,7 +71,14 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
         />
       </Sidebar>
 
-      <Pane title="Audio" description="Master output and media transport">
+      <Pane
+        title="Audio"
+        description={
+          hasMixer
+            ? 'Master output, per-application levels and media transport'
+            : 'Master output and media transport'
+        }
+      >
         <div className="grid max-w-3xl gap-3">
           <Card
             title="Master volume"
@@ -101,6 +124,27 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
             )}
           </Card>
 
+          {hasMixer && (
+            <Card title="Applications">
+              {mixer.length === 0 ? (
+                <EmptyState
+                  icon={AudioLines}
+                  title="Nothing is using the mixer"
+                  hint="Applications appear here once they open an audio stream. Start playback and the row shows up on the next poll."
+                />
+              ) : (
+                mixer.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    onLocalChange={applySession}
+                    setPaused={setPaused}
+                  />
+                ))
+              )}
+            </Card>
+          )}
+
           <Card title="Media transport">
             <div className="flex items-center gap-2">
               {TRANSPORT.map(({ action, label, icon: Icon, primary }) => (
@@ -128,5 +172,69 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
         </div>
       </Pane>
     </>
+  );
+}
+
+function SessionRow({
+  session,
+  onLocalChange,
+  setPaused
+}: {
+  session: AudioSession;
+  onLocalChange: (id: string, level: number, muted: boolean) => void;
+  setPaused: (paused: boolean) => void;
+}) {
+  // Per-session writes go to the OS mixer one call at a time; a raw drag would
+  // issue one per pixel, exactly as with DDC/CI brightness.
+  const sendLevel = useThrottledCommit((level: number) =>
+    window.switchboard.setSessionVolume(session.id, level, session.muted)
+  );
+
+  const toggleMute = async () => {
+    const next = !session.muted;
+    onLocalChange(session.id, session.level, next);
+    await window.switchboard.setSessionVolume(session.id, session.level, next).catch(() => {});
+  };
+
+  return (
+    // A silent player is dimmed rather than dropped: a row vanishing under the
+    // pointer mid-gesture is worse than a quiet one.
+    <div className={session.active ? undefined : 'opacity-50'}>
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <span className="truncate text-micro text-ink-dim">{session.name}</span>
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-pressed={session.muted}
+          aria-label={`Mute ${session.name}`}
+          className={`shrink-0 rounded border p-1 transition-colors ${
+            session.muted
+              ? 'border-warn/40 bg-warn/10 text-warn'
+              : 'border-edge text-ink-faint hover:bg-raised hover:text-ink'
+          }`}
+        >
+          {session.muted ? (
+            <VolumeX aria-hidden="true" className="h-3 w-3" />
+          ) : (
+            <Volume2 aria-hidden="true" className="h-3 w-3" />
+          )}
+        </button>
+      </div>
+      <LevelSlider
+        icon={session.muted ? VolumeX : Volume2}
+        label={`${session.name} volume`}
+        value={session.level}
+        min={0}
+        max={100}
+        onGestureChange={setPaused}
+        onChange={(level) => {
+          onLocalChange(session.id, level, session.muted);
+          sendLevel(level);
+        }}
+        onCommit={(level) =>
+          window.switchboard.setSessionVolume(session.id, level, session.muted).catch(() => {})
+        }
+      />
+    </div>
   );
 }

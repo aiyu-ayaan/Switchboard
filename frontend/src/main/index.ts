@@ -192,6 +192,7 @@ const ALLOWED_ROUTES = new Set([
   '/display/brightness',
   '/display/contrast',
   '/volume',
+  '/mixer',
   '/media',
   '/pairing/rotate',
   '/devices/revoke',
