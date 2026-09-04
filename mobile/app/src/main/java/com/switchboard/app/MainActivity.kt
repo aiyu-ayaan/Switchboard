@@ -346,7 +346,7 @@ private fun rememberLauncherForScan(onResult: (String?) -> Unit): (Unit) -> Unit
                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                 .setPrompt("Point at the code on your desktop")
                 .setBeepEnabled(false)
-                .setOrientationLocked(false)
+                .setOrientationLocked(true)
         )
     }
 }
