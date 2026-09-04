@@ -1,354 +1,237 @@
-# WebSocket Wire Protocol Specification
+# Switchboard API & Wire Protocol Reference
 
-Switchboard uses a framed JSON protocol carried inside an encrypted WebSocket connection on port **9427**.
+This document provides the complete technical specification for Switchboard''s network wire protocol, JSON-RPC envelopes, WebSocket events, and the local loopback HTTP interface.
 
-## 1. Connection Phases
+---
 
-A connection has exactly three plaintext frames, then switches to binary:
+## 🌐 Protocol Overview
 
-| # | Direction       | Type   | Message      |
-| - | --------------- | ------ | ------------ |
-| 1 | host → client   | text   | `hello`      |
-| 2 | client → host   | text   | `auth`       |
-| 3 | host → client   | text   | `authResult` |
-| … | both            | binary | encrypted envelopes |
+Switchboard utilizes two network interfaces:
+1. **Encrypted WebSocket (`/ws`)**: Bidirectional full-duplex connection between Android client and Go host daemon over the local network (port `9427`).
+2. **Loopback REST API (`/local/*`)**: HTTP/JSON interface bound strictly to `127.0.0.1`, used exclusively by the Electron desktop frontend.
 
-A plaintext frame received after the handshake is ignored. A binary frame received before it is dropped and the socket closed.
+---
 
-### `hello`
+## 📡 1. WebSocket Protocol (`/ws`)
 
-```json
-{
-  "type": "hello",
-  "daemonId": "uuid",
-  "hostName": "ROOT",
-  "identityKey": "base64url",
-  "ephemeralKey": "base64url",
-  "challenge": "base64url"
-}
-```
+### Envelope Format
 
-### `auth`
+All WebSocket messages follow a standardized JSON envelope structure:
 
 ```json
 {
-  "mode": "pair | resume",
-  "identityKey": "base64url",
-  "ephemeralKey": "base64url",
-  "deviceName": "Google Pixel 8",
-  "proof": "base64url"
+  "type": "<message_type>",
+  "id": "<optional_request_uuid>",
+  "payload": { ... }
 }
 ```
 
-`pair` requires the current pairing code to have been folded into the key schedule. `resume` requires the client's identity key to already be stored on the host.
+---
 
-### `authResult`
+### Client Requests (Phone ➔ Desktop)
 
-```json
-{ "type": "authResult", "ok": true, "deviceId": "uuid", "hostName": "ROOT", "proof": "base64url" }
-```
-
-On failure: `{ "type": "authResult", "ok": false, "error": "authentication failed" }`.
-
-The client must verify the host's `proof` before trusting the connection. See [security-pairing.md](../../development/devdocs/security-pairing.md).
-
-## 2. Encrypted Frame Layout
-
-```
-┌──────────────┬──────────────────────────────────────────┐
-│ nonce (12 B) │ AES-256-GCM ciphertext ‖ tag (16 B)      │
-└──────────────┴──────────────────────────────────────────┘
-   4 zero bytes + big-endian uint64 counter
-```
-
-Each direction uses its own key. The counter must strictly increase; a repeated or lower counter is rejected as a replay.
-
-## 3. Envelope
-
-The plaintext inside every frame:
+#### 1. `get_state`
+Requests the full current state of displays, audio volume, app mixer, active media, and transfer status.
 
 ```json
 {
-  "id": "uuid-v4",
-  "type": "command | event | response | error",
-  "action": "display.brightness.set",
-  "payload": {},
-  "timestamp": 1725450000000
+  "type": "get_state",
+  "id": "req-001"
 }
 ```
 
-A `response` reuses the `id` of the command that caused it. Clients match on that id and skip the `event` frames interleaved with it.
-
-## 4. Actions
-
-### Displays
-
-| Action                   | Payload                              | Response          |
-| ------------------------ | ------------------------------------ | ----------------- |
-| `display.list`           | –                                    | `Display[]`       |
-| `display.brightness.set` | `{ "displayId": "…", "value": 60 }`  | the updated `Display` |
-| `display.contrast.set`   | `{ "displayId": "…", "value": 50 }`  | the updated `Display` |
+#### 2. `set_brightness`
+Sets the hardware brightness on a specific display.
 
 ```json
 {
-  "id": "\\\\.\\DISPLAY4",
-  "name": "27I200Q",
-  "internal": false,
-  "brightness": 72,
-  "minBrightness": 0,
-  "maxBrightness": 100,
-  "hasContrast": true,
-  "contrast": 50,
-  "minContrast": 0,
-  "maxContrast": 100
+  "type": "set_brightness",
+  "id": "req-002",
+  "payload": {
+    "displayId": "\\\\.\\DISPLAY4",
+    "value": 75
+  }
 }
 ```
 
-`minBrightness` / `maxBrightness` are the panel's **real capability range** read from the hardware, not an assumed 0–100. Clients must render against this range and the host clamps every write to it. An internal panel reports `internal: true` and `hasContrast: false`, and should show a single slider.
-
-### Audio
-
-| Action              | Payload                              | Response |
-| ------------------- | ------------------------------------ | -------- |
-| `system.volume.get` | –                                    | `Volume` |
-| `system.volume.set` | `{ "level": 75, "muted": false }`    | `Volume` |
-
-`level` is 0–100.
-
-#### Per-application mixer
-
-| Action             | Payload                                              | Response         |
-| ------------------ | ---------------------------------------------------- | ---------------- |
-| `audio.mixer.list` | –                                                    | `AudioSession[]` |
-| `audio.mixer.set`  | `{ "sessionId": "…", "level": 40, "muted": false }`  | `AudioSession[]` |
-
-```json
-{ "id": "{0.0.0.…}|\Device\…|Spotify.exe%b{…}", "name": "Spotify",
-  "pid": 18244, "level": 65, "muted": false, "active": true }
-```
-
-The session list also rides in every `host.state` as `mixer`, so a client renders the mixer from the snapshot it already has rather than asking for it.
-
-`id` is the OS session identifier, not the process. A browser or chat client spans several processes behind a single mixer entry, and whichever process happened to open the stream does not survive a restart — keying on the PID would move a user's volume setting to a different application. `pid` is carried anyway because it is what lets a client resolve a real icon.
-
-`active` is false for a session that still holds its mixer entry but has stopped playing. Windows keeps those entries around for a while, and dropping them from the list would make a paused player vanish from the mixer while the user was looking at it, so they are reported and shown de-emphasised instead.
-
-A host without per-application control omits `mixer` from its `capabilities` and reports an empty list.
-
-### Media
-
-| Action                    | Payload                    | Response       |
-| ------------------------- | -------------------------- | -------------- |
-| `media.playback.command`  | `{ "action": "toggle" }`   | `{ "action" }` |
-| `media.artwork`           | -                          | `MediaArtwork` |
-
-Accepted actions: `play`, `pause`, `toggle`, `next`, `prev`, `stop`.
-
-Commands are sent to the host's OS media session — on Windows, the System Media Transport Controls session that Spotify, browsers and native players publish to. Driving that session keeps `play` and `pause` distinct and lets the host *read* what is playing. Players that claim a global hotkey but publish no session fall back to synthesised multimedia keys, where `play` and `pause` both land on the toggle key.
-
-The session is also what `host.state` reports as `media`:
+#### 3. `set_contrast`
+Sets the hardware contrast on a DDC/CI-capable display.
 
 ```json
 {
-  "active": true,
-  "status": "playing",
-  "title": "Sakhiyaan",
-  "artist": "Maninder Buttar",
-  "album": "Sakhiyaan",
-  "source": "Spotify",
-  "artworkId": "5f2c91a0d3be47aa"
+  "type": "set_contrast",
+  "id": "req-003",
+  "payload": {
+    "displayId": "\\\\.\\DISPLAY4",
+    "value": 50
+  }
 }
 ```
 
-`status` is one of `playing`, `paused` or `stopped`. `active` is false when nothing holds the session, in which case every other field is empty — an idle host, not an error.
-
-#### Artwork
-
-`artworkId` names the current track's cover art without carrying it. Cover art is an order of magnitude larger than the rest of the snapshot and changes only when the track does, so it is pulled once with `media.artwork` and cached against this ID rather than pushed with every broadcast:
-
-```json
-{ "artworkId": "5f2c91a0d3be47aa", "mimeType": "image/png", "data": "<base64>" }
-```
-
-`artworkId` is empty when the track has no artwork. A client should request artwork only when the ID in a snapshot differs from the one it holds, and should discard a reply whose ID no longer matches the current track — a late reply would otherwise be shown against the wrong song.
-
-The daemon polls the session once a second and broadcasts `host.state` when it changes, so a track paused at the desktop reaches every connected phone.
-
-### Events
-
-| Action       | Direction     | Payload     |
-| ------------ | ------------- | ----------- |
-| `host.state` | host → client | `HostState` |
-
-Pushed on connect and after every state change, so multiple clients converge rather than drift.
+#### 4. `set_volume`
+Sets the system master audio volume and/or mute state.
 
 ```json
 {
-  "hostName": "ROOT",
-  "daemonId": "uuid",
-  "displays": [ … ],
-  "volume": { "level": 50, "muted": false },
-  "media": { "active": true, "status": "playing", "title": "…", "artist": "…",
-             "album": "…", "source": "Spotify", "artworkId": "5f2c91a0d3be47aa" },
-  "capabilities": ["display", "volume", "media"]
+  "type": "set_volume",
+  "id": "req-004",
+  "payload": {
+    "level": 65,
+    "muted": false
+  }
 }
 ```
 
-`capabilities` reports what this host can actually do. Clients should hide controls the host does not list rather than showing dead UI — a machine with no audio endpoint still drives its monitors.
-
-### Errors
-
-```json
-{ "id": "<request id>", "type": "error", "action": "display.contrast.set",
-  "payload": { "message": "display \"…\" has no contrast control" } }
-```
-
-A failed command never closes the connection.
-
-## 5. Local Desktop API
-
-The Electron UI talks to the daemon over plain HTTP on loopback. These routes return `403` for any non-loopback peer and carry no pairing credentials.
-
-| Method | Route                       | Body                                 |
-| ------ | --------------------------- | ------------------------------------ |
-| GET    | `/local/state`              | –                                    |
-| POST   | `/local/displays/refresh`   | `{}`                                 |
-| POST   | `/local/display/brightness` | `{ "displayId": "…", "value": 60 }`  |
-| POST   | `/local/display/contrast`   | `{ "displayId": "…", "value": 50 }`  |
-| POST   | `/local/volume`             | `{ "level": 50, "muted": false }`    |
-| POST   | `/local/media`              | `{ "action": "next" }`               |
-| POST   | `/local/pairing/rotate`     | `{}`                                 |
-| POST   | `/local/devices/revoke`     | `{ "deviceId": "uuid" }`             |
-| POST   | `/local/files/send`         | `{ "deviceId": "uuid", "paths": ["C:/…"] }` |
-| POST   | `/local/files/control`      | `{ "transferId": "uuid", "action": "pause" }` |
-| GET    | `/local/files/history`      | –                                    |
-| GET    | `/local/settings`           | –                                    |
-| POST   | `/local/settings`           | a whole `Settings` object            |
-| POST   | `/local/settings/download-dir` | `{ "path": "C:/…" }`              |
-
-`GET /local/state` returns `{ host, pairing, devices, transfers, settings }` — everything the desktop renders in one poll, so the UI never needs a second request to draw a frame.
-
-Transfers in this response carry two fields the WebSocket `file.progress` event does not: `path` and the owning `deviceId` / `deviceName`. A phone has no use for a host filesystem path and every reason not to be told one, so the path reaches the loopback API — which is what has to open the containing folder — and stops there.
-
-`POST /local/settings` takes the whole object rather than a patch. There are three fields, and a full write means a stale UI cannot silently clobber a field it did not know about.
-
-### Settings
-
-```json
-{ "downloadDir": "C:/Users/…/Downloads/Switchboard", "rateUnit": "MBps", "runInBackground": true }
-```
-
-Received files land in a `Switchboard` folder of their own rather than loose in Downloads, so everything a phone sent can be found — or deleted — without sifting through browser downloads. `rateUnit` is a display preference only: the daemon reports raw bytes per second and never formats. `POST /local/settings/download-dir` validates a candidate directory (exists, writable) before the UI commits it.
-
-## 6. File Transfer
-
-Files move over the same encrypted envelope channel as every other command. There is no second socket and no second key exchange: a transfer is a sequence of ordinary envelopes, so it inherits the session's confidentiality, authentication and replay protection unchanged.
-
-Both directions use the same frames. Whichever side holds the file sends the offer; the other side receives. `direction` is named from the mobile client's point of view — `upload` is phone → desktop, `download` is desktop → phone — so a stored history row reads the same on both ends.
-
-### Frames
-
-| Action          | Direction         | Payload        |
-| --------------- | ----------------- | -------------- |
-| `file.offer`    | sender → receiver | `FileOffer`    |
-| `file.accept`   | receiver → sender | `FileAccept`   |
-| `file.chunk`    | sender → receiver | `FileChunk`    |
-| `file.ack`      | receiver → sender | `FileAck`      |
-| `file.complete` | receiver → sender | `FileComplete` |
-| `file.control`  | either            | `FileControl`  |
-| `file.progress` | event             | `FileProgress` |
-| `file.list`     | client → host     | `FileHistory`  |
-
-### Sequence
-
-```
-sender                                receiver
-  │  file.offer   {id, name, size, sha256}   │
-  │ ───────────────────────────────────────► │  size the destination,
-  │                                          │  look for a resumable .part
-  │  file.accept  {id, offset, accepted}     │
-  │ ◄─────────────────────────────────────── │
-  │  file.chunk   {id, offset, data}         │
-  │ ───────────────────────────────────────► │  WriteAt(offset), hash
-  │                    ⋮                     │
-  │  file.ack     {id, received}             │
-  │ ◄─────────────────────────────────────── │  paces the sender
-  │                    ⋮                     │
-  │  file.chunk   {id, offset, data, last}   │
-  │ ───────────────────────────────────────► │  verify digest, publish
-  │  file.complete{id, ok, sha256}           │
-  │ ◄─────────────────────────────────────── │
-```
-
-### `file.offer`
+#### 5. `set_mixer_volume`
+Adjusts the volume level for an individual active application session.
 
 ```json
 {
-  "transferId": "uuid",
-  "name": "quarterly-report.pdf",
-  "size": 8123456,
-  "mimeType": "application/pdf",
-  "sha256": "9f86d081…",
-  "direction": "upload"
+  "type": "set_mixer_volume",
+  "id": "req-005",
+  "payload": {
+    "sessionId": "{0.0.0.00000000}.{...}|chrome.exe",
+    "level": 80,
+    "muted": false
+  }
 }
 ```
 
-`name` arrives from an untrusted peer. The receiver takes the base name only and rejects path separators, `..` and absolute paths — an offer is a filename, never a location. A name that collides with an existing file is de-duplicated (`report.pdf` → `report (1).pdf`) rather than overwriting.
-
-### `file.accept`
-
-```json
-{ "transferId": "uuid", "offset": 2097152, "accepted": true }
-```
-
-`offset` is how many bytes the receiver already holds. A fresh transfer sends `0`; one resuming after a disconnect sends the length of the partial file it kept, and the sender seeks there instead of restarting. A refusal sets `accepted: false` and carries a `reason` — no disk space, a declined permission, a rejected name.
-
-### `file.chunk`
-
-```json
-{ "transferId": "uuid", "offset": 2097152, "data": "<base64>", "last": false }
-```
-
-Chunks are **256 KiB** of file bytes, base64 to roughly 341 KB on the wire. The offset is authoritative: the receiver writes *at* it rather than appending, so a duplicated or reordered frame cannot corrupt the output. Both ends stream against storage a chunk at a time, so a multi-GB file never sits in memory on either side.
-
-### `file.ack`
-
-```json
-{ "transferId": "uuid", "received": 4194304 }
-```
-
-Acks exist for flow control, not reliability — the transport already guarantees delivery. Without them a fast desktop disk outruns a slow phone and the excess piles up in socket buffers on both ends. The sender stays within a small window of the last ack, and the receiver acks on a window rather than per chunk so acknowledgement traffic stays negligible.
-
-### `file.complete`
-
-```json
-{ "transferId": "uuid", "ok": true, "sha256": "9f86d081…" }
-```
-
-The receiver hashes as bytes land and compares against the offer before publishing the file. A mismatch means the bytes are bad: the partial file is discarded, `ok` is false, and `error` says why. Only a verified file is renamed out of its `.part` staging name into place, so a failed or interrupted transfer never leaves something that looks complete.
-
-### `file.control`
-
-```json
-{ "transferId": "uuid", "action": "pause" }
-```
-
-`pause`, `resume` or `cancel`, honoured from either side. Pause keeps the `.part` file so the transfer can resume from its offset; cancel deletes it.
-
-### `file.progress`
+#### 6. `media_control`
+Dispatches a playback transport action to the active media session.
 
 ```json
 {
-  "transferId": "uuid",
-  "name": "quarterly-report.pdf",
-  "direction": "upload",
-  "status": "active",
-  "transferred": 4194304,
-  "size": 8123456,
-  "bytesPerSec": 5242880,
-  "startedAt": 1725450000000
+  "type": "media_control",
+  "id": "req-006",
+  "payload": {
+    "action": "play_pause"
+  }
+}
+```
+*Supported actions*: `"play"`, `"pause"`, `"play_pause"`, `"next"`, `"previous"`, `"stop"`.
+
+#### 7. `file_transfer_init`
+Initiates a peer-to-peer file transfer.
+
+```json
+{
+  "type": "file_transfer_init",
+  "id": "req-007",
+  "payload": {
+    "name": "photo.jpg",
+    "size": 4194304,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "direction": "upload"
+  }
 }
 ```
 
-`status` is one of `pending`, `active`, `paused`, `completed`, `failed` or `cancelled`. `bytesPerSec` is smoothed and always in **bytes** per second — each client formats it as MB/s or Mb/s according to the user's own preference rather than the daemon choosing a unit. Progress is emitted on a timer, not per chunk: a 256 KiB chunk at LAN speed would otherwise raise hundreds of events a second to move one progress bar.
+---
 
+### Host Broadcasts & Events (Desktop ➔ Phone)
+
+#### 1. `host_state`
+Pushed upon connection and whenever host state (displays, volume, mixer) changes.
+
+```json
+{
+  "type": "host_state",
+  "payload": {
+    "hostName": "ROOT",
+    "daemonId": "d19795f7-fa89-4779-abb1-320207c92dcf",
+    "displays": [
+      {
+        "id": "\\\\.\\DISPLAY4",
+        "name": "27I200Q",
+        "internal": false,
+        "brightness": 75,
+        "minBrightness": 0,
+        "maxBrightness": 100,
+        "hasContrast": true,
+        "contrast": 50,
+        "minContrast": 0,
+        "maxContrast": 100
+      }
+    ],
+    "volume": {
+      "level": 65,
+      "muted": false
+    },
+    "mixer": [
+      {
+        "id": "{0.0.0.00000000}.{...}|chrome.exe",
+        "name": "Chrome",
+        "pid": 10984,
+        "level": 80,
+        "muted": false,
+        "active": true
+      }
+    ],
+    "media": {
+      "active": true,
+      "status": "playing",
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "source": "Spotify",
+      "artworkId": "9fda916f0da10db2"
+    }
+  }
+}
+```
+
+#### 2. `media_changed`
+Emitted asynchronously whenever the active song, artist, playback state, or artwork changes.
+
+```json
+{
+  "type": "media_changed",
+  "payload": {
+    "active": true,
+    "status": "paused",
+    "title": "New Track",
+    "artist": "New Artist",
+    "source": "Chrome",
+    "artworkId": "8abc1234..."
+  }
+}
+```
+
+#### 3. `transfer_progress`
+Real-time progress update during active file transfers.
+
+```json
+{
+  "type": "transfer_progress",
+  "payload": {
+    "transferId": "1754fb18-c748-436b-9b4e-2d583a9b607a",
+    "transferred": 2097152,
+    "total": 4194304,
+    "bytesPerSec": 15728640,
+    "status": "active"
+  }
+}
+```
+
+---
+
+## 🖥️ 2. Local Loopback REST API (`/local/*`)
+
+The Electron frontend communicates with the Go backend over `http://127.0.0.1:9427/local`. External network requests to `/local/*` are rejected with `403 Forbidden`.
+
+| Method | Endpoint | Description | Request Payload |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/local/state` | Returns complete host state, active pairing info, and connected devices. | None |
+| `POST` | `/local/displays/refresh` | Force rescan of physical display monitors. | `{}` |
+| `POST` | `/local/display/brightness` | Set monitor brightness. | `{"displayId": "...", "value": 80}` |
+| `POST` | `/local/display/contrast` | Set monitor contrast. | `{"displayId": "...", "value": 50}` |
+| `POST` | `/local/volume` | Set master system volume. | `{"level": 50, "muted": false}` |
+| `POST` | `/local/mixer` | Set per-app audio volume. | `{"sessionId": "...", "level": 100, "muted": false}` |
+| `POST` | `/local/media` | Send media transport command. | `{"action": "play_pause"}` |
+| `GET` | `/local/media/artwork` | Returns raw binary image bytes for current album artwork. | Query: `?id=...` |
+| `POST` | `/local/pairing/rotate` | Generates a fresh pairing code and QR payload. | `{}` |
+| `POST` | `/local/devices/revoke` | Revokes access for a paired mobile device. | `{"deviceId": "..."}` |
+| `POST` | `/local/files/send` | Queue desktop files to send to a connected device. | `{"deviceId": "...", "paths": ["..."]}` |
+| `POST` | `/local/files/control` | Pause, resume, or cancel a transfer. | `{"transferId": "...", "action": "cancel"}` |
+| `GET` | `/local/settings` | Retrieve host preferences. | None |
+| `POST` | `/local/settings` | Update host preferences. | `{"downloadDir": "...", "runInBackground": true}` |

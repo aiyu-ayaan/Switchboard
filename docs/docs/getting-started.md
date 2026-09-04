@@ -1,92 +1,133 @@
 # Getting Started with Switchboard
 
-This guide walks you through building and running Switchboard across the desktop host and an Android device.
+This guide walks through configuring your environment, building all components, and running Switchboard across desktop and mobile devices.
 
-## Prerequisites
+---
 
-- **Desktop**
-  - Node.js 20+ and pnpm 9+
-  - Go 1.22+ (no C toolchain needed — SQLite is pure Go)
-- **Mobile**
-  - Android SDK with **platform 37** and build-tools installed
-  - JDK 17+ (Gradle 9.7 also runs on newer JDKs)
-  - A device or emulator on API 26+
+## 🛠️ Prerequisites
 
-Phase 1 system control (displays, audio, media) is implemented for **Windows**. The daemon builds and runs on macOS and Linux, where those calls return `not supported on this platform`; pairing, transport, and both UIs work there.
+Before building Switchboard, ensure you have the following tools installed:
 
-## 1. Install dependencies
+### Host Machine
+- **Git**: With submodule support.
+- **Go**: Version 1.22 or newer ([Download Go](https://go.dev/dl/)).
+- **Node.js**: Version 20 LTS or newer ([Download Node.js](https://nodejs.org/)).
+- **pnpm**: Version 9 or newer (`npm install -g pnpm`).
+- **C Compiler / Windows SDK** (Optional, for native cgo bindings if rebuilding custom system DLLs).
 
+### Mobile Environment
+- **Android Studio**: Ladybug (2024.2.1+) or newer.
+- **Android SDK**: API 34+ installed.
+- **JDK**: Java 17 or Java 21 (bundled with Android Studio).
+- **Physical Android device or Emulator**: Running Android 8.0+ (API 26+) connected via USB or Wi-Fi debugging.
+
+---
+
+## 📥 1. Repository Setup
+
+Clone the repository and its documentation submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/aiyu-ayaan/Switchboard.git
+cd Switchboard
+```
+
+If you previously cloned without `--recurse-submodules`:
+```bash
+git submodule update --init --recursive
+```
+
+Install workspace JavaScript/TypeScript dependencies:
 ```bash
 pnpm install
 ```
 
-## 2. Run the desktop app
+---
 
+## 💻 2. Running the Desktop Host
+
+Switchboard Desktop consists of a **Go backend daemon** and an **Electron frontend**.
+
+### Development Mode
+
+You can run both concurrently using the workspace runner:
 ```bash
 pnpm dev
 ```
 
-This starts the Go daemon and the Electron UI together. To run them separately:
+Or run them in separate terminals for independent logging:
 
 ```bash
-pnpm dev:backend     # go run ./cmd/server
-pnpm dev:frontend    # vite + electron
+# Terminal 1: Backend Daemon
+cd backend
+go run cmd/server/main.go
 ```
-
-The daemon listens on port **9427**. Override it with `--port` or `SWITCHBOARD_PORT`.
-
-The Electron app starts a daemon itself only if nothing already answers on the local API, so running both commands does not spawn two daemons.
-
-## 3. Build a release bundle
 
 ```bash
-pnpm build            # daemon + desktop + Android
-pnpm build:backend    # -> bin/switchboard(.exe)
-pnpm build:frontend   # -> frontend/dist
+# Terminal 2: Electron Frontend
+pnpm dev:frontend
 ```
 
-## 4. Build and run the Android client
+### Environment Variables
 
-Point Gradle at your SDK by creating `mobile/local.properties`:
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `SWITCHBOARD_PORT` | `9427` | The local network port the Go daemon binds to for mobile WebSocket & HTTP connections. |
+| `SWITCHBOARD_DB` | OS AppData (`%APPDATA%/switchboard/host.db`) | SQLite database path for persistent pairing keys and device registrations. |
+| `SWITCHBOARD_DEV` | `0` | Set to `1` when developing to reload Vite dev server and unpackaged daemon binaries. |
 
-```properties
-sdk.dir=/path/to/Android/sdk
-```
+---
 
-Then:
+## 📱 3. Running the Android Client
 
+### Using Android Studio
+1. Launch Android Studio.
+2. Select **Open** and select the `mobile/` directory.
+3. Allow Gradle to sync dependencies.
+4. Select your target device or emulator from the device toolbar.
+5. Click **Run** (`Shift + F10`).
+
+### Using Command Line
 ```bash
-pnpm android:build    # assembleDebug
-pnpm android:run      # install + launch on a connected device
-pnpm android:test     # unit tests, including the crypto interop vector
+# Build debug APK
+pnpm android:build
+
+# Install and launch debug APK on connected device/emulator
+pnpm android:run
+
+# Run unit tests
+pnpm android:test
 ```
 
-Or open `mobile/` in Android Studio.
+---
 
-## 5. Pair a phone
+## 🔗 4. First-Time Pairing Workflow
 
-1. Open the desktop app and select **Devices** in the left rail.
-2. On the phone, tap **Scan QR code** and point it at the desktop.
+1. Ensure your PC and Android device are connected to the same local Wi-Fi network or subnet.
+2. Launch the desktop app and select the **Paired Devices** tab.
+3. Open Switchboard on Android.
+4. If this is your first time, the connection screen will prompt:
+   - **Scan QR Code**: Grants camera access, scans the desktop QR code, and connects immediately.
+   - **Enter code manually**: Enter the computer's local IP address and the 10-character pairing code shown on desktop.
+5. Once paired, your mobile app displays the live dashboard with your computer's monitors, volume levels, and file transfer options.
 
-   Or tap **Enter code manually** and type the address and code the desktop shows (for example `192.168.1.105:9427` and `S8W6Q7HRKF`).
-3. The code is valid for five minutes; **New code** issues a fresh one and invalidates the old.
+---
 
-Both devices must be on the same network. After the first pairing the phone reconnects on its own — the stored key is the credential, so there is no code to re-enter.
+## 📦 5. Building for Production
 
-To revoke access, use the trash icon beside the device on the desktop, or **Forget** on the phone. Revoking on the desktop drops the device's live connection immediately.
-
-### Running against an emulator
-
-An emulator cannot usually reach the host's LAN address. Bridge the port first, then pair with `127.0.0.1:9427`:
-
+### Desktop Production Build
 ```bash
-adb reverse tcp:9427 tcp:9427
+# Build the Go backend binary
+pnpm build:backend
+
+# Build the Electron frontend distribution package
+pnpm build:frontend
 ```
+Production output will be generated in `frontend/dist/`.
 
-## Troubleshooting
-
-**"No controllable displays found"** — enable DDC/CI in the monitor's own on-screen menu. Some docks and KVM switches do not pass the control channel through. Use **Rescan** after changing displays.
-
-**Port already in use** — another process may hold 9427. Start the daemon with `--port 9500` and set `SWITCHBOARD_PORT=9500` for the desktop app.
-
-**The phone cannot connect** — confirm both devices are on the same subnet and that the host firewall allows inbound TCP on the daemon port.
+### Android Production Build
+```bash
+cd mobile
+./gradlew assembleRelease
+```
+The signed APK will be located in `mobile/app/build/outputs/apk/release/`.
