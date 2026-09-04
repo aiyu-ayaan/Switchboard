@@ -231,6 +231,13 @@ fun SwitchboardApp(
 
                         if (connected) {
                             IconButton(
+                                onClick = { viewModel.disconnect() },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(Icons.Filled.SwapHoriz, contentDescription = "Switch desktop")
+                            }
+
+                            IconButton(
                                 onClick = { showConnectionInfo = true },
                                 modifier = Modifier.size(48.dp)
                             ) {
@@ -302,7 +309,8 @@ fun SwitchboardApp(
                                 onScan = { scanner(Unit) },
                                 onManual = viewModel::pairManually,
                                 onConnect = viewModel::connect,
-                                onForget = viewModel::forget
+                                onForget = viewModel::forget,
+                                onOpenSettings = { currentScreen = AppScreen.Settings }
                             )
                         } else {
                             HomeScreen(
