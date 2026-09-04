@@ -1,4 +1,4 @@
-import { QrCode, RefreshCw, Smartphone, Trash2 } from 'lucide-react';
+import { Check, Copy, QrCode, RefreshCw, Smartphone, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import QRCodeLib from 'qrcode';
 import type { LocalState } from '../../shared/types';
@@ -13,6 +13,22 @@ export function DevicesView({ state, refresh }: DevicesViewProps) {
   const { pairing, devices } = state;
   const [qr, setQr] = useState<string | null>(null);
   const [pendingRevoke, setPendingRevoke] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(pairing.code);
+      setCopied(true);
+    } catch {
+      // Ignore clipboard write failure
+    }
+  };
 
   // Rendered locally; the payload never leaves the machine.
   useEffect(() => {
@@ -90,9 +106,32 @@ export function DevicesView({ state, refresh }: DevicesViewProps) {
 
               <div className="text-center">
                 <p className="text-micro text-ink-faint">Or type this code on your phone</p>
-                <p className="font-mono text-lg font-semibold tracking-[0.25em] text-ink">
-                  {pairing.code}
-                </p>
+                <div className="mt-1 flex items-center justify-center gap-2">
+                  <p className="font-mono text-lg font-semibold tracking-[0.25em] text-ink">
+                    {pairing.code}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={copyCode}
+                    title={copied ? 'Copied' : 'Copy code'}
+                    aria-label={copied ? 'Copied pairing code' : 'Copy pairing code'}
+                    className={`flex items-center gap-1 rounded border border-edge px-2 py-0.5 text-micro transition-colors hover:bg-raised ${
+                      copied ? 'text-level' : 'text-ink-dim hover:text-ink'
+                    }`}
+                  >
+                    {copied ? (
+                      <>
+                        <Check aria-hidden="true" className="h-3 w-3" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy aria-hidden="true" className="h-3 w-3" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <dl className="w-full space-y-1 border-t border-edge pt-2 font-mono text-micro">
