@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,6 +69,7 @@ import com.switchboard.app.data.KnownHost
 @Composable
 fun PairingScreen(
     hosts: List<KnownHost>,
+    liveHostIds: Set<String> = emptySet(),
     error: String?,
     onScan: () -> Unit,
     onManual: (String, String) -> Unit,
@@ -234,6 +236,7 @@ fun PairingScreen(
             items(hosts, key = { it.daemonId }) { host ->
                 HostRow(
                     host = host,
+                    isLive = host.daemonId in liveHostIds,
                     onConnect = { onConnect(host) },
                     onForget = { confirmForget = host }
                 )
@@ -347,7 +350,12 @@ fun PairingScreen(
 }
 
 @Composable
-private fun HostRow(host: KnownHost, onConnect: () -> Unit, onForget: () -> Unit) {
+private fun HostRow(
+    host: KnownHost,
+    isLive: Boolean,
+    onConnect: () -> Unit,
+    onForget: () -> Unit
+) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -364,25 +372,52 @@ private fun HostRow(host: KnownHost, onConnect: () -> Unit, onForget: () -> Unit
         ) {
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = if (isLive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.size(42.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Filled.Computer,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        tint = if (isLive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(22.dp)
                     )
                 }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = host.hostName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = host.hostName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (isLive) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                )
+                                Text(
+                                    text = "Live",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
                 Surface(
                     shape = RoundedCornerShape(6.dp),

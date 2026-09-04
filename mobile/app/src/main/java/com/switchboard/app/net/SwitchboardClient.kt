@@ -315,11 +315,11 @@ class SwitchboardClient(
 
     private enum class Phase { AWAITING_HELLO, AWAITING_RESULT, READY }
 
-    private companion object {
-        const val TAG = "SwitchboardClient"
-        const val NORMAL_CLOSURE = 1000
+    companion object {
+        private const val TAG = "SwitchboardClient"
+        private const val NORMAL_CLOSURE = 1000
 
-        private fun isEmulator(): Boolean {
+        internal fun isEmulator(): Boolean {
             return (Build.FINGERPRINT.startsWith("generic")
                 || Build.FINGERPRINT.startsWith("unknown")
                 || Build.HARDWARE.contains("goldfish")

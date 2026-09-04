@@ -21,8 +21,15 @@ import com.switchboard.app.net.PairingPayload
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.SwitchboardJson
 import com.switchboard.app.net.Volume
+import java.net.InetSocketAddress
+import java.net.Socket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +42,8 @@ enum class ConnectionStatus { Disconnected, Connecting, Connected }
 data class UiState(
     val status: ConnectionStatus = ConnectionStatus.Disconnected,
     val hosts: List<KnownHost> = emptyList(),
+    val liveHostsCount: Int = 0,
+    val liveHostIds: Set<String> = emptySet(),
     val activeHost: KnownHost? = null,
     val host: HostState = HostState(),
     /** Cover art for [HostState.media], decoded once per track. */
@@ -74,6 +83,8 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         val last = store.lastHostId?.let { id -> store.hosts().find { it.daemonId == id } }
             ?: store.hosts().firstOrNull()
         last?.let(::connect)
+
+        startLiveProbing()
     }
 
     fun setScanning(scanning: Boolean) = _uiState.update { it.copy(scanning = scanning, error = null) }
@@ -214,6 +225,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         connection = null
         client.disconnect()
         _uiState.update { it.copy(status = ConnectionStatus.Disconnected, activeHost = null) }
+        triggerLiveProbe()
     }
 
     /** "Forget system": drops stored keys for a host and leaves it if active. */
@@ -225,6 +237,80 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
             _uiState.update { it.copy(activeHost = null, host = HostState(), artwork = null) }
         }
         _uiState.update { it.copy(hosts = store.hosts()) }
+        triggerLiveProbe()
+    }
+
+    private var liveProbeJob: Job? = null
+
+    private fun startLiveProbing() {
+        liveProbeJob?.cancel()
+        liveProbeJob = viewModelScope.launch {
+            while (isActive) {
+                probeLiveHosts()
+                delay(3000)
+            }
+        }
+    }
+
+    fun triggerLiveProbe() {
+        viewModelScope.launch {
+            probeLiveHosts()
+        }
+    }
+
+    private suspend fun probeLiveHosts() {
+        val currentHosts = store.hosts()
+        if (currentHosts.isEmpty()) {
+            _uiState.update { it.copy(liveHostsCount = 0, liveHostIds = emptySet()) }
+            return
+        }
+
+        val active = _uiState.value.activeHost
+        val isConnected = _uiState.value.status == ConnectionStatus.Connected
+
+        val liveIds = coroutineScope {
+            currentHosts.map { host ->
+                async(Dispatchers.IO) {
+                    if (isConnected && active?.daemonId == host.daemonId) {
+                        host.daemonId to true
+                    } else {
+                        host.daemonId to isHostReachable(host)
+                    }
+                }
+            }.awaitAll()
+                .filter { it.second }
+                .map { it.first }
+                .toSet()
+        }
+
+        _uiState.update {
+            it.copy(
+                liveHostsCount = liveIds.size,
+                liveHostIds = liveIds
+            )
+        }
+    }
+
+    private fun isHostReachable(host: KnownHost): Boolean {
+        val candidates = buildList {
+            add(host.host to host.port)
+            if (SwitchboardClient.isEmulator()) {
+                add("10.0.2.2" to host.port)
+            }
+            add("127.0.0.1" to host.port)
+        }.distinct()
+
+        for ((targetHost, targetPort) in candidates) {
+            try {
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress(targetHost, targetPort), 750)
+                    return true
+                }
+            } catch (_: Exception) {
+                // Try next candidate
+            }
+        }
+        return false
     }
 
     // ---- Controls ----

@@ -204,11 +204,15 @@ fun SwitchboardApp(
                                             text = if (state.status == ConnectionStatus.Connecting) {
                                                 "Connecting to ${state.activeHost?.hostName ?: "desktop"}…"
                                             } else {
-                                                "Not connected"
+                                                "Connected ${state.liveHostsCount}"
                                             },
                                             style = MaterialTheme.typography.labelSmall,
                                             fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (state.liveHostsCount > 0) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            }
                                         )
                                     }
                                 }
@@ -249,13 +253,6 @@ fun SwitchboardApp(
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan pairing code")
-                            }
-
-                            IconButton(
-                                onClick = { currentScreen = AppScreen.Settings },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Open Settings")
                             }
                         }
                     }
@@ -305,6 +302,7 @@ fun SwitchboardApp(
                         if (!connected) {
                             PairingScreen(
                                 hosts = state.hosts,
+                                liveHostIds = state.liveHostIds,
                                 error = state.error,
                                 onScan = { scanner(Unit) },
                                 onManual = viewModel::pairManually,
