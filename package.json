@@ -10,8 +10,9 @@
     "build": "node scripts/runner.mjs build",
     "build:backend": "node scripts/runner.mjs build:backend",
     "build:frontend": "pnpm --filter frontend build",
-    "build:android": "node scripts/runner.mjs build:android",
-    "all": "node scripts/runner.mjs all"
+    "android:build": "node scripts/android.mjs assembleDebug",
+    "android:run": "node scripts/android.mjs run",
+    "android:test": "node scripts/android.mjs testDebugUnitTest"
   },
   "keywords": [
     "switchboard",
