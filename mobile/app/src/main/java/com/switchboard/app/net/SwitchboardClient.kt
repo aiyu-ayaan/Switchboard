@@ -20,12 +20,15 @@ import okio.ByteString.Companion.toByteString
 /** What the UI observes while a connection is live. */
 sealed interface ConnectionEvent {
     data class Connected(
+        /** The host's real daemon ID, learned from its hello. */
+        val daemonId: String,
         val deviceId: String,
         val hostName: String,
         /** The host key learned during this handshake, pinned for later resumes. */
         val hostKey: String
     ) : ConnectionEvent
     data class State(val state: HostState) : ConnectionEvent
+    data class Artwork(val artwork: MediaArtwork) : ConnectionEvent
     data class Failed(val reason: String) : ConnectionEvent
     data object Disconnected : ConnectionEvent
 }
@@ -175,7 +178,14 @@ class SwitchboardClient(
 
                 session = derived
                 phase = Phase.READY
-                trySend(ConnectionEvent.Connected(result.deviceId, result.hostName, learnedHostKey))
+                trySend(
+                    ConnectionEvent.Connected(
+                        daemonId,
+                        result.deviceId,
+                        result.hostName,
+                        learnedHostKey
+                    )
+                )
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -185,12 +195,22 @@ class SwitchboardClient(
                         Envelope.serializer(),
                         active.open(bytes.toByteArray()).decodeToString()
                     )
-                    if (envelope.action == Actions.HOST_STATE && envelope.payload != null) {
-                        trySend(
+                    val payload = envelope.payload
+                    when {
+                        envelope.action == Actions.HOST_STATE && payload != null -> trySend(
                             ConnectionEvent.State(
                                 SwitchboardJson.decodeFromJsonElement(
                                     HostState.serializer(),
-                                    envelope.payload
+                                    payload
+                                )
+                            )
+                        )
+
+                        envelope.action == Actions.MEDIA_ARTWORK && payload != null -> trySend(
+                            ConnectionEvent.Artwork(
+                                SwitchboardJson.decodeFromJsonElement(
+                                    MediaArtwork.serializer(),
+                                    payload
                                 )
                             )
                         )

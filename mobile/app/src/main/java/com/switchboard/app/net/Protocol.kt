@@ -12,6 +12,7 @@ object Actions {
     const val DISPLAY_CONTRAST = "display.contrast.set"
     const val VOLUME_SET = "system.volume.set"
     const val MEDIA_COMMAND = "media.playback.command"
+    const val MEDIA_ARTWORK = "media.artwork"
     const val HOST_STATE = "host.state"
 }
 
@@ -56,12 +57,56 @@ data class Display(
 @Serializable
 data class Volume(val level: Int = 0, val muted: Boolean = false)
 
+/** Playback states the host reports in [MediaState.status]. */
+object Playback {
+    const val STOPPED = "stopped"
+    const val PLAYING = "playing"
+    const val PAUSED = "paused"
+}
+
+/**
+ * What the desktop is playing right now, read from its OS media session.
+ *
+ * [artworkId] identifies the cover art without carrying it: the image is
+ * fetched once per track over [Actions.MEDIA_ARTWORK] and cached against this
+ * value, so a slider drag does not drag album art across the network with it.
+ */
+@Serializable
+data class MediaState(
+    val active: Boolean = false,
+    val status: String = Playback.STOPPED,
+    val title: String = "",
+    val artist: String = "",
+    val album: String = "",
+    val source: String = "",
+    val artworkId: String = ""
+) {
+    val isPlaying: Boolean get() = status == Playback.PLAYING
+
+    /** A one-line summary for the home list. */
+    val summary: String
+        get() = when {
+            !active || title.isEmpty() -> "Nothing playing"
+            artist.isEmpty() -> title
+            else -> "$title - $artist"
+        }
+}
+
+@Serializable
+data class MediaArtwork(
+    val artworkId: String = "",
+    val mimeType: String = "",
+    /** Base64 image bytes. Empty when the track has no cover art. */
+    val data: String = ""
+)
+
 @Serializable
 data class HostState(
     val hostName: String = "",
     val daemonId: String = "",
     val displays: List<Display> = emptyList(),
     val volume: Volume = Volume(),
+    val media: MediaState = MediaState(),
     val capabilities: List<String> = emptyList()
 )
 

@@ -2,18 +2,19 @@ package com.switchboard.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,8 +28,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -36,8 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
-import com.switchboard.app.ui.ControlScreen
 import com.switchboard.app.ui.PairingScreen
+import com.switchboard.app.ui.Section
+import com.switchboard.app.ui.SectionActions
+import com.switchboard.app.ui.HomeScreen
+import com.switchboard.app.ui.SectionScreen
 import com.switchboard.app.ui.SwitchboardTheme
 
 class MainActivity : ComponentActivity() {
@@ -70,21 +79,54 @@ fun SwitchboardApp(viewModel: SwitchboardViewModel = viewModel()) {
 
     val connected = state.status == ConnectionStatus.Connected
 
+    // null is the home list; a value is that section's own screen. Navigation
+    // is one level deep, so a nav graph would be scaffolding around a nullable.
+    var section by rememberSaveable { mutableStateOf<Section?>(null) }
+
+    // Losing the host makes any open section meaningless.
+    LaunchedEffect(connected) { if (!connected) section = null }
+    BackHandler(enabled = connected && section != null) { section = null }
+
+    val actions = remember(viewModel) {
+        SectionActions(
+            onBrightness = viewModel::setBrightness,
+            onContrast = viewModel::setContrast,
+            onVolume = viewModel::setVolume,
+            onMedia = viewModel::media
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (connected && section != null) {
+                        IconButton(
+                            onClick = { section = null },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to controls"
+                            )
+                        }
+                    }
+                },
                 title = {
                     Column {
                         Text(
-                            text = state.activeHost?.hostName ?: "Switchboard",
+                            text = section?.title
+                                ?: state.activeHost?.hostName
+                                ?: "Switchboard",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            text = when (state.status) {
-                                ConnectionStatus.Connected -> "Connected"
-                                ConnectionStatus.Connecting -> "Connecting…"
-                                ConnectionStatus.Disconnected -> "Not connected"
-                            },
+                            text = section?.let { state.activeHost?.hostName ?: "" }
+                                ?: when (state.status) {
+                                    ConnectionStatus.Connected -> "Connected"
+                                    ConnectionStatus.Connecting -> "Connecting…"
+                                    ConnectionStatus.Disconnected -> "Not connected"
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -130,22 +172,26 @@ fun SwitchboardApp(viewModel: SwitchboardViewModel = viewModel()) {
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            if (connected) {
-                ControlScreen(
-                    state = state,
-                    onBrightness = viewModel::setBrightness,
-                    onContrast = viewModel::setContrast,
-                    onVolume = viewModel::setVolume,
-                    onMedia = viewModel::media
-                )
-            } else {
-                PairingScreen(
+            when {
+                !connected -> PairingScreen(
                     hosts = state.hosts,
                     error = state.error,
                     onScan = { scanner(Unit) },
                     onManual = viewModel::pairManually,
                     onConnect = viewModel::connect,
                     onForget = viewModel::forget
+                )
+
+                section != null -> SectionScreen(
+                    section = section!!,
+                    state = state,
+                    actions = actions
+                )
+
+                else -> HomeScreen(
+                    state = state,
+                    actions = actions,
+                    onOpen = { section = it }
                 )
             }
         }
