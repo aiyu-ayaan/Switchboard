@@ -115,6 +115,26 @@ A `response` reuses the `id` of the command that caused it. Clients match on tha
 
 `level` is 0–100.
 
+#### Per-application mixer
+
+| Action             | Payload                                              | Response         |
+| ------------------ | ---------------------------------------------------- | ---------------- |
+| `audio.mixer.list` | –                                                    | `AudioSession[]` |
+| `audio.mixer.set`  | `{ "sessionId": "…", "level": 40, "muted": false }`  | `AudioSession[]` |
+
+```json
+{ "id": "{0.0.0.…}|\Device\…|Spotify.exe%b{…}", "name": "Spotify",
+  "pid": 18244, "level": 65, "muted": false, "active": true }
+```
+
+The session list also rides in every `host.state` as `mixer`, so a client renders the mixer from the snapshot it already has rather than asking for it.
+
+`id` is the OS session identifier, not the process. A browser or chat client spans several processes behind a single mixer entry, and whichever process happened to open the stream does not survive a restart — keying on the PID would move a user's volume setting to a different application. `pid` is carried anyway because it is what lets a client resolve a real icon.
+
+`active` is false for a session that still holds its mixer entry but has stopped playing. Windows keeps those entries around for a while, and dropping them from the list would make a paused player vanish from the mixer while the user was looking at it, so they are reported and shown de-emphasised instead.
+
+A host without per-application control omits `mixer` from its `capabilities` and reports an empty list.
+
 ### Media
 
 | Action                    | Payload                    | Response       |
