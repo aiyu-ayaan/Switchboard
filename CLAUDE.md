@@ -60,17 +60,19 @@ Use PnPM workspaces to manage dependencies and streamline development across the
 
 ## Development Phase
 
-Phase 1: Initial Setup and Basic Functionality
+Detailed task-level tracking and progress milestones are maintained in:
+👉 **[`development/devdocs/TODO.md`](development/devdocs/TODO.md)**
 
+### Phase 1: Initial Setup and Basic Functionality
 - Set up the project structure and development environment.
 - Implement basic functionality for the desktop and mobile applications, including establishing a secure connection between the two.
 - Implement basic controls for system settings (brightness, contrast, volume, etc.) and media playback.
 - Implement DDC/CI to capture all connected monitor information and allow users to control monitor settings from the mobile app.
 
-## Phase 2: File Transfer and Media Management
-
+### Phase 2: File Transfer and Media Management
 - Implement file transfer capabilities between the mobile device and the computer, allowing users to send and receive files securely.
 
+---
 
 ## Considerations
 
@@ -80,51 +82,19 @@ Phase 1: Initial Setup and Basic Functionality
 - Compatibility: Ensure compatibility with a wide range of devices and operating systems, including different versions of Windows, macOS, and Linux for the desktop app, as well as various Android devices for the mobile app.
 - Scalability: Design the architecture of the applications to be scalable, allowing for future enhancements and additional features without significant rework. Consider modular design principles and separation of concerns to facilitate future development.
 
-
-## Commit Message Guidelines
-
-### Commit Message Structure
-
-A commit message should consist of a short summary, a detailed description (if necessary), and any relevant metadata. The structure is as follows:
-
-```
-<type>(<scope>): <short summary>
-```
-
-- You can add a detailed description after the short summary if needed to provide additional context about the changes made in the commit.
-- After each commit, update the documentation in `@devdocs` (`development/devdocs/`) and `docs/docs/` with the relevant information.
-- When committing changes that touch the `development/` submodule, commits must be created in both the submodule repo and the main repo.
-- See [`development/Commit.md`](development/Commit.md) for complete guidelines on submodule detached HEAD prevention and commit rules.
-- See [`development/Release-Commit.md`](development/Release-Commit.md) for automated release triggers and documentation deploy markers (`!alpha`, `!beta`, `!docs`, etc.).
-
 ---
 
-### Commit Types
+## Claude Code & AI Agent Guidelines
 
-The following commit types are recommended for use in this project:
+All comprehensive instructions, commit message standards, release markers, and submodule dual-commit workflows have been migrated to:
+👉 **[`development/CLAUDE.md`](development/CLAUDE.md)** (Submodule authoritative guide)
+👉 **[`development/Commit.md`](development/Commit.md)** (Detailed commit and detached HEAD guide)
+👉 **[`development/Release-Commit.md`](development/Release-Commit.md)** (CI release and documentation triggers)
 
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, missing semi-colons, etc.)
-- `refactor`: Code refactoring without changing functionality
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks (build process, package manager, etc.)
-- `perf`: Performance improvements
-- `ci`: Continuous integration changes
-- `revert`: Reverting a previous commit
-- `build`: Changes that affect the build system or external dependencies
+### Key Rules Summary for AI Agents
+1. **NEVER Push to Remote**: Never execute `git push` or push variants. Commits are strictly **LOCAL**.
+2. **No AI Attribution**: The author must reflect the repository username (`aiyu-ayaan`), never an AI assistant or co-author tag.
+3. **Submodule Dual-Commit**: When touching `development/`, commit in both the submodule repo (`main` branch) and the parent repo (`master` branch).
+4. **Commit Structure**: Follow `<type>(<scope>): <short summary>`.
+5. **Keep Commits Atomic**: Break distinct changes into smaller, logical commits.
 
----
-
-### Scope
-
-The scope of a commit message should indicate the area of the codebase that is affected by the changes (e.g., `android`, `desktop`, `backend`). If the scope is not applicable, it can be omitted.
-
----
-
-### Important Considerations for AI Agents
-
-1. **NEVER Push to Remote**: Never run `git push`, `git push origin`, or any push variant. Commits are strictly local.
-2. **No AI Attribution**: Never add yourself as the author or co-author of the commit message. The commit message should reflect the repository username, never an AI assistant's name or co-authored-by tag.
-3. **Keep Commits Atomic**: Break distinct changes into smaller, logical commits with clear messages.
