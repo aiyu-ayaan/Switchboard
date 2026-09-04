@@ -98,3 +98,13 @@ All comprehensive instructions, commit message standards, release markers, and s
 4. **Commit Structure**: Follow `<type>(<scope>): <short summary>`.
 5. **Keep Commits Atomic**: Break distinct changes into smaller, logical commits.
 
+---
+
+## Code Search & Exploration (CodeGraph)
+
+For code search, symbol lookup, or understanding any query across the codebase, always reach for **CodeGraph** before using grep/find or reading files:
+- **MCP Tool**: Use `codegraph_explore` to inspect symbols, verbatim source, and dynamic call paths in a single call.
+- **Shell / CLI**: Run `codegraph explore "<symbol names or query>"` to search and analyze call paths.
+- If the repository has a `.codegraph/` index, reach for CodeGraph first to trace symbols and call hierarchies. If no `.codegraph/` directory exists, use standard search tools.
+
+

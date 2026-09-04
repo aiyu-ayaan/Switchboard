@@ -71,3 +71,8 @@ When any file inside `development/` is modified:
 
 ### E. DOCUMENTATION INTEGRITY
 After each relevant commit, update the documentation in `@devdocs` (`development/devdocs/`) and `docs/docs/`, and keep `development/devdocs/TODO.md` updated with progress.
+
+### F. CODE SEARCH & EXPLORATION (CODEGRAPH)
+For code search, symbol discovery, or understanding queries across the codebase:
+- Always use **CodeGraph** (`codegraph_explore` MCP tool or `codegraph explore "<query>"`) before using grep/find or manually reading files.
+- Traces verbatim source and dynamic call paths between components in a single operation.
