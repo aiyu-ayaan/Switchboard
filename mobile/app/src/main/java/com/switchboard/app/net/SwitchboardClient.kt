@@ -319,6 +319,7 @@ class SwitchboardClient(
     private fun encodePayload(payload: Any) = when (payload) {
         is DisplaySet -> SwitchboardJson.encodeToJsonElement(DisplaySet.serializer(), payload)
         is Volume -> SwitchboardJson.encodeToJsonElement(Volume.serializer(), payload)
+        is MixerSet -> SwitchboardJson.encodeToJsonElement(MixerSet.serializer(), payload)
         is MediaCommand -> SwitchboardJson.encodeToJsonElement(MediaCommand.serializer(), payload)
         is FileOffer -> SwitchboardJson.encodeToJsonElement(FileOffer.serializer(), payload)
         is FileAccept -> SwitchboardJson.encodeToJsonElement(FileAccept.serializer(), payload)
