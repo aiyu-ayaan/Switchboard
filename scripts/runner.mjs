@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { connect } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
@@ -16,6 +17,7 @@ const rootDir = resolve(__dirname, '..');
 
 const isWindows = process.platform === 'win32';
 const activeChildren = new Set();
+const BACKEND_PORT = Number(process.env.SWITCHBOARD_PORT ?? 9427);
 
 function log(prefix, message) {
   const colors = {
@@ -150,12 +152,38 @@ async function buildAndroid() {
   }
 }
 
+/** Resolves once something is listening on the port, or after the deadline. */
+function waitForPort(port, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolvePromise) => {
+    const attempt = () => {
+      const socket = connect({ port, host: '127.0.0.1' });
+      socket.once('connect', () => {
+        socket.destroy();
+        resolvePromise(true);
+      });
+      socket.once('error', () => {
+        socket.destroy();
+        if (Date.now() > deadline) resolvePromise(false);
+        else setTimeout(attempt, 250);
+      });
+    };
+    attempt();
+  });
+}
+
 async function devAll() {
   log('system', '=== Spinning Backend Daemon & Frontend UI ===');
-  return Promise.allSettled([
-    spinBackend().catch(err => log('backend', `Backend notice: ${err.message}`)),
-    spinFrontend().catch(err => log('frontend', `Frontend notice: ${err.message}`))
-  ]);
+
+  const backend = spinBackend().catch(err => log('backend', `Backend notice: ${err.message}`));
+
+  // Electron starts the daemon itself when none is answering, so the frontend
+  // must not race ahead of `go run` -- two daemons cannot bind the same port.
+  const ready = await waitForPort(BACKEND_PORT);
+  if (!ready) log('backend', 'Daemon did not come up in time; starting the frontend anyway.');
+
+  const frontend = spinFrontend().catch(err => log('frontend', `Frontend notice: ${err.message}`));
+  return Promise.allSettled([backend, frontend]);
 }
 
 async function buildAll() {

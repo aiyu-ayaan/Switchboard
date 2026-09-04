@@ -27,8 +27,11 @@ function daemonPath(): string | null {
 /** True when a daemon is already answering on the local API. */
 async function daemonRunning(): Promise<boolean> {
   try {
+    // Generous: the first fetch in the main process pays a cold-start cost of
+    // over a second, and a false negative here starts a second daemon that
+    // then fails to bind the port.
     const res = await fetch(`http://127.0.0.1:${DAEMON_PORT}/local/state`, {
-      signal: AbortSignal.timeout(1000)
+      signal: AbortSignal.timeout(5000)
     });
     return res.ok;
   } catch {

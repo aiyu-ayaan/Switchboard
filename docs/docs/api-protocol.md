@@ -117,11 +117,42 @@ A `response` reuses the `id` of the command that caused it. Clients match on tha
 
 ### Media
 
-| Action                    | Payload                    |
-| ------------------------- | -------------------------- |
-| `media.playback.command`  | `{ "action": "toggle" }`   |
+| Action                    | Payload                    | Response       |
+| ------------------------- | -------------------------- | -------------- |
+| `media.playback.command`  | `{ "action": "toggle" }`   | `{ "action" }` |
+| `media.artwork`           | -                          | `MediaArtwork` |
 
-Accepted actions: `play`, `pause`, `toggle`, `next`, `prev`, `stop`. `play` and `pause` both map to the platform toggle key, since the transport state lives in the media application rather than in Switchboard.
+Accepted actions: `play`, `pause`, `toggle`, `next`, `prev`, `stop`.
+
+Commands are sent to the host's OS media session — on Windows, the System Media Transport Controls session that Spotify, browsers and native players publish to. Driving that session keeps `play` and `pause` distinct and lets the host *read* what is playing. Players that claim a global hotkey but publish no session fall back to synthesised multimedia keys, where `play` and `pause` both land on the toggle key.
+
+The session is also what `host.state` reports as `media`:
+
+```json
+{
+  "active": true,
+  "status": "playing",
+  "title": "Sakhiyaan",
+  "artist": "Maninder Buttar",
+  "album": "Sakhiyaan",
+  "source": "Spotify",
+  "artworkId": "5f2c91a0d3be47aa"
+}
+```
+
+`status` is one of `playing`, `paused` or `stopped`. `active` is false when nothing holds the session, in which case every other field is empty — an idle host, not an error.
+
+#### Artwork
+
+`artworkId` names the current track's cover art without carrying it. Cover art is an order of magnitude larger than the rest of the snapshot and changes only when the track does, so it is pulled once with `media.artwork` and cached against this ID rather than pushed with every broadcast:
+
+```json
+{ "artworkId": "5f2c91a0d3be47aa", "mimeType": "image/png", "data": "<base64>" }
+```
+
+`artworkId` is empty when the track has no artwork. A client should request artwork only when the ID in a snapshot differs from the one it holds, and should discard a reply whose ID no longer matches the current track — a late reply would otherwise be shown against the wrong song.
+
+The daemon polls the session once a second and broadcasts `host.state` when it changes, so a track paused at the desktop reaches every connected phone.
 
 ### Events
 
@@ -137,6 +168,8 @@ Pushed on connect and after every state change, so multiple clients converge rat
   "daemonId": "uuid",
   "displays": [ … ],
   "volume": { "level": 50, "muted": false },
+  "media": { "active": true, "status": "playing", "title": "…", "artist": "…",
+             "album": "…", "source": "Spotify", "artworkId": "5f2c91a0d3be47aa" },
   "capabilities": ["display", "volume", "media"]
 }
 ```

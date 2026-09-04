@@ -19,11 +19,25 @@ export interface Volume {
   muted: boolean;
 }
 
+/** What the host is playing, read from its OS media session. */
+export interface MediaState {
+  active: boolean;
+  status: 'playing' | 'paused' | 'stopped';
+  title: string;
+  artist: string;
+  album: string;
+  /** The application the sound is coming from. */
+  source: string;
+  /** Names the cover art without carrying it; fetched separately, cached by ID. */
+  artworkId: string;
+}
+
 export interface HostState {
   hostName: string;
   daemonId: string;
   displays: Display[];
   volume: Volume;
+  media: MediaState;
   capabilities: string[];
 }
 
