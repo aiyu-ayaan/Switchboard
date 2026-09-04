@@ -300,3 +300,132 @@ func TestPairingCodeIsTypeable(t *testing.T) {
 		t.Fatalf("rotation repeated a code: %d unique out of 50", len(seen))
 	}
 }
+
+// A phone stays paired across a daemon restart: both halves of the credential
+// come back from SQLite rather than being regenerated. If the host minted a new
+// identity on boot, every previously paired device would silently fall back to
+// needing the QR code again.
+func TestPairingSurvivesDaemonRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "restart.db")
+
+	identity, err := crypto.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// --- First run: pair a phone, then shut the daemon down. ---
+	store, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control := system.NewController()
+	srv, err := New(&config.Config{Port: 0}, store, control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+
+	before := srv.PairingInfo()
+	paired, err := dial(t, ts, identity, modePair, []byte(before.Code))
+	if err != nil {
+		t.Fatalf("pairing rejected: %v", err)
+	}
+	paired.conn.Close()
+	ts.Close()
+	control.Close()
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// --- Restart: same database file, a brand new Server. ---
+	reopened, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { reopened.Close() })
+
+	control2 := system.NewController()
+	t.Cleanup(control2.Close)
+
+	srv2, err := New(&config.Config{Port: 0}, reopened, control2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts2 := httptest.NewServer(srv2.Handler())
+	t.Cleanup(ts2.Close)
+
+	after := srv2.PairingInfo()
+	if after.DaemonID != before.DaemonID {
+		t.Fatalf("daemon ID changed across restart: %s -> %s", before.DaemonID, after.DaemonID)
+	}
+	// The phone pins this key at pairing time and checks it on every resume.
+	if after.HostKey != before.HostKey {
+		t.Fatalf("host identity key changed across restart: %s -> %s", before.HostKey, after.HostKey)
+	}
+
+	devices, err := srv2.Devices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(devices) != 1 {
+		t.Fatalf("expected the paired device to survive the restart, got %+v", devices)
+	}
+
+	// The credential that matters: resume with no pairing code at all.
+	resumed, err := dial(t, ts2, identity, modeResume, nil)
+	if err != nil {
+		t.Fatalf("resume after restart rejected: %v", err)
+	}
+	if resumed.deviceID != paired.deviceID {
+		t.Fatalf("device ID changed across restart: %s -> %s", paired.deviceID, resumed.deviceID)
+	}
+}
+
+// TestMediaStateAndArtworkOverTheWire walks the path a phone actually takes:
+// read the media snapshot out of host.state, then fetch the cover art it names
+// as a separate command. The IDs must agree, or a client caching artwork by ID
+// re-fetches the same image on every snapshot it receives.
+func TestMediaStateAndArtworkOverTheWire(t *testing.T) {
+	srv, ts := newHarness(t)
+
+	identity, err := crypto.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := dial(t, ts, identity, modePair, []byte(srv.PairingInfo().Code))
+	if err != nil {
+		t.Fatalf("pairing rejected: %v", err)
+	}
+
+	state := srv.control.State(srv.DaemonID())
+	hasMedia := false
+	for _, c := range state.Capabilities {
+		if c == "media" {
+			hasMedia = true
+		}
+	}
+	if !hasMedia {
+		t.Skip("host reports no media capability")
+	}
+
+	reply := client.call(t, protocol.ActionMediaArtwork, nil)
+	if reply.Type != protocol.TypeResponse {
+		t.Fatalf("media.artwork returned %s: %s", reply.Type, reply.Payload)
+	}
+	var artwork protocol.MediaArtwork
+	if err := reply.Decode(&artwork); err != nil {
+		t.Fatalf("decoding artwork: %v", err)
+	}
+
+	switch {
+	case state.Media.ArtworkID == "":
+		if artwork.ArtworkID != "" {
+			t.Fatalf("artwork arrived for a snapshot that advertised none: %q", artwork.ArtworkID)
+		}
+	case artwork.ArtworkID != state.Media.ArtworkID:
+		t.Fatalf("artwork id %q does not match snapshot id %q",
+			artwork.ArtworkID, state.Media.ArtworkID)
+	case artwork.Data == "":
+		t.Fatal("snapshot advertised artwork but none came back")
+	}
+}

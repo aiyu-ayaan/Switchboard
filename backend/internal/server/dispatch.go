@@ -74,7 +74,18 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope) {
 			s.fail(c, env, err)
 			return
 		}
+		// No broadcast here: the player needs a moment to act on the command,
+		// so a snapshot taken now would still carry the old status. The media
+		// watcher picks the real change up on its next pass.
 		s.reply(c, env, map[string]string{"action": req.Action})
+
+	case protocol.ActionMediaArtwork:
+		artwork, err := s.control.MediaArtwork()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, artwork)
 
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))

@@ -70,6 +70,16 @@ func (c *Controller) SetVolume(level int, muted bool) (protocol.Volume, error) {
 // Media sends a transport command to the active media session.
 func (c *Controller) Media(action string) error { return sendMediaCommand(action) }
 
+// MediaState reads what the host is playing. A host with nothing playing
+// yields the zero state and no error, so callers distinguish "idle" from
+// "broken" without inspecting the error.
+func (c *Controller) MediaState() (protocol.MediaState, error) { return mediaState() }
+
+// MediaArtwork reads the cover image for the current track. Artwork is fetched
+// on demand rather than carried in every snapshot: it is far larger than the
+// rest of the state and changes only when the track does.
+func (c *Controller) MediaArtwork() (protocol.MediaArtwork, error) { return mediaArtwork() }
+
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
@@ -90,6 +100,9 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 	}
 	if mediaSupported() {
 		state.Capabilities = append(state.Capabilities, "media")
+		if media, err := c.MediaState(); err == nil {
+			state.Media = media
+		}
 	}
 	return state
 }

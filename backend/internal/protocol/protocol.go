@@ -27,6 +27,11 @@ const (
 	ActionVolumeSet = "system.volume.set"
 
 	ActionMediaCommand = "media.playback.command"
+	// ActionMediaArtwork fetches the cover art for the track named by
+	// MediaState.ArtworkID. Artwork is pulled on demand rather than carried in
+	// every host.state broadcast: the image is orders of magnitude larger than
+	// the rest of the snapshot and only changes when the track does.
+	ActionMediaArtwork = "media.artwork"
 
 	ActionHostState = "host.state" // event: full snapshot pushed to clients
 	ActionPing      = "system.ping"
@@ -125,11 +130,45 @@ type MediaCommand struct {
 	Action string `json:"action"` // play | pause | toggle | next | prev | stop
 }
 
+// Playback states reported in MediaState.Status.
+const (
+	PlaybackStopped = "stopped"
+	PlaybackPlaying = "playing"
+	PlaybackPaused  = "paused"
+)
+
+// MediaState is the now-playing snapshot read from the OS media session, so a
+// client can render real transport state instead of a stateless button row.
+//
+// Every field is a value type: the daemon compares two snapshots to decide
+// whether anything changed and a broadcast is warranted.
+type MediaState struct {
+	Active bool   `json:"active"` // false when nothing holds the media session
+	Status string `json:"status"` // playing | paused | stopped
+	Title  string `json:"title"`
+	Artist string `json:"artist"`
+	Album  string `json:"album"`
+	Source string `json:"source"` // owning application, for the "from" label
+
+	// ArtworkID identifies the cover art for this track. It is empty when the
+	// session exposes no thumbnail. Clients cache by this value and only
+	// re-fetch when it changes.
+	ArtworkID string `json:"artworkId"`
+}
+
+// MediaArtwork is the reply to media.artwork: the cover image itself.
+type MediaArtwork struct {
+	ArtworkID string `json:"artworkId"`
+	MimeType  string `json:"mimeType"`
+	Data      string `json:"data"` // base64, empty when the track has no artwork
+}
+
 // HostState is the full snapshot pushed on connect and after every change.
 type HostState struct {
-	HostName     string    `json:"hostName"`
-	DaemonID     string    `json:"daemonId"`
-	Displays     []Display `json:"displays"`
-	Volume       Volume    `json:"volume"`
-	Capabilities []string  `json:"capabilities"`
+	HostName     string     `json:"hostName"`
+	DaemonID     string     `json:"daemonId"`
+	Displays     []Display  `json:"displays"`
+	Volume       Volume     `json:"volume"`
+	Media        MediaState `json:"media"`
+	Capabilities []string   `json:"capabilities"`
 }

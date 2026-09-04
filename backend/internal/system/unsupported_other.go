@@ -30,4 +30,8 @@ func setVolume(int, bool) (protocol.Volume, error) { return protocol.Volume{}, E
 
 func sendMediaCommand(string) error { return ErrUnsupported }
 
+func mediaState() (protocol.MediaState, error) { return protocol.MediaState{}, ErrUnsupported }
+
+func mediaArtwork() (protocol.MediaArtwork, error) { return protocol.MediaArtwork{}, ErrUnsupported }
+
 func mediaSupported() bool { return false }

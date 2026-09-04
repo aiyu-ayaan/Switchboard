@@ -49,5 +49,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Media playback changes at the host, not at our request, so it needs a
+	// watcher to reach connected phones.
+	go srv.WatchMedia(ctx)
+
 	return srv.ListenAndServe(ctx)
 }

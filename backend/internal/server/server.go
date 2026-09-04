@@ -282,6 +282,58 @@ func (s *Server) Broadcast() {
 	}
 }
 
+// mediaPollInterval is how often the daemon re-reads the OS media session.
+//
+// Windows raises change events for this session, but consuming them means
+// handing WinRT a Go callback that fires on a thread pool thread. A one second
+// poll is well inside what reads as instant on a phone, costs a single cheap
+// call, and keeps the delivery path the same as every other state change.
+const mediaPollInterval = time.Second
+
+// WatchMedia broadcasts whenever what the host is playing changes, so a phone
+// tracks play, pause and track changes driven from the desktop rather than
+// only the ones it caused itself. It blocks until the context is cancelled.
+func (s *Server) WatchMedia(ctx context.Context) {
+	ticker := time.NewTicker(mediaPollInterval)
+	defer ticker.Stop()
+
+	var last protocol.MediaState
+	var lastErr string
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Nothing is listening, so skip the OS call entirely. The next
+			// client to connect is sent a fresh snapshot on connect anyway.
+			if s.clientCount() == 0 {
+				continue
+			}
+			current, err := s.control.MediaState()
+			if err != nil {
+				// A wedged media stack would otherwise log once a second.
+				if msg := err.Error(); msg != lastErr {
+					lastErr = msg
+					log.Printf("media watch: %v", err)
+				}
+				continue
+			}
+			lastErr = ""
+			if current != last {
+				last = current
+				s.Broadcast()
+			}
+		}
+	}
+}
+
+func (s *Server) clientCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.clients)
+}
+
 // localIP finds the LAN address a phone on the same network can reach. It
 // dials an off-machine address without sending anything, which makes the OS
 // pick the interface it would actually route through.
