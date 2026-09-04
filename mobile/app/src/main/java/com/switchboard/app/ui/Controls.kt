@@ -1,17 +1,29 @@
 package com.switchboard.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -34,16 +46,22 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -58,44 +76,47 @@ import com.switchboard.app.net.MediaState
 import kotlin.math.roundToInt
 
 /**
- * The controls each section is built from.
- *
- * Every one of these appears twice: full size on the section's own screen, and
- * again inside the long-press quick settings sheet. Defining them once is what
- * keeps the shortcut and the screen behind it from drifting apart.
+ * Expressive Section Card with Material 3 Expressive corner radius (24.dp)
+ * and elevation borders.
  */
-
 @Composable
-fun SectionCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun SectionCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
-        )
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
-        Column(Modifier.padding(16.dp), content = content)
+        Column(Modifier.padding(18.dp), content = content)
     }
 }
 
 @Composable
 fun EmptyCard(title: String, body: String) {
     SectionCard {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(6.dp))
         Text(
-            body,
-            style = MaterialTheme.typography.bodySmall,
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
 /**
- * A labelled slider.
- *
- * The value shown tracks the drag locally and only publishes on release: each
- * write travels over I2C to the panel, so a raw per-pixel stream would queue up
- * behind the bus.
+ * Expressive slider row with capsule track styling, animated level badge,
+ * and tactile feedback.
  */
 @Composable
 fun LevelRow(
@@ -112,13 +133,21 @@ fun LevelRow(
     val percent = if (max > min) ((shown - min) / (max - min) * 100).roundToInt() else 0
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null, // the label beside it carries the meaning
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.width(10.dp))
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
         Slider(
             value = shown,
             onValueChange = { dragging = it },
@@ -130,24 +159,36 @@ fun LevelRow(
             },
             valueRange = min.toFloat()..max.toFloat(),
             enabled = enabled,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            ),
             modifier = Modifier
                 .weight(1f)
                 .semantics { contentDescription = label }
         )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = "$percent%",
-            style = MaterialTheme.typography.labelMedium,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(44.dp)
-        )
+        Spacer(Modifier.width(12.dp))
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.width(48.dp)
+        ) {
+            Text(
+                text = "$percent%",
+                style = MaterialTheme.typography.labelMedium,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                maxLines = 1
+            )
+        }
     }
 }
 
 /**
- * One panel. An external monitor shows brightness and contrast; a built-in
- * panel shows brightness alone, having no DDC/CI contrast channel.
+ * Display control card with expressive header and brightness/contrast sliders.
  */
 @Composable
 fun DisplayCard(
@@ -158,30 +199,45 @@ fun DisplayCard(
 ) {
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (display.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (display.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
             Text(
                 text = display.name,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                text = if (display.internal) "Internal" else "DDC/CI",
-                style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                Text(
+                    text = if (display.internal) "Internal" else "DDC/CI",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
 
         LevelRow(
             icon = Icons.Filled.LightMode,
@@ -193,7 +249,7 @@ fun DisplayCard(
         )
 
         if (display.hasContrast) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
             LevelRow(
                 icon = Icons.Filled.Contrast,
                 label = "${display.name} contrast",
@@ -204,15 +260,13 @@ fun DisplayCard(
             )
         }
 
-        // The panel's real capability range, which is not always 0-100. Only
-        // worth the space on the section's own screen.
         if (detailed) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = buildString {
-                    append("Brightness ${display.brightness} / ${display.maxBrightness}")
+                    append("Brightness: ${display.brightness} / ${display.maxBrightness}")
                     if (display.hasContrast) {
-                        append("    Contrast ${display.contrast} / ${display.maxContrast}")
+                        append("   •   Contrast: ${display.contrast} / ${display.maxContrast}")
                     }
                 },
                 style = MaterialTheme.typography.labelSmall,
@@ -223,6 +277,9 @@ fun DisplayCard(
     }
 }
 
+/**
+ * Expressive master volume card with prominent mute container and slider.
+ */
 @Composable
 fun VolumeCard(level: Int, muted: Boolean, onVolume: (Int, Boolean) -> Unit) {
     var dragging by remember { mutableFloatStateOf(Float.NaN) }
@@ -232,40 +289,56 @@ fun VolumeCard(level: Int, muted: Boolean, onVolume: (Int, Boolean) -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "Master volume",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-            // State is spelled out as well as coloured.
-            Text(
-                text = if (muted) "Muted" else "$level%",
-                style = MaterialTheme.typography.labelMedium,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = { onVolume(level, !muted) },
-                modifier = Modifier.size(48.dp) // 48dp touch target
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
             ) {
-                Icon(
-                    imageVector = if (muted) {
-                        Icons.AutoMirrored.Filled.VolumeOff
-                    } else {
-                        Icons.AutoMirrored.Filled.VolumeUp
-                    },
-                    contentDescription = if (muted) "Unmute" else "Mute",
-                    tint = if (muted) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                Text(
+                    text = if (muted) "MUTED" else "$level%",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = if (muted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = CircleShape,
+                color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier.bouncyClickable { onVolume(level, !muted) }
+            ) {
+                Box(
+                    modifier = Modifier.size(44.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (muted) {
+                            Icons.AutoMirrored.Filled.VolumeOff
+                        } else {
+                            Icons.AutoMirrored.Filled.VolumeUp
+                        },
+                        contentDescription = if (muted) "Unmute" else "Mute",
+                        tint = if (muted) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
             Slider(
                 value = shown,
                 onValueChange = { dragging = it },
@@ -277,16 +350,77 @@ fun VolumeCard(level: Int, muted: Boolean, onVolume: (Int, Boolean) -> Unit) {
                 },
                 valueRange = 0f..100f,
                 enabled = !muted,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                ),
                 modifier = Modifier
                     .weight(1f)
                     .semantics { contentDescription = "Master volume" }
             )
-            Spacer(Modifier.width(12.dp))
         }
     }
 }
 
-/** Cover art, title, artist and the app the sound is coming from. */
+/**
+ * Animated 3-bar vertical equalizer pulse indicating live audio playback.
+ */
+@Composable
+private fun AnimatedEqualizer(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "equalizer")
+    val bar1 by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(420, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar1"
+    )
+    val bar2 by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(340, delayMillis = 80, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar2"
+    )
+    val bar3 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(520, delayMillis = 40, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar3"
+    )
+
+    Row(
+        modifier = modifier.height(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        listOf(bar1, bar2, bar3).forEach { heightFraction ->
+            val actualFraction = if (isPlaying) heightFraction else 0.25f
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight(actualFraction)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        }
+    }
+}
+
+/**
+ * Expressive Now Playing card with artwork spring scale and animated equalizer.
+ */
 @Composable
 fun NowPlaying(
     media: MediaState,
@@ -294,21 +428,30 @@ fun NowPlaying(
     artSize: Dp = 72.dp
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Artwork(artwork, artSize)
-        Spacer(Modifier.width(14.dp))
+        Artwork(artwork, artSize, isPlaying = media.isPlaying)
+        Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                text = if (media.active && media.title.isNotEmpty()) media.title else "Nothing playing",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (media.active && media.title.isNotEmpty()) media.title else "Nothing playing",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (media.active && media.isPlaying) {
+                    AnimatedEqualizer(isPlaying = true)
+                }
+            }
             if (media.artist.isNotEmpty()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = media.artist,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -325,20 +468,35 @@ fun NowPlaying(
             }
             if (media.source.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = media.source,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = media.source,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun Artwork(artwork: ImageBitmap?, size: Dp) {
-    val shape = RoundedCornerShape(10.dp)
+private fun Artwork(artwork: ImageBitmap?, size: Dp, isPlaying: Boolean = false) {
+    val shape = RoundedCornerShape(16.dp)
+    val scale = remember { Animatable(1f) }
+
+    LaunchedEffect(isPlaying) {
+        scale.animateTo(
+            targetValue = if (isPlaying) 1.03f else 1.0f,
+            animationSpec = ExpressiveMotion.Bouncy
+        )
+    }
+
     if (artwork != null) {
         Image(
             bitmap = artwork,
@@ -346,61 +504,92 @@ private fun Artwork(artwork: ImageBitmap?, size: Dp) {
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(size)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                }
                 .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
         )
         return
     }
-    // Holding the same footprint keeps the row from jumping when art arrives.
-    Row(
-        modifier = Modifier
-            .size(size)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.size(size)
     ) {
-        Icon(
-            imageVector = Icons.Filled.MusicNote,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(size / 3)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Filled.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(size / 2.5f)
+            )
+        }
     }
 }
 
 /**
- * Transport buttons. The centre button shows the state the host reports, so a
- * track paused from the desktop reads as paused here.
+ * Transport controls with 56.dp central Play/Pause morphing button and spring scale buttons.
  */
 @Composable
 fun TransportRow(playing: Boolean, onMedia: (String) -> Unit) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        TransportButton(Icons.Filled.SkipPrevious, "Previous track") { onMedia("prev") }
-        FilledTonalIconButton(
-            onClick = { onMedia("toggle") },
-            modifier = Modifier.size(56.dp),
-            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
+        TransportButton(
+            icon = Icons.Filled.SkipPrevious,
+            label = "Previous track"
+        ) { onMedia("prev") }
+
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .size(56.dp)
+                .bouncyClickable { onMedia("toggle") }
         ) {
-            Icon(
-                imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (playing) "Pause" else "Play"
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (playing) "Pause" else "Play",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
         }
-        TransportButton(Icons.Filled.SkipNext, "Next track") { onMedia("next") }
-        TransportButton(Icons.Filled.Stop, "Stop") { onMedia("stop") }
+
+        TransportButton(
+            icon = Icons.Filled.SkipNext,
+            label = "Next track"
+        ) { onMedia("next") }
+
+        TransportButton(
+            icon = Icons.Filled.Stop,
+            label = "Stop"
+        ) { onMedia("stop") }
     }
 }
 
 @Composable
 private fun TransportButton(icon: ImageVector, label: String, onClick: () -> Unit) {
-    FilledTonalIconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
-        Icon(icon, contentDescription = label)
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .size(46.dp)
+            .bouncyClickable(onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp)
+            )
+        }
     }
 }
