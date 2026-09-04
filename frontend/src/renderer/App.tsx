@@ -1,16 +1,20 @@
-import { Monitor, Smartphone, Volume2 } from 'lucide-react';
+import { Monitor, Send, Settings, Smartphone, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { ActivityBar, StatusBar, TitleBar } from './components/Shell';
 import type { ViewId } from './components/Shell';
 import { DisplaysView } from './components/DisplaysView';
 import { AudioView } from './components/AudioView';
+import { FilesView } from './components/FilesView';
 import { DevicesView } from './components/DevicesView';
+import { SettingsView } from './components/SettingsView';
 import { useHostState } from './useHostState';
 
 const SECTIONS = [
   { id: 'displays' as const, label: 'Displays', icon: Monitor },
   { id: 'audio' as const, label: 'Audio and media', icon: Volume2 },
-  { id: 'devices' as const, label: 'Paired devices', icon: Smartphone }
+  { id: 'files' as const, label: 'File transfers', icon: Send },
+  { id: 'devices' as const, label: 'Paired devices', icon: Smartphone },
+  { id: 'settings' as const, label: 'Settings', icon: Settings }
 ];
 
 export const App = () => {
@@ -18,6 +22,8 @@ export const App = () => {
   const [view, setView] = useState<ViewId>('displays');
 
   const online = state?.devices.filter((d) => d.online).length ?? 0;
+  const moving =
+    state?.transfers.filter((t) => t.status === 'active' || t.status === 'pending').length ?? 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -25,9 +31,11 @@ export const App = () => {
 
       <div className="flex min-h-0 flex-1">
         <ActivityBar
-          items={SECTIONS.map((section) =>
-            section.id === 'devices' && online > 0 ? { ...section, badge: online } : section
-          )}
+          items={SECTIONS.map((section) => {
+            if (section.id === 'devices' && online > 0) return { ...section, badge: online };
+            if (section.id === 'files' && moving > 0) return { ...section, badge: moving };
+            return section;
+          })}
           active={view}
           onSelect={setView}
         />
@@ -38,7 +46,9 @@ export const App = () => {
               <DisplaysView state={state} patch={patch} setPaused={setPaused} refresh={refresh} />
             )}
             {view === 'audio' && <AudioView state={state} patch={patch} setPaused={setPaused} />}
+            {view === 'files' && <FilesView state={state} refresh={refresh} />}
             {view === 'devices' && <DevicesView state={state} refresh={refresh} />}
+            {view === 'settings' && <SettingsView state={state} patch={patch} />}
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center bg-canvas">

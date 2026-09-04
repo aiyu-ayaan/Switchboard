@@ -119,6 +119,13 @@ export interface SwitchboardBridge {
   media(action: MediaAction): Promise<void>;
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;
+  /**
+   * Resolves a dropped or picked `File` to its absolute path.
+   *
+   * Chromium stopped exposing `File.path` to the renderer, and the renderer has
+   * no Node access, so the preload layer answers this with `webUtils`.
+   */
+  pathForFile(file: File): string;
   /** Queues files for a paired device; paths come from the drag-and-drop tray. */
   sendFiles(deviceId: string, paths: string[]): Promise<FileTransfer[]>;
   controlTransfer(transferId: string, action: 'pause' | 'resume' | 'cancel'): Promise<void>;
