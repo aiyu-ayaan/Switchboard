@@ -176,21 +176,35 @@ fun SwitchboardApp(
                                     )
                                 }
                                 is AppScreen.Main -> {
-                                    Text(
-                                        text = state.activeHost?.hostName ?: "Switchboard",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = when (state.status) {
-                                            ConnectionStatus.Connected -> "Connected"
-                                            ConnectionStatus.Connecting -> "Connecting…"
-                                            ConnectionStatus.Disconnected -> "Not connected"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (connected) {
+                                        Text(
+                                            text = state.activeHost?.hostName ?: "Switchboard",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Connected",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Switchboard",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (state.status == ConnectionStatus.Connecting) {
+                                                "Connecting to ${state.activeHost?.hostName ?: "desktop"}…"
+                                            } else {
+                                                "Not connected"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -47,9 +47,11 @@ data class UiState(
     val canControlMedia: Boolean get() = host.capabilities.contains("media")
 }
 
-private const val DEFAULT_PORT = 9427
-
 class SwitchboardViewModel(application: Application) : AndroidViewModel(application) {
+
+    companion object {
+        const val DEFAULT_PORT = 9427
+    }
 
     private val store = HostStore(application)
     private val client = SwitchboardClient(store.identity, "${Build.MANUFACTURER} ${Build.MODEL}")
@@ -186,11 +188,20 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
                     is ConnectionEvent.Failed ->
                         _uiState.update {
-                            it.copy(status = ConnectionStatus.Disconnected, error = event.reason)
+                            it.copy(
+                                status = ConnectionStatus.Disconnected,
+                                activeHost = null,
+                                error = event.reason
+                            )
                         }
 
                     ConnectionEvent.Disconnected ->
-                        _uiState.update { it.copy(status = ConnectionStatus.Disconnected) }
+                        _uiState.update {
+                            it.copy(
+                                status = ConnectionStatus.Disconnected,
+                                activeHost = null
+                            )
+                        }
                 }
             }
         }
@@ -200,7 +211,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         connection?.cancel()
         connection = null
         client.disconnect()
-        _uiState.update { it.copy(status = ConnectionStatus.Disconnected) }
+        _uiState.update { it.copy(status = ConnectionStatus.Disconnected, activeHost = null) }
     }
 
     /** "Forget system": drops stored keys for a host and leaves it if active. */

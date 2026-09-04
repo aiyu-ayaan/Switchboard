@@ -93,12 +93,25 @@ class SwitchboardClient(
 
         val endpoints = buildList {
             add(endpoint)
+
+            fun fallbackUrl(newHost: String): String {
+                val prefix = endpoint.substringBefore("://") + "://"
+                val rest = endpoint.substringAfter("://")
+                val portAndPath = rest.substring(
+                    rest.indexOfFirst { it == ':' || it == '/' }.let { if (it == -1) rest.length else it }
+                )
+                return "$prefix$newHost$portAndPath"
+            }
+
             if (isEmulator()) {
-                if (endpoint.contains("://127.0.0.1:")) {
-                    add(endpoint.replace("://127.0.0.1:", "://10.0.2.2:"))
-                } else if (endpoint.contains("://localhost:")) {
-                    add(endpoint.replace("://localhost:", "://10.0.2.2:"))
+                val emulatorUrl = fallbackUrl("10.0.2.2")
+                if (!contains(emulatorUrl)) {
+                    add(emulatorUrl)
                 }
+            }
+            val loopbackUrl = fallbackUrl("127.0.0.1")
+            if (!contains(loopbackUrl)) {
+                add(loopbackUrl)
             }
         }
 

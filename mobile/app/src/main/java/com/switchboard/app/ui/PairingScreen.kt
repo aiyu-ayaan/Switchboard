@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.switchboard.app.SwitchboardViewModel
 import com.switchboard.app.data.KnownHost
 
 /**
@@ -355,7 +359,12 @@ private fun HostRow(host: KnownHost, onConnect: () -> Unit, onForget: () -> Unit
 @Composable
 private fun ManualPairingDialog(onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
     var address by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("") }
+    var addPortToo by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
+
+    val isPortValid = !addPortToo || port.isBlank() || (port.toIntOrNull() != null && port.toInt() in 1..65535)
+    val isConnectEnabled = address.isNotBlank() && code.isNotBlank() && isPortValid
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -379,8 +388,8 @@ private fun ManualPairingDialog(onDismiss: () -> Unit, onSubmit: (String, String
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("Host address") },
-                    placeholder = { Text("192.168.1.10:9427") },
+                    label = { Text("IP address") },
+                    placeholder = { Text("192.168.1.10") },
                     shape = RoundedCornerShape(14.dp),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -389,7 +398,52 @@ private fun ManualPairingDialog(onDismiss: () -> Unit, onSubmit: (String, String
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    Checkbox(
+                        checked = addPortToo,
+                        onCheckedChange = { addPortToo = it }
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Add port too",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clickable { addPortToo = !addPortToo }
+                    )
+                }
+                AnimatedVisibility(
+                    visible = addPortToo,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column {
+                        OutlinedTextField(
+                            value = port,
+                            onValueChange = { input ->
+                                if (input.all { it.isDigit() }) {
+                                    port = input
+                                }
+                            },
+                            label = { Text("Port") },
+                            placeholder = { Text("9427") },
+                            shape = RoundedCornerShape(14.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
+                }
+                if (!addPortToo) {
+                    Spacer(Modifier.height(6.dp))
+                }
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it.uppercase() },
@@ -409,8 +463,15 @@ private fun ManualPairingDialog(onDismiss: () -> Unit, onSubmit: (String, String
         },
         confirmButton = {
             Button(
-                onClick = { onSubmit(address, code) },
-                enabled = address.isNotBlank() && code.isNotBlank(),
+                onClick = {
+                    val finalAddress = if (addPortToo && port.isNotBlank()) {
+                        "${address.trim()}:${port.trim()}"
+                    } else {
+                        address.trim()
+                    }
+                    onSubmit(finalAddress, code)
+                },
+                enabled = isConnectEnabled,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
