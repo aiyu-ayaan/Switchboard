@@ -199,8 +199,26 @@ The Electron UI talks to the daemon over plain HTTP on loopback. These routes re
 | POST   | `/local/media`              | `{ "action": "next" }`               |
 | POST   | `/local/pairing/rotate`     | `{}`                                 |
 | POST   | `/local/devices/revoke`     | `{ "deviceId": "uuid" }`             |
+| POST   | `/local/files/send`         | `{ "deviceId": "uuid", "paths": ["C:/…"] }` |
+| POST   | `/local/files/control`      | `{ "transferId": "uuid", "action": "pause" }` |
+| GET    | `/local/files/history`      | –                                    |
+| GET    | `/local/settings`           | –                                    |
+| POST   | `/local/settings`           | a whole `Settings` object            |
+| POST   | `/local/settings/download-dir` | `{ "path": "C:/…" }`              |
 
-`GET /local/state` returns `{ host, pairing, devices }` — everything the desktop renders in one poll.
+`GET /local/state` returns `{ host, pairing, devices, transfers, settings }` — everything the desktop renders in one poll, so the UI never needs a second request to draw a frame.
+
+Transfers in this response carry two fields the WebSocket `file.progress` event does not: `path` and the owning `deviceId` / `deviceName`. A phone has no use for a host filesystem path and every reason not to be told one, so the path reaches the loopback API — which is what has to open the containing folder — and stops there.
+
+`POST /local/settings` takes the whole object rather than a patch. There are three fields, and a full write means a stale UI cannot silently clobber a field it did not know about.
+
+### Settings
+
+```json
+{ "downloadDir": "C:/Users/…/Downloads/Switchboard", "rateUnit": "MBps", "runInBackground": true }
+```
+
+Received files land in a `Switchboard` folder of their own rather than loose in Downloads, so everything a phone sent can be found — or deleted — without sifting through browser downloads. `rateUnit` is a display preference only: the daemon reports raw bytes per second and never formats. `POST /local/settings/download-dir` validates a candidate directory (exists, writable) before the UI commits it.
 
 ## 6. File Transfer
 
