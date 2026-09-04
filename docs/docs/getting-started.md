@@ -1,53 +1,92 @@
 # Getting Started with Switchboard
 
-This guide walks you through building and running Switchboard across desktop host and Android mobile devices.
+This guide walks you through building and running Switchboard across the desktop host and an Android device.
 
 ## Prerequisites
 
-- **Desktop**:
-  - Node.js (v20+) and pnpm (v9+)
-  - Go (v1.22+)
-  - GCC / CGO toolchain (if compiling SQLite C-bindings on Windows/Linux)
-- **Mobile**:
-  - Android Studio Hedgehog (2023.1.1+) or newer
-  - Android SDK 34 (Android 14)
-  - Minimum device SDK 26 (Android 8.0 Oreo)
+- **Desktop**
+  - Node.js 20+ and pnpm 9+
+  - Go 1.22+ (no C toolchain needed — SQLite is pure Go)
+- **Mobile**
+  - Android SDK with **platform 37** and build-tools installed
+  - JDK 17+ (Gradle 9.7 also runs on newer JDKs)
+  - A device or emulator on API 26+
 
-## Setup Steps
+Phase 1 system control (displays, audio, media) is implemented for **Windows**. The daemon builds and runs on macOS and Linux, where those calls return `not supported on this platform`; pairing, transport, and both UIs work there.
 
-### 1. Desktop Host & Frontend
+## 1. Install dependencies
 
-1. Install desktop frontend dependencies:
-   ```bash
-   pnpm install
-   ```
+```bash
+pnpm install
+```
 
-2. Start desktop frontend in development mode:
-   ```bash
-   pnpm dev:frontend
-   ```
+## 2. Run the desktop app
 
-### 2. Backend Daemon Service
+```bash
+pnpm dev
+```
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
+This starts the Go daemon and the Electron UI together. To run them separately:
 
-2. Run the Go server:
-   ```bash
-   go run cmd/server/main.go
-   ```
+```bash
+pnpm dev:backend     # go run ./cmd/server
+pnpm dev:frontend    # vite + electron
+```
 
-### 3. Android Mobile Application
+The daemon listens on port **9427**. Override it with `--port` or `SWITCHBOARD_PORT`.
 
-1. Open the `mobile/` directory in **Android Studio**.
-2. Sync Gradle dependencies.
-3. Deploy to a connected physical Android device or emulator with network connectivity to your computer.
+The Electron app starts a daemon itself only if nothing already answers on the local API, so running both commands does not spawn two daemons.
 
-## Pairing Your Device
+## 3. Build a release bundle
 
-1. Launch both the desktop host application and the mobile app on the same local network.
-2. The desktop UI will display an active pairing QR code.
-3. Open Switchboard on your Android device and tap **Scan QR Code**.
-4. Once scanned, the secure channel will establish, and your remote controls will activate immediately.
+```bash
+pnpm build            # daemon + desktop + Android
+pnpm build:backend    # -> bin/switchboard(.exe)
+pnpm build:frontend   # -> frontend/dist
+```
+
+## 4. Build and run the Android client
+
+Point Gradle at your SDK by creating `mobile/local.properties`:
+
+```properties
+sdk.dir=/path/to/Android/sdk
+```
+
+Then:
+
+```bash
+pnpm android:build    # assembleDebug
+pnpm android:run      # install + launch on a connected device
+pnpm android:test     # unit tests, including the crypto interop vector
+```
+
+Or open `mobile/` in Android Studio.
+
+## 5. Pair a phone
+
+1. Open the desktop app and select **Devices** in the left rail.
+2. On the phone, tap **Scan QR code** and point it at the desktop.
+
+   Or tap **Enter code manually** and type the address and code the desktop shows (for example `192.168.1.105:9427` and `S8W6Q7HRKF`).
+3. The code is valid for five minutes; **New code** issues a fresh one and invalidates the old.
+
+Both devices must be on the same network. After the first pairing the phone reconnects on its own — the stored key is the credential, so there is no code to re-enter.
+
+To revoke access, use the trash icon beside the device on the desktop, or **Forget** on the phone. Revoking on the desktop drops the device's live connection immediately.
+
+### Running against an emulator
+
+An emulator cannot usually reach the host's LAN address. Bridge the port first, then pair with `127.0.0.1:9427`:
+
+```bash
+adb reverse tcp:9427 tcp:9427
+```
+
+## Troubleshooting
+
+**"No controllable displays found"** — enable DDC/CI in the monitor's own on-screen menu. Some docks and KVM switches do not pass the control channel through. Use **Rescan** after changing displays.
+
+**Port already in use** — another process may hold 9427. Start the daemon with `--port 9500` and set `SWITCHBOARD_PORT=9500` for the desktop app.
+
+**The phone cannot connect** — confirm both devices are on the same subnet and that the host firewall allows inbound TCP on the daemon port.

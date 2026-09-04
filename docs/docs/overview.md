@@ -10,11 +10,13 @@ Switchboard turns your Android smartphone or tablet into a versatile, low-latenc
 - Reconnect seamlessly without re-entering credentials.
 
 ### 2. Multi-Display & System Controls
-- Direct hardware monitor management via DDC/CI (adjust brightness, contrast, and inputs across all attached displays).
-- System master audio volume, mute, and per-app audio mixer controls.
-- Media playback controls (Play, Pause, Skip Next, Skip Previous, Seek).
+- Direct hardware monitor management via DDC/CI: brightness and contrast across every attached display.
+- Each panel reports its own capability range, so sliders track real hardware limits instead of an assumed 0-100.
+- Built-in laptop panels are driven through WMI and expose brightness only, as the hardware allows.
+- System master audio volume and mute.
+- Media playback controls (Play/Pause, Next, Previous, Stop).
 
-### 3. Encrypted File Transfer
+### 3. Encrypted File Transfer (Phase 2)
 - Send files directly between phone and computer with zero third-party cloud intermediaries.
 - Full integrity verification and resumed transfer support.
 
@@ -24,5 +26,5 @@ Switchboard turns your Android smartphone or tablet into a versatile, low-latenc
 
 ## Roadmap & Milestones
 
-- **Phase 1**: Initial setup, secure QR handshake, basic system audio/brightness controls, DDC/CI monitor detection.
+- **Phase 1** (complete): secure QR and manual pairing, DDC/CI multi-monitor brightness and contrast, master audio, media transport, multi-host switching.
 - **Phase 2**: High-speed encrypted file transfer and advanced media management.
