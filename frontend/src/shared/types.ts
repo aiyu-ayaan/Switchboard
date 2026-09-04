@@ -60,10 +60,51 @@ export interface PairedDevice {
   online: boolean;
 }
 
+/** Direction, named from the mobile client's point of view. */
+export type TransferDirection = 'upload' | 'download';
+
+export type TransferStatus =
+  | 'pending'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/** One transfer, live or historical. Mirrors protocol.FileProgress. */
+export interface FileTransfer {
+  transferId: string;
+  name: string;
+  direction: TransferDirection;
+  status: TransferStatus;
+  transferred: number;
+  size: number;
+  /** Smoothed rate; the UI formats it per the user's MB/s or Mb/s preference. */
+  bytesPerSec: number;
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+  deviceId?: string;
+  deviceName?: string;
+  path?: string;
+}
+
+/** Daemon-side preferences the desktop UI owns. */
+export interface HostSettings {
+  /** Where received files land. Defaults to Downloads/Switchboard. */
+  downloadDir: string;
+  /** Rate unit shown in the UI: bytes or bits per second. */
+  rateUnit: 'MBps' | 'Mbps';
+  /** Keep the daemon alive with the window closed. */
+  runInBackground: boolean;
+}
+
 export interface LocalState {
   host: HostState;
   pairing: PairingInfo;
   devices: PairedDevice[];
+  transfers: FileTransfer[];
+  settings: HostSettings;
 }
 
 export type MediaAction = 'play' | 'pause' | 'toggle' | 'next' | 'prev' | 'stop';
@@ -78,6 +119,14 @@ export interface SwitchboardBridge {
   media(action: MediaAction): Promise<void>;
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;
+  /** Queues files for a paired device; paths come from the drag-and-drop tray. */
+  sendFiles(deviceId: string, paths: string[]): Promise<FileTransfer[]>;
+  controlTransfer(transferId: string, action: 'pause' | 'resume' | 'cancel'): Promise<void>;
+  updateSettings(patch: Partial<HostSettings>): Promise<HostSettings>;
+  /** Opens the OS folder picker and returns the chosen directory, or null. */
+  chooseDownloadDir(): Promise<string | null>;
+  /** Reveals a completed transfer in the OS file manager. */
+  revealTransfer(transferId: string): Promise<void>;
   window: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<boolean>;

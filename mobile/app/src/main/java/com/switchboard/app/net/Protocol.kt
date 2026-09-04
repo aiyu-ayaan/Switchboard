@@ -14,6 +14,50 @@ object Actions {
     const val MEDIA_COMMAND = "media.playback.command"
     const val MEDIA_ARTWORK = "media.artwork"
     const val HOST_STATE = "host.state"
+
+    // File transfer. Both directions use the same frames; the side holding
+    // the file sends the offer and the receiver paces it with acks.
+    const val FILE_OFFER = "file.offer"
+    const val FILE_ACCEPT = "file.accept"
+    const val FILE_CHUNK = "file.chunk"
+    const val FILE_ACK = "file.ack"
+    const val FILE_COMPLETE = "file.complete"
+    const val FILE_CONTROL = "file.control"
+    const val FILE_PROGRESS = "file.progress"
+    const val FILE_LIST = "file.list"
+}
+
+/**
+ * Payload slice carried by one [Actions.FILE_CHUNK] frame, matching
+ * `protocol.ChunkSize` on the host. Chunks stream off storage, so a multi-GB
+ * file never sits in memory.
+ */
+const val CHUNK_SIZE = 256 * 1024
+
+/** Transfer direction, named from this device's point of view. */
+object Direction {
+    const val UPLOAD = "upload"     // phone -> desktop
+    const val DOWNLOAD = "download" // desktop -> phone
+}
+
+/** Transfer lifecycle states reported in [FileProgress.status]. */
+object TransferStatus {
+    const val PENDING = "pending"
+    const val ACTIVE = "active"
+    const val PAUSED = "paused"
+    const val COMPLETED = "completed"
+    const val FAILED = "failed"
+    const val CANCELLED = "cancelled"
+
+    fun isTerminal(status: String): Boolean =
+        status == COMPLETED || status == FAILED || status == CANCELLED
+}
+
+/** Actions carried by [Actions.FILE_CONTROL]. */
+object Control {
+    const val PAUSE = "pause"
+    const val RESUME = "resume"
+    const val CANCEL = "cancel"
 }
 
 val SwitchboardJson = Json {
@@ -159,3 +203,71 @@ data class AuthResult(
     val proof: String = "",
     val error: String = ""
 )
+
+
+// ---- File transfer ----
+
+@Serializable
+data class FileOffer(
+    val transferId: String,
+    val name: String,
+    val size: Long,
+    val mimeType: String = "",
+    /** SHA-256 of the whole file, hex; verified by the receiver. */
+    val sha256: String = "",
+    val direction: String
+)
+
+/**
+ * The receiver's go-ahead. [offset] is how many bytes it already holds, so a
+ * resumed transfer seeks instead of restarting.
+ */
+@Serializable
+data class FileAccept(
+    val transferId: String,
+    val offset: Long = 0,
+    val accepted: Boolean = true,
+    val reason: String = ""
+)
+
+/** One slice. [offset] is authoritative: the receiver writes at it. */
+@Serializable
+data class FileChunk(
+    val transferId: String,
+    val offset: Long,
+    val data: String,
+    val last: Boolean = false
+)
+
+@Serializable
+data class FileAck(val transferId: String, val received: Long)
+
+@Serializable
+data class FileComplete(
+    val transferId: String,
+    val ok: Boolean = false,
+    val sha256: String = "",
+    val error: String = ""
+)
+
+@Serializable
+data class FileControl(val transferId: String, val action: String)
+
+@Serializable
+data class FileProgress(
+    val transferId: String,
+    val name: String = "",
+    val direction: String = Direction.UPLOAD,
+    val status: String = TransferStatus.PENDING,
+    val transferred: Long = 0,
+    val size: Long = 0,
+    val bytesPerSec: Long = 0,
+    val error: String = "",
+    val startedAt: Long = 0,
+    val finishedAt: Long = 0
+) {
+    val fraction: Float get() = if (size > 0) (transferred.toFloat() / size).coerceIn(0f, 1f) else 0f
+}
+
+@Serializable
+data class FileHistory(val transfers: List<FileProgress> = emptyList())

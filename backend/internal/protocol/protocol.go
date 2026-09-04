@@ -33,9 +33,29 @@ const (
 	// the rest of the snapshot and only changes when the track does.
 	ActionMediaArtwork = "media.artwork"
 
+	// File transfer. Both directions use the same frames: whichever side
+	// holds the file sends the offer, and the receiver drives the pace by
+	// acknowledging. See docs/docs/api-protocol.md.
+	ActionFileOffer    = "file.offer"    // sender -> receiver: what is coming
+	ActionFileAccept   = "file.accept"   // receiver -> sender: start at offset
+	ActionFileChunk    = "file.chunk"    // sender -> receiver: one slice
+	ActionFileAck      = "file.ack"      // receiver -> sender: slice landed
+	ActionFileComplete = "file.complete" // receiver -> sender: verified
+	ActionFileControl  = "file.control"  // either side: pause/resume/cancel
+	ActionFileProgress = "file.progress" // event: transfer telemetry
+	ActionFileList     = "file.list"     // history
+
 	ActionHostState = "host.state" // event: full snapshot pushed to clients
 	ActionPing      = "system.ping"
 )
+
+// ChunkSize is the payload slice carried by one file.chunk frame.
+//
+// 256 KiB base64-expands to ~341 KB per frame, which stays well inside a
+// WebSocket frame while keeping the per-frame envelope and AEAD overhead
+// negligible. Chunks are streamed straight off disk, so a multi-GB file never
+// sits in memory on either side.
+const ChunkSize = 256 * 1024
 
 // Envelope is the JSON structure carried inside every encrypted frame.
 type Envelope struct {
@@ -171,4 +191,108 @@ type HostState struct {
 	Volume       Volume     `json:"volume"`
 	Media        MediaState `json:"media"`
 	Capabilities []string   `json:"capabilities"`
+}
+
+
+// ---- File transfer ----
+
+// Transfer directions, named from the mobile client's point of view so a
+// stored row reads the same on both ends.
+const (
+	DirectionUpload   = "upload"   // phone -> desktop
+	DirectionDownload = "download" // desktop -> phone
+)
+
+// Transfer lifecycle states.
+const (
+	TransferPending   = "pending"
+	TransferActive    = "active"
+	TransferPaused    = "paused"
+	TransferCompleted = "completed"
+	TransferFailed    = "failed"
+	TransferCancelled = "cancelled"
+)
+
+// Control actions carried by file.control.
+const (
+	ControlPause  = "pause"
+	ControlResume = "resume"
+	ControlCancel = "cancel"
+)
+
+// FileOffer announces a file before any bytes move, so the receiver can
+// allocate, resume, or refuse before the sender starts streaming.
+type FileOffer struct {
+	TransferID string `json:"transferId"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	MimeType   string `json:"mimeType,omitempty"`
+	// SHA256 of the whole file, hex. Checked by the receiver on completion.
+	SHA256    string `json:"sha256,omitempty"`
+	Direction string `json:"direction"`
+}
+
+// FileAccept is the receiver's go-ahead. Offset is how many bytes it already
+// holds: a fresh transfer sends 0, a resumed one sends the length of the
+// partial file it kept, and the sender seeks there rather than restarting.
+type FileAccept struct {
+	TransferID string `json:"transferId"`
+	Offset     int64  `json:"offset"`
+	Accepted   bool   `json:"accepted"`
+	Reason     string `json:"reason,omitempty"`
+}
+
+// FileChunk is one slice of the file. Offset is authoritative — the receiver
+// writes at it rather than appending, so a duplicate or reordered frame cannot
+// corrupt the output.
+type FileChunk struct {
+	TransferID string `json:"transferId"`
+	Offset     int64  `json:"offset"`
+	Data       string `json:"data"` // base64
+	Last       bool   `json:"last,omitempty"`
+}
+
+// FileAck paces the sender: it waits for the receiver to confirm a window of
+// chunks before sending more, so a fast disk cannot outrun a slow phone and
+// pile frames up in the socket buffer.
+type FileAck struct {
+	TransferID string `json:"transferId"`
+	Received   int64  `json:"received"` // bytes written so far
+}
+
+// FileComplete closes a transfer. OK is false when the receiver's digest did
+// not match the offer, which means the bytes are bad and the file was dropped.
+type FileComplete struct {
+	TransferID string `json:"transferId"`
+	OK         bool   `json:"ok"`
+	SHA256     string `json:"sha256,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// FileControl pauses, resumes, or cancels a live transfer from either side.
+type FileControl struct {
+	TransferID string `json:"transferId"`
+	Action     string `json:"action"`
+}
+
+// FileProgress is the telemetry both UIs render: a progress bar, a rate, and
+// the state that decides which buttons are live.
+type FileProgress struct {
+	TransferID  string `json:"transferId"`
+	Name        string `json:"name"`
+	Direction   string `json:"direction"`
+	Status      string `json:"status"`
+	Transferred int64  `json:"transferred"`
+	Size        int64  `json:"size"`
+	// BytesPerSec is a smoothed rate; both UIs format it per the user's
+	// MB/s or Mb/s preference rather than the daemon picking a unit.
+	BytesPerSec int64  `json:"bytesPerSec"`
+	Error       string `json:"error,omitempty"`
+	StartedAt   int64  `json:"startedAt"`
+	FinishedAt  int64  `json:"finishedAt,omitempty"`
+}
+
+// FileHistory is the reply to file.list.
+type FileHistory struct {
+	Transfers []FileProgress `json:"transfers"`
 }
