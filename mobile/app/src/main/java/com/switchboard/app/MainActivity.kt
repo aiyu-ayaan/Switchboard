@@ -128,6 +128,7 @@ fun SwitchboardApp(
             onBrightness = viewModel::setBrightness,
             onContrast = viewModel::setContrast,
             onVolume = viewModel::setVolume,
+            onMixerSession = viewModel::setSessionVolume,
             onMedia = viewModel::media,
             onSendFile = viewModel::sendFile,
             onTransferControl = viewModel::controlTransfer,

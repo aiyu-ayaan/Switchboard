@@ -12,6 +12,7 @@ import com.switchboard.app.net.Display
 import com.switchboard.app.net.DisplaySet
 import com.switchboard.app.net.HostState
 import com.switchboard.app.net.MediaCommand
+import com.switchboard.app.net.MixerSet
 import com.switchboard.app.net.Playback
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.FileProgress
@@ -51,6 +52,7 @@ data class UiState(
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
     val canControlMedia: Boolean get() = host.capabilities.contains("media")
+    val canControlMixer: Boolean get() = host.capabilities.contains("mixer")
 }
 
 /**
@@ -241,6 +243,20 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     fun setVolume(level: Int, muted: Boolean) {
         connection.patchHost { it.copy(volume = Volume(level, muted)) }
         connection.send(Actions.VOLUME_SET, Volume(level, muted))
+    }
+
+    /**
+     * Applies one session's level/mute locally so the slider tracks the finger,
+     * then sends the wire command. The host echoes the whole mixer list in its
+     * reply, which reconciles any discrepancy.
+     */
+    fun setSessionVolume(sessionId: String, level: Int, muted: Boolean) {
+        connection.patchHost { host ->
+            host.copy(mixer = host.mixer.map {
+                if (it.id == sessionId) it.copy(level = level, muted = muted) else it
+            })
+        }
+        connection.send(Actions.MIXER_SET, MixerSet(sessionId, level, muted))
     }
 
     /**

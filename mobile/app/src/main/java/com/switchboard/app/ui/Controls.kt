@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.switchboard.app.net.AudioSession
 import com.switchboard.app.net.Display
 import com.switchboard.app.net.MediaState
 import kotlin.math.roundToInt
@@ -586,5 +587,110 @@ private fun TransportButton(icon: ImageVector, label: String, onClick: () -> Uni
                 modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+/**
+ * Per-application mixer card listing every OS audio session.
+ *
+ * Sessions that are present but not actively playing are dimmed rather than
+ * hidden: a paused player would vanish mid-gesture if we dropped it.
+ */
+@Composable
+fun MixerCard(
+    sessions: List<AudioSession>,
+    onSessionVolume: (sessionId: String, level: Int, muted: Boolean) -> Unit
+) {
+    SectionCard {
+        Text(
+            text = "Applications",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        if (sessions.isEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Nothing is using the audio mixer. Start playback and it will appear here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@SectionCard
+        }
+
+        sessions.forEach { session ->
+            Spacer(Modifier.height(14.dp))
+            SessionRow(session = session, onSessionVolume = onSessionVolume)
+        }
+    }
+}
+
+@Composable
+private fun SessionRow(
+    session: AudioSession,
+    onSessionVolume: (sessionId: String, level: Int, muted: Boolean) -> Unit
+) {
+    // The whole row is dimmed when a session is present but not playing —
+    // alpha 0.5 signals "quiet" without removing the control entirely.
+    val rowAlpha = if (session.active) 1f else 0.5f
+
+    Column(modifier = Modifier.graphicsLayer { alpha = rowAlpha }) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = session.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(8.dp))
+            // Mute toggle mirrors VolumeCard but is sized to sit inline.
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (session.muted)
+                    MaterialTheme.colorScheme.errorContainer
+                else
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.bouncyClickable {
+                    onSessionVolume(session.id, session.level, !session.muted)
+                }
+            ) {
+                Icon(
+                    imageVector = if (session.muted)
+                        Icons.AutoMirrored.Filled.VolumeOff
+                    else
+                        Icons.AutoMirrored.Filled.VolumeUp,
+                    contentDescription = if (session.muted)
+                        "Unmute ${session.name}"
+                    else
+                        "Mute ${session.name}",
+                    tint = if (session.muted)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .size(18.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        LevelRow(
+            icon = if (session.muted)
+                Icons.AutoMirrored.Filled.VolumeOff
+            else
+                Icons.AutoMirrored.Filled.VolumeUp,
+            label = "${session.name} volume",
+            value = session.level,
+            min = 0,
+            max = 100,
+            enabled = !session.muted,
+            onChange = { onSessionVolume(session.id, it, session.muted) }
+        )
     }
 }

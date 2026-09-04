@@ -88,6 +88,7 @@ class SectionActions(
     val onBrightness: (Display, Int) -> Unit,
     val onContrast: (Display, Int) -> Unit,
     val onVolume: (Int, Boolean) -> Unit,
+    val onMixerSession: (sessionId: String, level: Int, muted: Boolean) -> Unit,
     val onMedia: (String) -> Unit,
     val onSendFile: (Uri) -> Unit,
     val onTransferControl: (String, String) -> Unit,
@@ -293,11 +294,19 @@ private fun SectionBody(
                 }
             }
 
-            Section.Audio -> VolumeCard(
-                level = state.host.volume.level,
-                muted = state.host.volume.muted,
-                onVolume = actions.onVolume
-            )
+            Section.Audio -> {
+                VolumeCard(
+                    level = state.host.volume.level,
+                    muted = state.host.volume.muted,
+                    onVolume = actions.onVolume
+                )
+                if (state.canControlMixer) {
+                    MixerCard(
+                        sessions = state.host.mixer,
+                        onSessionVolume = actions.onMixerSession
+                    )
+                }
+            }
 
             Section.Media -> SectionCard {
                 NowPlaying(
