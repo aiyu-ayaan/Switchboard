@@ -272,7 +272,11 @@ class SwitchboardClient(
                     Log.i(TAG, "Primary endpoint connection failed ($t), trying fallback endpoint")
                     return
                 }
-                trySend(ConnectionEvent.Failed(t.message ?: "connection failed"))
+                // A transport failure just means the desktop is not reachable.
+                // Raw socket messages ("unexpected end of stream on ...") are
+                // noise to the user, so this reads as a plain disconnect; real
+                // protocol failures still emit Failed from the handshake.
+                trySend(ConnectionEvent.Disconnected)
                 channel.close()
             }
         }

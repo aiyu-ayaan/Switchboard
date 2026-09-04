@@ -21,8 +21,8 @@ import com.switchboard.app.net.PairingPayload
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.SwitchboardJson
 import com.switchboard.app.net.Volume
-import java.net.InetSocketAddress
-import java.net.Socket
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -301,13 +301,27 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         }.distinct()
 
         for ((targetHost, targetPort) in candidates) {
-            try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(targetHost, targetPort), 750)
-                    return true
+            // An open TCP port is not proof the daemon is up: an adb reverse
+            // tunnel, or any forwarder, accepts the connection and then drops
+            // it. Only an actual HTTP reply means Switchboard is answering, so
+            // the badge stops reading "Live" against a dead desktop. Any status
+            // code counts -- the daemon 404s an unknown path, which is a reply.
+            val connection = try {
+                (URL("http://$targetHost:$targetPort/").openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 750
+                    readTimeout = 750
+                    requestMethod = "GET"
                 }
             } catch (_: Exception) {
+                continue
+            }
+            try {
+                connection.responseCode
+                return true
+            } catch (_: Exception) {
                 // Try next candidate
+            } finally {
+                connection.disconnect()
             }
         }
         return false
