@@ -193,7 +193,6 @@ type HostState struct {
 	Capabilities []string   `json:"capabilities"`
 }
 
-
 // ---- File transfer ----
 
 // Transfer directions, named from the mobile client's point of view so a

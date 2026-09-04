@@ -27,6 +27,12 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/media", s.localMedia)
 	handle("POST /local/pairing/rotate", s.localRotatePairing)
 	handle("POST /local/devices/revoke", s.localRevokeDevice)
+	handle("POST /local/files/send", s.localSendFiles)
+	handle("POST /local/files/control", s.localFileControl)
+	handle("GET /local/files/history", s.localFileHistory)
+	handle("GET /local/settings", s.localGetSettings)
+	handle("POST /local/settings", s.localUpdateSettings)
+	handle("POST /local/settings/download-dir", s.localCheckDownloadDir)
 }
 
 // loopbackOnly rejects any request that did not originate on this machine.
@@ -47,9 +53,11 @@ func loopbackOnly(next http.HandlerFunc) http.Handler {
 
 // localStateResponse is everything the desktop UI renders in one poll.
 type localStateResponse struct {
-	Host    protocol.HostState `json:"host"`
-	Pairing PairingInfo        `json:"pairing"`
-	Devices []db.Device        `json:"devices"`
+	Host      protocol.HostState `json:"host"`
+	Pairing   PairingInfo        `json:"pairing"`
+	Devices   []db.Device        `json:"devices"`
+	Transfers []LocalTransfer    `json:"transfers"`
+	Settings  Settings           `json:"settings"`
 }
 
 func (s *Server) localState(w http.ResponseWriter, r *http.Request) {
@@ -58,10 +66,17 @@ func (s *Server) localState(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err, http.StatusInternalServerError)
 		return
 	}
+	transfers, err := s.localTransferHistory()
+	if err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, localStateResponse{
-		Host:    s.control.State(s.daemonID),
-		Pairing: s.PairingInfo(),
-		Devices: devices,
+		Host:      s.hostState(),
+		Pairing:   s.PairingInfo(),
+		Devices:   devices,
+		Transfers: transfers,
+		Settings:  s.Settings(),
 	})
 }
 
@@ -156,6 +171,101 @@ func (s *Server) localRevokeDevice(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, map[string]bool{"revoked": true})
 	}
+}
+
+// localSendFiles starts a desktop -> phone transfer for each path. Each file
+// gets its own transfer so one unreadable path does not sink the batch, and
+// the response reports per-path outcomes rather than a single status code.
+func (s *Server) localSendFiles(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceID string   `json:"deviceId"`
+		Paths    []string `json:"paths"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if req.DeviceID == "" || len(req.Paths) == 0 {
+		httpError(w, errors.New("deviceId and paths are required"), http.StatusBadRequest)
+		return
+	}
+
+	type result struct {
+		Path       string `json:"path"`
+		TransferID string `json:"transferId,omitempty"`
+		Error      string `json:"error,omitempty"`
+	}
+	results := make([]result, 0, len(req.Paths))
+	for _, path := range req.Paths {
+		id, err := s.transfers.Send(req.DeviceID, path)
+		if err != nil {
+			results = append(results, result{Path: path, Error: err.Error()})
+			continue
+		}
+		results = append(results, result{Path: path, TransferID: id})
+	}
+	writeJSON(w, map[string]any{"transfers": results})
+}
+
+func (s *Server) localFileControl(w http.ResponseWriter, r *http.Request) {
+	var req protocol.FileControl
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.transfers.ControlLocal(req.TransferID, req.Action); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]string{"transferId": req.TransferID, "action": req.Action})
+}
+
+func (s *Server) localFileHistory(w http.ResponseWriter, r *http.Request) {
+	history, err := s.transferHistory()
+	if err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, protocol.FileHistory{Transfers: history})
+}
+
+func (s *Server) localGetSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.Settings())
+}
+
+// localUpdateSettings takes a whole Settings object. Sending the full set
+// keeps the UI from having to know which fields it is allowed to omit, and
+// makes the validation below cover every write.
+func (s *Server) localUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var req Settings
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	settings, err := s.UpdateSettings(req)
+	if err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, settings)
+}
+
+// localCheckDownloadDir vets a folder the user picked in Electron's native
+// dialog before it is committed, so an unwritable choice is rejected while the
+// dialog is still fresh in mind rather than at the next transfer.
+func (s *Server) localCheckDownloadDir(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := ValidateDownloadDir(req.Path); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "path": req.Path, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "path": req.Path})
 }
 
 func decode(r *http.Request, v any) error {

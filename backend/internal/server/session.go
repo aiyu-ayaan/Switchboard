@@ -113,7 +113,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Push the opening snapshot so the phone renders without asking.
-	if env, err := protocol.New(protocol.TypeEvent, protocol.ActionHostState, s.control.State(s.daemonID)); err == nil {
+	if env, err := protocol.New(protocol.TypeEvent, protocol.ActionHostState, s.hostState()); err == nil {
 		c.send(env)
 	}
 

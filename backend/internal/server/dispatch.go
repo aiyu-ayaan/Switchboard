@@ -87,6 +87,75 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope) {
 		}
 		s.reply(c, env, artwork)
 
+	// File transfer. These frames are relayed straight into the transfer
+	// manager, which owns all the state; the daemon replies only when the
+	// engine refuses outright, because the real answer to an offer or a chunk
+	// is another frame the engine sends itself.
+	case protocol.ActionFileOffer:
+		var req protocol.FileOffer
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		req.Direction = protocol.DirectionUpload
+		if err := s.transfers.Offer(c.deviceID, req); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionFileAccept:
+		var req protocol.FileAccept
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.transfers.Accept(req); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionFileChunk:
+		var req protocol.FileChunk
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.transfers.Chunk(req); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionFileAck:
+		var req protocol.FileAck
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.transfers.Ack(req)
+
+	case protocol.ActionFileComplete:
+		var req protocol.FileComplete
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.transfers.Complete(req)
+
+	case protocol.ActionFileControl:
+		var req protocol.FileControl
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.transfers.Control(req); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionFileList:
+		history, err := s.transferHistory()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, protocol.FileHistory{Transfers: history})
+
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
 	}

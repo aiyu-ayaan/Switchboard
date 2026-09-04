@@ -22,6 +22,7 @@ import (
 	"switchboard/backend/internal/db"
 	"switchboard/backend/internal/protocol"
 	"switchboard/backend/internal/system"
+	"switchboard/backend/internal/transfer"
 )
 
 // pairingWindow is how long a displayed QR code stays valid. Short enough that
@@ -36,11 +37,13 @@ type Server struct {
 	identity *crypto.Identity
 	daemonID string
 
-	http *http.Server
+	http      *http.Server
+	transfers *transfer.Manager
 
-	mu      sync.RWMutex
-	pairing pairingToken
-	clients map[string]*client // by connection ID
+	mu       sync.RWMutex
+	pairing  pairingToken
+	settings Settings
+	clients  map[string]*client // by connection ID
 }
 
 type pairingToken struct {
@@ -75,14 +78,20 @@ func New(cfg *config.Config, store *db.Database, control *system.Controller) (*S
 
 func newServer(cfg *config.Config, store *db.Database, control *system.Controller,
 	identity *crypto.Identity, daemonID string) (*Server, error) {
+	settings, err := loadSettings(store)
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
 		cfg:      cfg,
 		store:    store,
 		control:  control,
 		identity: identity,
 		daemonID: daemonID,
+		settings: settings,
 		clients:  map[string]*client{},
 	}
+	s.transfers = transfer.NewManager(s.downloadDir, s.sendToDevice, s.onTransferEvent)
 	if _, err := s.RotatePairing(); err != nil {
 		return nil, err
 	}
@@ -265,7 +274,7 @@ func (s *Server) removeClient(c *client) {
 // Called after any change so a slider moved on one phone, or in the desktop
 // UI, is reflected on the others.
 func (s *Server) Broadcast() {
-	env, err := protocol.New(protocol.TypeEvent, protocol.ActionHostState, s.control.State(s.daemonID))
+	env, err := protocol.New(protocol.TypeEvent, protocol.ActionHostState, s.hostState())
 	if err != nil {
 		log.Printf("broadcast: %v", err)
 		return
@@ -279,6 +288,129 @@ func (s *Server) Broadcast() {
 
 	for _, c := range clients {
 		c.send(env)
+	}
+}
+
+// hostState is the snapshot pushed to clients.
+//
+// The files capability is appended here rather than inside system.Controller:
+// transfers are a service the daemon itself provides, not an OS control the
+// controller can probe a machine for.
+func (s *Server) hostState() protocol.HostState {
+	state := s.control.State(s.daemonID)
+	state.Capabilities = append(state.Capabilities, "files")
+	return state
+}
+
+// sendToDevice delivers one frame to every socket a device holds. It is what
+// the transfer manager writes through, so the engine never learns about
+// connections, sessions, or the WebSocket at all.
+func (s *Server) sendToDevice(deviceID, action string, payload any) error {
+	env, err := protocol.New(protocol.TypeCommand, action, payload)
+	if err != nil {
+		return err
+	}
+	targets := s.clientsFor(deviceID)
+	if len(targets) == 0 {
+		return fmt.Errorf("server: device %s is not connected", deviceID)
+	}
+	for _, c := range targets {
+		c.send(env)
+	}
+	return nil
+}
+
+// clientsFor returns every live socket a device holds. A phone that
+// reconnected before the daemon noticed the old socket die briefly has two.
+func (s *Server) clientsFor(deviceID string) []*client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	targets := make([]*client, 0, 1)
+	for _, c := range s.clients {
+		if c.deviceID == deviceID {
+			targets = append(targets, c)
+		}
+	}
+	return targets
+}
+
+// onTransferEvent persists progress and mirrors it to the phone. The desktop
+// UI reads the same rows back on its state poll, so both surfaces see one
+// version of the truth rather than two counters drifting apart.
+func (s *Server) onTransferEvent(e transfer.Event) {
+	if err := s.store.SaveTransfer(db.Transfer{
+		ID: e.TransferID, DeviceID: e.DeviceID, Name: e.Name, Size: e.Size,
+		Direction: e.Direction, Status: e.Status, Path: e.Path, SHA256: e.SHA256,
+		Transferred: e.Transferred, StartedAt: e.StartedAt,
+		FinishedAt: e.FinishedAt, Error: e.Error,
+	}); err != nil {
+		log.Printf("transfer %s: save: %v", e.TransferID, err)
+	}
+	if env, err := protocol.New(protocol.TypeEvent, protocol.ActionFileProgress, e.FileProgress); err == nil {
+		for _, c := range s.clientsFor(e.DeviceID) {
+			c.send(env)
+		}
+	}
+}
+
+// transferHistory renders stored rows as the progress shape both UIs already
+// know, so history and live transfers are one list rather than two schemas.
+func (s *Server) transferHistory() ([]protocol.FileProgress, error) {
+	rows, err := s.store.ListTransfers(50)
+	if err != nil {
+		return nil, err
+	}
+	history := make([]protocol.FileProgress, 0, len(rows))
+	for _, r := range rows {
+		history = append(history, transferProgress(r))
+	}
+	return history, nil
+}
+
+// LocalTransfer is a history row as the desktop UI sees it: the wire progress
+// plus the two things only this machine may know.
+//
+// Path and the owning device stay out of protocol.FileProgress deliberately.
+// A phone has no use for a host filesystem path and every reason not to be
+// told one, so the path reaches the loopback API — which is what has to open
+// the containing folder — and stops there.
+type LocalTransfer struct {
+	protocol.FileProgress
+	DeviceID   string `json:"deviceId,omitempty"`
+	DeviceName string `json:"deviceName,omitempty"`
+	Path       string `json:"path,omitempty"`
+}
+
+// localTransferHistory is transferHistory for the desktop UI, naming each
+// transfer's device so the list reads as "from Pixel 8" rather than a UUID.
+func (s *Server) localTransferHistory() ([]LocalTransfer, error) {
+	rows, err := s.store.ListTransfers(50)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	if devices, err := s.store.ListDevices(); err == nil {
+		for _, d := range devices {
+			names[d.ID] = d.Name
+		}
+	}
+	history := make([]LocalTransfer, 0, len(rows))
+	for _, r := range rows {
+		history = append(history, LocalTransfer{
+			FileProgress: transferProgress(r),
+			DeviceID:     r.DeviceID,
+			DeviceName:   names[r.DeviceID],
+			Path:         r.Path,
+		})
+	}
+	return history, nil
+}
+
+func transferProgress(r db.Transfer) protocol.FileProgress {
+	return protocol.FileProgress{
+		TransferID: r.ID, Name: r.Name, Direction: r.Direction, Status: r.Status,
+		Transferred: r.Transferred, Size: r.Size,
+		Error: r.Error, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt,
 	}
 }
 

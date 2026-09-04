@@ -45,6 +45,24 @@ CREATE TABLE IF NOT EXISTS devices (
     paired_at  INTEGER NOT NULL,
     last_seen  INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS transfers (
+    id          TEXT PRIMARY KEY,
+    device_id   TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    size        INTEGER NOT NULL,
+    direction   TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    sha256      TEXT NOT NULL,
+    transferred INTEGER NOT NULL,
+    started_at  INTEGER NOT NULL,
+    finished_at INTEGER NOT NULL,
+    error       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 `
 
 // Open opens (creating if needed) the database at path and applies the schema.
@@ -143,6 +161,98 @@ func (d *Database) RevokeDevice(id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ---- Transfers ----
+
+// Transfer is one row of file-transfer history. Timestamps are Unix
+// milliseconds to match protocol.FileProgress, which is what both UIs render.
+type Transfer struct {
+	ID          string
+	DeviceID    string
+	Name        string
+	Size        int64
+	Direction   string
+	Status      string
+	Path        string
+	SHA256      string
+	Transferred int64
+	StartedAt   int64
+	FinishedAt  int64
+	Error       string
+}
+
+// SaveTransfer inserts a transfer or updates the one already stored under the
+// same ID. A single upsert covers both because progress arrives as a stream of
+// updates to the same row, and the first one may be lost to a restart.
+func (d *Database) SaveTransfer(t Transfer) error {
+	_, err := d.sql.Exec(
+		`INSERT INTO transfers (id, device_id, name, size, direction, status, path, sha256,
+		                        transferred, started_at, finished_at, error)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET status = excluded.status, path = excluded.path,
+		     sha256 = excluded.sha256, transferred = excluded.transferred,
+		     finished_at = excluded.finished_at, error = excluded.error`,
+		t.ID, t.DeviceID, t.Name, t.Size, t.Direction, t.Status, t.Path, t.SHA256,
+		t.Transferred, t.StartedAt, t.FinishedAt, t.Error)
+	return err
+}
+
+// ListTransfers returns history newest-first, capped so a long-lived install
+// does not hand the desktop UI thousands of rows on every state poll.
+func (d *Database) ListTransfers(limit int) ([]Transfer, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := d.sql.Query(
+		`SELECT id, device_id, name, size, direction, status, path, sha256,
+		        transferred, started_at, finished_at, error
+		   FROM transfers ORDER BY started_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	transfers := []Transfer{}
+	for rows.Next() {
+		var t Transfer
+		if err := rows.Scan(&t.ID, &t.DeviceID, &t.Name, &t.Size, &t.Direction, &t.Status,
+			&t.Path, &t.SHA256, &t.Transferred, &t.StartedAt, &t.FinishedAt, &t.Error); err != nil {
+			return nil, err
+		}
+		transfers = append(transfers, t)
+	}
+	return transfers, rows.Err()
+}
+
+// ---- Settings ----
+
+// Settings returns every stored key. Callers layer their own defaults over the
+// result: an absent key means "never set", not "set to empty".
+func (d *Database) Settings() (map[string]string, error) {
+	rows, err := d.sql.Query(`SELECT key, value FROM settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	values := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		values[k] = v
+	}
+	return values, rows.Err()
+}
+
+// SetSetting stores one key.
+func (d *Database) SetSetting(key, value string) error {
+	_, err := d.sql.Exec(
+		`INSERT INTO settings (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
 }
 
 // scanner covers both *sql.Row and *sql.Rows.
