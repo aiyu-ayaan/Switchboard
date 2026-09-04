@@ -11,6 +11,8 @@ object Actions {
     const val DISPLAY_BRIGHTNESS = "display.brightness.set"
     const val DISPLAY_CONTRAST = "display.contrast.set"
     const val VOLUME_SET = "system.volume.set"
+    const val MIXER_LIST = "audio.mixer.list"
+    const val MIXER_SET = "audio.mixer.set"
     const val MEDIA_COMMAND = "media.playback.command"
     const val MEDIA_ARTWORK = "media.artwork"
     const val HOST_STATE = "host.state"
@@ -101,6 +103,27 @@ data class Display(
 @Serializable
 data class Volume(val level: Int = 0, val muted: Boolean = false)
 
+/**
+ * One program's entry in the host mixer.
+ *
+ * [id] is the OS session identifier, not the process: a browser spans several
+ * processes behind one mixer entry, and the PID that opened the stream does
+ * not survive a restart. [active] is false for a session holding its entry
+ * without playing — hiding those would make a paused player vanish mid-use.
+ */
+@Serializable
+data class AudioSession(
+    val id: String,
+    val name: String = "",
+    val pid: Int = 0,
+    val level: Int = 0,
+    val muted: Boolean = false,
+    val active: Boolean = false
+)
+
+@Serializable
+data class MixerSet(val sessionId: String, val level: Int, val muted: Boolean = false)
+
 /** Playback states the host reports in [MediaState.status]. */
 object Playback {
     const val STOPPED = "stopped"
@@ -150,6 +173,7 @@ data class HostState(
     val daemonId: String = "",
     val displays: List<Display> = emptyList(),
     val volume: Volume = Volume(),
+    val mixer: List<AudioSession> = emptyList(),
     val media: MediaState = MediaState(),
     val capabilities: List<String> = emptyList()
 )

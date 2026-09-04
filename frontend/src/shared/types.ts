@@ -32,11 +32,28 @@ export interface MediaState {
   artworkId: string;
 }
 
+/**
+ * One program's entry in the host mixer. `id` is the OS session identifier
+ * rather than the process — a browser spans several processes behind a single
+ * mixer entry — and `active` is false for a session that holds its entry
+ * without currently playing.
+ */
+export interface AudioSession {
+  id: string;
+  name: string;
+  pid: number;
+  level: number;
+  muted: boolean;
+  active: boolean;
+}
+
 export interface HostState {
   hostName: string;
   daemonId: string;
   displays: Display[];
   volume: Volume;
+  /** Empty on a host without per-application control; see `capabilities`. */
+  mixer: AudioSession[];
   media: MediaState;
   capabilities: string[];
 }
@@ -116,6 +133,7 @@ export interface SwitchboardBridge {
   setContrast(displayId: string, value: number): Promise<Display>;
   refreshDisplays(): Promise<Display[]>;
   setVolume(level: number, muted: boolean): Promise<Volume>;
+  setSessionVolume(sessionId: string, level: number, muted: boolean): Promise<AudioSession[]>;
   media(action: MediaAction): Promise<void>;
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;

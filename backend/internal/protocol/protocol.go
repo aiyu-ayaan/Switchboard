@@ -26,6 +26,10 @@ const (
 	ActionVolumeGet = "system.volume.get"
 	ActionVolumeSet = "system.volume.set"
 
+	// Per-application mixer: the volume of one program, not the whole host.
+	ActionMixerList = "audio.mixer.list"
+	ActionMixerSet  = "audio.mixer.set"
+
 	ActionMediaCommand = "media.playback.command"
 	// ActionMediaArtwork fetches the cover art for the track named by
 	// MediaState.ArtworkID. Artwork is pulled on demand rather than carried in
@@ -145,6 +149,31 @@ type Volume struct {
 	Muted bool `json:"muted"`
 }
 
+// AudioSession is one program's entry in the host mixer.
+//
+// ID is the OS session identifier rather than the process ID: a browser or a
+// chat client spans several processes that share one mixer entry, and the PID
+// of whichever one happened to open the stream is not stable across a restart.
+// PID is carried anyway because it is what lets a client show a real icon.
+type AudioSession struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	PID   int    `json:"pid"`
+	Level int    `json:"level"` // 0-100
+	Muted bool   `json:"muted"`
+	// Active is false for a session that still holds its mixer entry but has
+	// stopped playing. Windows keeps those around for a while, and hiding them
+	// outright would make a paused player vanish from the mixer mid-use.
+	Active bool `json:"active"`
+}
+
+// MixerSet is the payload for audio.mixer.set.
+type MixerSet struct {
+	SessionID string `json:"sessionId"`
+	Level     int    `json:"level"`
+	Muted     bool   `json:"muted"`
+}
+
 // MediaCommand is the payload for media.playback.command.
 type MediaCommand struct {
 	Action string `json:"action"` // play | pause | toggle | next | prev | stop
@@ -185,12 +214,15 @@ type MediaArtwork struct {
 
 // HostState is the full snapshot pushed on connect and after every change.
 type HostState struct {
-	HostName     string     `json:"hostName"`
-	DaemonID     string     `json:"daemonId"`
-	Displays     []Display  `json:"displays"`
-	Volume       Volume     `json:"volume"`
-	Media        MediaState `json:"media"`
-	Capabilities []string   `json:"capabilities"`
+	HostName string    `json:"hostName"`
+	DaemonID string    `json:"daemonId"`
+	Displays []Display `json:"displays"`
+	Volume   Volume    `json:"volume"`
+	// Mixer is empty on a host with no per-application control, which is what
+	// the "mixer" capability tells a client to expect.
+	Mixer        []AudioSession `json:"mixer"`
+	Media        MediaState     `json:"media"`
+	Capabilities []string       `json:"capabilities"`
 }
 
 // ---- File transfer ----
