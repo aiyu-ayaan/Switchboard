@@ -32,6 +32,12 @@ export interface MediaState {
   artworkId: string;
 }
 
+export interface MediaArtwork {
+  artworkId: string;
+  mimeType: string;
+  data: string;
+}
+
 /**
  * One program's entry in the host mixer. `id` is the OS session identifier
  * rather than the process — a browser spans several processes behind a single
@@ -135,6 +141,7 @@ export interface SwitchboardBridge {
   setVolume(level: number, muted: boolean): Promise<Volume>;
   setSessionVolume(sessionId: string, level: number, muted: boolean): Promise<AudioSession[]>;
   media(action: MediaAction): Promise<void>;
+  getMediaArtwork(): Promise<MediaArtwork>;
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;
   /**

@@ -194,6 +194,7 @@ const ALLOWED_ROUTES = new Set([
   '/volume',
   '/mixer',
   '/media',
+  '/media/artwork',
   '/pairing/rotate',
   '/devices/revoke',
   '/files/send',

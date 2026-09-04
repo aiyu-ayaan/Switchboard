@@ -26,6 +26,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/volume", s.localSetVolume)
 	handle("POST /local/mixer", s.localSetSessionVolume)
 	handle("POST /local/media", s.localMedia)
+	handle("GET /local/media/artwork", s.localMediaArtwork)
 	handle("POST /local/pairing/rotate", s.localRotatePairing)
 	handle("POST /local/devices/revoke", s.localRevokeDevice)
 	handle("POST /local/files/send", s.localSendFiles)
@@ -160,6 +161,15 @@ func (s *Server) localMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"action": req.Action})
+}
+
+func (s *Server) localMediaArtwork(w http.ResponseWriter, r *http.Request) {
+	artwork, err := s.control.MediaArtwork()
+	if err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, artwork)
 }
 
 func (s *Server) localRotatePairing(w http.ResponseWriter, r *http.Request) {

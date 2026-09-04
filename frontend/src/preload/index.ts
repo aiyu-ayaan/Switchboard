@@ -12,6 +12,7 @@ import type {
   HostSettings,
   LocalState,
   MediaAction,
+  MediaArtwork,
   PairingInfo,
   SwitchboardBridge,
   Volume
@@ -31,6 +32,7 @@ const bridge: SwitchboardBridge = {
   media: async (action: MediaAction) => {
     await call('/media', { action });
   },
+  getMediaArtwork: () => call<MediaArtwork>('/media/artwork'),
   rotatePairing: () => call<PairingInfo>('/pairing/rotate', {}),
   revokeDevice: async (deviceId) => {
     await call('/devices/revoke', { deviceId });

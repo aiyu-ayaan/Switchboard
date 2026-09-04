@@ -1,5 +1,7 @@
 import {
   AudioLines,
+  Music,
+  Pause,
   Play,
   SkipBack,
   SkipForward,
@@ -7,9 +9,8 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useCallback } from 'react';
-import type { AudioSession, LocalState, MediaAction } from '../../shared/types';
+import { useCallback, useEffect, useState } from 'react';
+import type { AudioSession, LocalState } from '../../shared/types';
 import { useThrottledCommit } from '../useHostState';
 import { Card, EmptyState, Pane, Sidebar, SidebarItem } from './Shell';
 import { LevelSlider } from './LevelSlider';
@@ -19,13 +20,6 @@ interface AudioViewProps {
   patch: (fn: (draft: LocalState) => LocalState) => void;
   setPaused: (paused: boolean) => void;
 }
-
-const TRANSPORT: Array<{ action: MediaAction; label: string; icon: LucideIcon; primary?: boolean }> = [
-  { action: 'prev', label: 'Previous track', icon: SkipBack },
-  { action: 'toggle', label: 'Play or pause', icon: Play, primary: true },
-  { action: 'next', label: 'Next track', icon: SkipForward },
-  { action: 'stop', label: 'Stop', icon: Square }
-];
 
 export function AudioView({ state, patch, setPaused }: AudioViewProps) {
   const { volume, mixer } = state.host;
@@ -58,6 +52,28 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
     applyLocal(volume.level, next);
     await window.switchboard.setVolume(volume.level, next).catch(() => {});
   };
+
+  const media = state.host.media;
+  const isPlaying = media.status === 'playing';
+  const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!media.artworkId) {
+      setArtworkUrl(null);
+      return;
+    }
+    window.switchboard.getMediaArtwork().then((art) => {
+      if (!cancelled && art && art.data) {
+        setArtworkUrl(`data:${art.mimeType || 'image/jpeg'};base64,${art.data}`);
+      }
+    }).catch(() => {
+      if (!cancelled) setArtworkUrl(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [media.artworkId]);
 
   return (
     <>
@@ -146,26 +162,83 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
           )}
 
           <Card title="Media transport">
+            {hasMedia && media.active && (media.title || media.artist) && (
+              <div className="mb-3 flex items-center gap-3.5 rounded-lg border border-edge bg-raised/40 p-2.5">
+                {artworkUrl ? (
+                  <img
+                    src={artworkUrl}
+                    alt="Album art"
+                    className="h-12 w-12 shrink-0 rounded-md object-cover border border-edge/60"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-edge/60 bg-sunken text-ink-dim">
+                    <Music aria-hidden="true" className="h-6 w-6" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-ink">
+                    {media.title || 'Unknown title'}
+                  </div>
+                  {media.artist && (
+                    <div className="truncate text-xs text-ink-dim">
+                      {media.artist}
+                    </div>
+                  )}
+                  {media.source && (
+                    <div className="mt-0.5 text-micro uppercase tracking-wider text-ink-faint">
+                      {media.source}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2">
-              {TRANSPORT.map(({ action, label, icon: Icon, primary }) => (
-                <button
-                  key={action}
-                  type="button"
-                  aria-label={label}
-                  title={label}
-                  disabled={!hasMedia}
-                  onClick={() => window.switchboard.media(action).catch(() => {})}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-40 ${
-                    primary
-                      ? 'bg-accent text-rail hover:brightness-110'
-                      : 'border border-edge text-ink-dim hover:bg-raised hover:text-ink'
-                  }`}
-                >
-                  <Icon aria-hidden="true" className="h-4 w-4" />
-                </button>
-              ))}
+              <button
+                type="button"
+                aria-label="Previous track"
+                title="Previous track"
+                disabled={!hasMedia}
+                onClick={() => window.switchboard.media('prev').catch(() => {})}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-edge text-ink-dim transition-colors hover:bg-raised hover:text-ink disabled:pointer-events-none disabled:opacity-40"
+              >
+                <SkipBack aria-hidden="true" className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                title={isPlaying ? 'Pause' : 'Play'}
+                disabled={!hasMedia}
+                onClick={() => window.switchboard.media(isPlaying ? 'pause' : 'play').catch(() => {})}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-rail transition-colors hover:brightness-110 disabled:pointer-events-none disabled:opacity-40"
+              >
+                {isPlaying ? (
+                  <Pause aria-hidden="true" className="h-4 w-4" />
+                ) : (
+                  <Play aria-hidden="true" className="h-4 w-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                aria-label="Next track"
+                title="Next track"
+                disabled={!hasMedia}
+                onClick={() => window.switchboard.media('next').catch(() => {})}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-edge text-ink-dim transition-colors hover:bg-raised hover:text-ink disabled:pointer-events-none disabled:opacity-40"
+              >
+                <SkipForward aria-hidden="true" className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Stop"
+                title="Stop"
+                disabled={!hasMedia}
+                onClick={() => window.switchboard.media('stop').catch(() => {})}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-edge text-ink-dim transition-colors hover:bg-raised hover:text-ink disabled:pointer-events-none disabled:opacity-40"
+              >
+                <Square aria-hidden="true" className="h-4 w-4" />
+              </button>
             </div>
-            <p className="text-micro text-ink-faint">
+            <p className="mt-2 text-micro text-ink-faint">
               Commands reach whichever application currently owns the system media session.
             </p>
           </Card>
