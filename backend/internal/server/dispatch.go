@@ -64,6 +64,28 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope) {
 		s.reply(c, env, volume)
 		s.Broadcast()
 
+	case protocol.ActionMixerList:
+		sessions, err := s.control.Mixer()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, sessions)
+
+	case protocol.ActionMixerSet:
+		var req protocol.MixerSet
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		sessions, err := s.control.SetSessionVolume(req.SessionID, req.Level, req.Muted)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, sessions)
+		s.Broadcast()
+
 	case protocol.ActionMediaCommand:
 		var req protocol.MediaCommand
 		if err := env.Decode(&req); err != nil {

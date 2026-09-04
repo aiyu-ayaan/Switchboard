@@ -67,6 +67,16 @@ func (c *Controller) SetVolume(level int, muted bool) (protocol.Volume, error) {
 	return setVolume(level, muted)
 }
 
+// Mixer lists the per-application audio sessions on the default output.
+func (c *Controller) Mixer() ([]protocol.AudioSession, error) { return mixerSessions() }
+
+// SetSessionVolume writes one program's level and mute state, and returns the
+// whole mixer: moving one session can change others, because Windows ducks
+// sessions against each other, and the caller renders the list as a unit.
+func (c *Controller) SetSessionVolume(id string, level int, muted bool) ([]protocol.AudioSession, error) {
+	return setSessionVolume(id, level, muted)
+}
+
 // Media sends a transport command to the active media session.
 func (c *Controller) Media(action string) error { return sendMediaCommand(action) }
 
@@ -88,6 +98,7 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 		HostName:     c.HostName(),
 		DaemonID:     daemonID,
 		Displays:     []protocol.Display{},
+		Mixer:        []protocol.AudioSession{},
 		Capabilities: []string{},
 	}
 	if displays, err := c.Displays(); err == nil {
@@ -97,6 +108,12 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 	if volume, err := c.Volume(); err == nil {
 		state.Volume = volume
 		state.Capabilities = append(state.Capabilities, "volume")
+	}
+	if mixerSupported() {
+		state.Capabilities = append(state.Capabilities, "mixer")
+		if sessions, err := c.Mixer(); err == nil {
+			state.Mixer = sessions
+		}
 	}
 	if mediaSupported() {
 		state.Capabilities = append(state.Capabilities, "media")

@@ -28,6 +28,14 @@ func getVolume() (protocol.Volume, error) { return protocol.Volume{}, ErrUnsuppo
 
 func setVolume(int, bool) (protocol.Volume, error) { return protocol.Volume{}, ErrUnsupported }
 
+func mixerSessions() ([]protocol.AudioSession, error) { return nil, ErrUnsupported }
+
+func setSessionVolume(string, int, bool) ([]protocol.AudioSession, error) {
+	return nil, ErrUnsupported
+}
+
+func mixerSupported() bool { return false }
+
 func sendMediaCommand(string) error { return ErrUnsupported }
 
 func mediaState() (protocol.MediaState, error) { return protocol.MediaState{}, ErrUnsupported }

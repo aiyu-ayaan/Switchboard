@@ -24,6 +24,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/display/brightness", s.localSetBrightness)
 	handle("POST /local/display/contrast", s.localSetContrast)
 	handle("POST /local/volume", s.localSetVolume)
+	handle("POST /local/mixer", s.localSetSessionVolume)
 	handle("POST /local/media", s.localMedia)
 	handle("POST /local/pairing/rotate", s.localRotatePairing)
 	handle("POST /local/devices/revoke", s.localRevokeDevice)
@@ -131,6 +132,21 @@ func (s *Server) localSetVolume(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Broadcast()
 	writeJSON(w, volume)
+}
+
+func (s *Server) localSetSessionVolume(w http.ResponseWriter, r *http.Request) {
+	var req protocol.MixerSet
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	sessions, err := s.control.SetSessionVolume(req.SessionID, req.Level, req.Muted)
+	if err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	s.Broadcast()
+	writeJSON(w, sessions)
 }
 
 func (s *Server) localMedia(w http.ResponseWriter, r *http.Request) {
