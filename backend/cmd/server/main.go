@@ -1,11 +1,53 @@
+// Command server runs the Switchboard host daemon.
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"switchboard/backend/internal/config"
+	"switchboard/backend/internal/db"
+	"switchboard/backend/internal/server"
+	"switchboard/backend/internal/system"
 )
 
 func main() {
-	fmt.Println("Starting Switchboard Backend Service...")
-	log.Println("Switchboard daemon initialized.")
+	log.SetFlags(log.Ltime)
+	log.SetPrefix("switchboard: ")
+
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load(os.Args[1:])
+	if err != nil {
+		return err
+	}
+	if err := cfg.EnsureDBDir(); err != nil {
+		return err
+	}
+
+	store, err := db.Open(cfg.DBPath)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	control := system.NewController()
+	defer control.Close()
+
+	srv, err := server.New(cfg, store, control)
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return srv.ListenAndServe(ctx)
 }
