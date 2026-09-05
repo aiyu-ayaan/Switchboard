@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
@@ -333,19 +334,28 @@ private fun HostHeroCard(
                 }
             }
             if (state.canLockSystem && onLock != null) {
+                val isLocked = state.host.locked
                 Spacer(Modifier.width(8.dp))
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    color = if (isLocked) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    },
                     modifier = Modifier
                         .size(38.dp)
                         .bouncyClickable(onClick = onLock)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Filled.Lock,
-                            contentDescription = "Lock workstation",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                            contentDescription = if (isLocked) "Host workstation is locked" else "Lock workstation",
+                            tint = if (isLocked) {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -769,9 +779,14 @@ private fun BentoUtilityGrid(
                         }
                     }
                     if (state.canLockSystem) {
+                        val isLocked = state.host.locked
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = if (isLocked) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(30.dp)
@@ -780,12 +795,31 @@ private fun BentoUtilityGrid(
                                     actions.onLockSystem()
                                 }
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                                    contentDescription = null,
+                                    tint = if (isLocked) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = "Lock",
+                                    text = if (isLocked) "Locked" else "Lock",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = if (isLocked) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
                                     maxLines = 1
                                 )
                             }

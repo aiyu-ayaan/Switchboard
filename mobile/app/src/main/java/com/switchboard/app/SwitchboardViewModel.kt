@@ -355,6 +355,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     /** Requests the host workstation to lock its session. */
     fun lockSystem() {
+        connection.patchHost { it.copy(locked = true) }
         connection.send(Actions.SYSTEM_LOCK)
     }
 

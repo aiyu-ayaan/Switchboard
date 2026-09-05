@@ -220,6 +220,7 @@ data class HostState(
     val mixer: List<AudioSession> = emptyList(),
     val outputs: List<AudioDevice> = emptyList(),
     val media: MediaState = MediaState(),
+    val locked: Boolean = false,
     val capabilities: List<String> = emptyList()
 )
 

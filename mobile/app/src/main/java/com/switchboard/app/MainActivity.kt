@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -290,11 +291,33 @@ fun SwitchboardApp(
                 },
                 actions = {
                     if (connected && state.canLockSystem) {
-                        IconButton(
-                            onClick = { viewModel.lockSystem() },
-                            modifier = Modifier.size(48.dp)
+                        val isLocked = state.host.locked
+                        Surface(
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = if (isLocked) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer
+                            },
+                            modifier = Modifier
+                                .padding(horizontal = 4.dp)
+                                .size(36.dp)
                         ) {
-                            Icon(Icons.Filled.Lock, contentDescription = "Lock workstation")
+                            IconButton(
+                                onClick = { viewModel.lockSystem() },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                                    contentDescription = if (isLocked) "Host workstation is locked" else "Lock workstation",
+                                    tint = if (isLocked) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
 
