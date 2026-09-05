@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -159,6 +162,7 @@ fun SwitchboardApp(
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
+    var showLockConfirmDialog by remember { mutableStateOf(false) }
     val homeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     LaunchedEffect(sharedUris) {
@@ -171,6 +175,7 @@ fun SwitchboardApp(
     LaunchedEffect(connected) {
         if (!connected) {
             showConnectionInfo = false
+            showLockConfirmDialog = false
             if (currentScreen is AppScreen.Detail) {
                 currentScreen = AppScreen.Main
             }
@@ -200,7 +205,7 @@ fun SwitchboardApp(
             ),
             onTransferControl = viewModel::controlTransfer,
             rateUnit = transferConfig.rateUnit,
-            onLockSystem = viewModel::lockSystem
+            onLockSystem = { showLockConfirmDialog = true }
         )
     }
 
@@ -304,7 +309,7 @@ fun SwitchboardApp(
                                 .size(36.dp)
                         ) {
                             IconButton(
-                                onClick = { viewModel.lockSystem() },
+                                onClick = { showLockConfirmDialog = true },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
@@ -427,6 +432,60 @@ fun SwitchboardApp(
                 }
             }
         }
+    }
+
+    if (showLockConfirmDialog && connected) {
+        val hostName = state.activeHost?.hostName ?: "the workstation"
+        val isLocked = state.host.locked
+        AlertDialog(
+            onDismissRequest = { showLockConfirmDialog = false },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            icon = {
+                Icon(
+                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                    contentDescription = null,
+                    tint = if (isLocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = if (isLocked) "Lock $hostName again?" else "Lock $hostName?",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "This will immediately lock the desktop screen and require the user's password or PIN to sign back in.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLockConfirmDialog = false
+                        viewModel.lockSystem()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(
+                        text = "Lock Workstation",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showLockConfirmDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showConnectionInfo && connected) {
