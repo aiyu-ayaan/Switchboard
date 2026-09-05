@@ -23,6 +23,24 @@ import type {
 const call = <T>(route: string, body?: unknown): Promise<T> =>
   ipcRenderer.invoke('daemon:request', route, body) as Promise<T>;
 
+/**
+ * Listens on a pushed camera channel for as long as the caller keeps the
+ * returned handle.
+ *
+ * One subscribe count covers both tracks: the renderer decides which to draw
+ * from, and holding only the one it happens to prefer would leave the other
+ * unavailable the moment the phone turned out not to have a hardware encoder.
+ */
+const subscribe = <T>(channel: string, handler: (value: T) => void): (() => void) => {
+  const listener = (_event: unknown, value: T) => handler(value);
+  ipcRenderer.on(channel, listener);
+  ipcRenderer.send('camera:subscribe');
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+    ipcRenderer.send('camera:unsubscribe');
+  };
+};
+
 const bridge: SwitchboardBridge = {
   getState: () => call<LocalState>('/state'),
   setBrightness: (displayId, value) => call<Display>('/display/brightness', { displayId, value }),
@@ -59,17 +77,12 @@ const bridge: SwitchboardBridge = {
     getVcamStatus: () => ipcRenderer.invoke('camera:vcamStatus'),
     installVcam: () => ipcRenderer.invoke('camera:installVcam'),
     uninstallVcam: () => ipcRenderer.invoke('camera:uninstallVcam'),
-    // Frames are pushed rather than requested: the main process holds the long
-    // poll against the daemon, so the renderer never waits and never polls.
-    onFrame: (handler) => {
-      const listener = (_event: unknown, jpeg: ArrayBuffer) => handler(jpeg);
-      ipcRenderer.on('camera:frame', listener);
-      ipcRenderer.send('camera:subscribe');
-      return () => {
-        ipcRenderer.removeListener('camera:frame', listener);
-        ipcRenderer.send('camera:unsubscribe');
-      };
-    }
+    // Frames are pushed rather than requested: the main process holds the
+    // streams open against the daemon, so the renderer never waits and never
+    // polls. Subscribing to either track starts both, since the renderer picks
+    // between them by which one is actually arriving.
+    onFrame: (handler) => subscribe('camera:frame', handler),
+    onVideo: (handler) => subscribe('camera:video', handler)
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

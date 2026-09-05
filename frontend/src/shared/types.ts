@@ -182,12 +182,38 @@ export interface CameraState {
   hasManualFocus: boolean;
   hasManualExposure: boolean;
   hasWhiteBalance: boolean;
+  /** The presets this lens honours; anything else is ignored by the camera. */
+  whiteBalanceModes?: string[];
+  hasAutoFraming: boolean;
   hasFrontCamera: boolean;
   /** Measured by the daemon from what the link actually delivered. */
   fps: number;
   bytesPerSec: number;
+  /** Which track is feeding the view: `h264` off the phone's hardware
+   *  encoder, or `jpeg` when the phone had none. */
+  codec?: string;
   vcamInstalled?: boolean;
   error?: string;
+}
+
+/**
+ * One H.264 access unit from the phone, with what the display still has to do
+ * to it. The camera writes into the phone's hardware encoder directly, so
+ * rotation and mirroring never got baked into the pixels — which is the point:
+ * a canvas transform costs nothing and a per-pixel loop on the phone cost most
+ * of the frame rate.
+ */
+export interface CameraVideoUnit {
+  data: ArrayBuffer;
+  /** True when this unit decodes on its own. A decoder joining mid-stream must
+   *  discard everything before the first one. */
+  key: boolean;
+  rotation: number;
+  mirror: boolean;
+  width: number;
+  height: number;
+  /** The encoder's own monotonic capture time, in microseconds. */
+  timestamp: number;
 }
 
 export interface SwitchboardBridge {
@@ -234,6 +260,7 @@ export interface SwitchboardBridge {
      * unsubscribe function.
      */
     onFrame(handler: (jpeg: ArrayBuffer) => void): () => void;
+    onVideo(handler: (unit: CameraVideoUnit) => void): () => void;
   };
   window: {
     minimize(): Promise<void>;

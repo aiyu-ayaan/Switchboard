@@ -11,22 +11,69 @@ const WHITE_BALANCE = ['auto', 'incandescent', 'fluorescent', 'daylight', 'cloud
 
 const STREAM_URL = 'http://127.0.0.1:9427/local/camera/stream';
 
+/** How long the JPEG track stands aside after the last H.264 access unit. */
+const VIDEO_TRACK_GRACE_MS = 2000;
+
+/**
+ * The `avc1.PPCCLL` string for an Annex-B stream, read out of its first SPS.
+ *
+ * `VideoDecoder.configure` needs a codec string, and profile and level differ
+ * between phones: a guess that disagrees with the bytes configures cleanly and
+ * then decodes nothing, which looks exactly like a camera that is not sending.
+ * The three bytes after the SPS header are profile_idc, the constraint flags
+ * and level_idc, which is precisely what the string encodes.
+ */
+const codecFromAnnexB = (data: Uint8Array): string | null => {
+  for (let i = 0; i + 5 < data.length; i += 1) {
+    if (data[i] !== 0 || data[i + 1] !== 0) continue;
+    const start = data[i + 2] === 1 ? i + 3 : data[i + 2] === 0 && data[i + 3] === 1 ? i + 4 : -1;
+    if (start < 0) continue;
+    // NAL type 7 is the sequence parameter set.
+    if ((data[start] & 0x1f) === 7 && start + 3 < data.length) {
+      const hex = [data[start + 1], data[start + 2], data[start + 3]]
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+      return `avc1.${hex}`;
+    }
+    i = start - 1;
+  }
+  return null;
+};
+
 /**
  * Live view and controls for a phone acting as a webcam.
  *
- * Frames arrive over IPC as raw JPEG bytes rather than through an `<img>`
- * pointed at the daemon: the renderer runs with `default-src 'self'` and makes
- * no network requests of its own, and relaxing that for a video feed would be
- * a poor trade. Each frame becomes a blob URL, and the previous one is revoked
- * immediately — at 30fps, leaking them exhausts the renderer within minutes.
+ * Frames arrive over IPC rather than through an `<img>` or a `<video>` pointed
+ * at the daemon: the renderer runs with `default-src 'self'` and makes no
+ * network requests of its own, and relaxing that for a video feed would be a
+ * poor trade.
+ *
+ * The phone sends two tracks and this prefers H.264, decoded by `VideoDecoder`
+ * on the GPU. That is what makes the high frame rates the panel offers real:
+ * the JPEG track costs the phone a software compression per picture and could
+ * not keep up, so a 60 fps request used to arrive as about 14. The JPEG track
+ * is still read, and takes over whenever the video track has gone quiet — a
+ * phone with no hardware encoder has nothing else to send.
+ *
+ * Either way the picture is painted to a canvas rather than swapped into an
+ * `<img src>`. React state is the wrong home for sixty arrivals a second —
+ * every frame re-ran this whole component and its control panel — and a blob
+ * URL per frame made the browser start a fresh async decode each time, so
+ * frames could paint out of order or not at all.
+ *
+ * Rotation and mirroring are applied here, on the video track. The camera
+ * writes straight into the phone's hardware encoder, so there is no pass on
+ * that side in which to bake them into the pixels — and a canvas transform
+ * costs nothing where the per-pixel loops it replaced cost most of the frame
+ * rate. The JPEG track still arrives with them applied, because the virtual
+ * camera and OBS have nowhere to put a transform.
  */
 export const CameraView = ({ state }: { state: LocalState }) => {
   const [camera, setCamera] = useState<CameraState | null>(null);
-  const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [vcamBusy, setVcamBusy] = useState(false);
   const [vcamMessage, setVcamMessage] = useState<string | null>(null);
-  const previousUrl = useRef<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const online = state.devices.filter((d) => d.online);
   const [deviceId, setDeviceId] = useState('');
@@ -75,18 +122,170 @@ export const CameraView = ({ state }: { state: LocalState }) => {
   }, [refresh]);
 
   useEffect(() => {
-    const stop = window.switchboard.camera.onFrame((jpeg) => {
-      const url = URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' }));
-      // Revoke on replacement, not on unmount: one URL per frame at 30fps is
-      // a megabyte a second of retained blobs otherwise.
-      if (previousUrl.current) URL.revokeObjectURL(previousUrl.current);
-      previousUrl.current = url;
-      setFrameUrl(url);
+    let disposed = false;
+
+    /**
+     * Draws one frame, applying whatever orientation the sender left to us.
+     *
+     * The canvas is sized to the *displayed* picture, so a portrait phone at
+     * 90 degrees produces a portrait canvas rather than a landscape one with
+     * the picture spilling out of it.
+     */
+    const paint = (
+      source: CanvasImageSource,
+      width: number,
+      height: number,
+      rotation: number,
+      mirror: boolean
+    ) => {
+      const canvas = canvasRef.current;
+      if (!canvas || disposed || !width || !height) return;
+
+      const swapped = rotation === 90 || rotation === 270;
+      const displayWidth = swapped ? height : width;
+      const displayHeight = swapped ? width : height;
+      if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.save();
+      ctx.translate(displayWidth / 2, displayHeight / 2);
+      // Called outermost-first: the last transform set is the first applied to
+      // the source, so this is mirror-of-rotated, matching what the phone does
+      // to the JPEG track in software.
+      if (mirror) ctx.scale(-1, 1);
+      if (rotation) ctx.rotate((rotation * Math.PI) / 180);
+      ctx.drawImage(source, -width / 2, -height / 2, width, height);
+      ctx.restore();
+    };
+
+    // ---- H.264 ----
+
+    let decoder: VideoDecoder | null = null;
+    let configured = false;
+    // A decoder cannot start on a delta frame, and neither can it resume on one
+    // after an error or a drop.
+    let needsKey = true;
+    let orientation = { rotation: 0, mirror: false };
+    let lastUnitAt = 0;
+
+    const resetDecoder = () => {
+      needsKey = true;
+      configured = false;
+      if (decoder && decoder.state !== 'closed') {
+        try {
+          decoder.close();
+        } catch {
+          // Already torn down by the error that got us here.
+        }
+      }
+      decoder = null;
+    };
+
+    const stopVideo = window.switchboard.camera.onVideo((unit) => {
+      if (disposed || typeof VideoDecoder === 'undefined') return;
+      lastUnitAt = Date.now();
+
+      if (unit.key) needsKey = false;
+      else if (needsKey) return;
+
+      if (!decoder) {
+        decoder = new VideoDecoder({
+          output: (frame) => {
+            try {
+              // Orientation is read at paint time rather than paired with the
+              // chunk that produced this frame: decoding is asynchronous, and
+              // the settings behind it change at human speed, so the worst
+              // this costs is one frame of lag after a rotate.
+              paint(
+                frame,
+                frame.displayWidth,
+                frame.displayHeight,
+                orientation.rotation,
+                orientation.mirror
+              );
+            } finally {
+              // VideoFrames hold GPU memory outside the JS heap; at 60fps,
+              // leaving them to the collector exhausts the renderer in
+              // seconds.
+              frame.close();
+            }
+          },
+          error: resetDecoder
+        });
+      }
+
+      const bytes = new Uint8Array(unit.data);
+      if (!configured) {
+        // Taken from the stream's own SPS rather than assumed: encoders differ
+        // on profile and level, and a codec string that disagrees with the
+        // bytes is a decoder that configures and then produces nothing.
+        decoder.configure({
+          codec: codecFromAnnexB(bytes) ?? 'avc1.42E01E',
+          optimizeForLatency: true
+        });
+        configured = true;
+      }
+
+      // A machine that cannot keep up must fall behind by dropping, not by
+      // queueing: a backlog here is latency that only ever grows. Dropping a
+      // delta corrupts the picture until the next keyframe, which is why the
+      // decoder is told to wait for one.
+      if (!unit.key && decoder.decodeQueueSize > 4) {
+        needsKey = true;
+        return;
+      }
+
+      orientation = { rotation: unit.rotation, mirror: unit.mirror };
+      try {
+        decoder.decode(
+          new EncodedVideoChunk({
+            type: unit.key ? 'key' : 'delta',
+            timestamp: unit.timestamp,
+            data: bytes
+          })
+        );
+      } catch {
+        resetDecoder();
+      }
     });
+
+    // ---- JPEG fallback ----
+
+    // One decode in flight at a time. Frames arrive faster than a slow machine
+    // can decode them, and queueing every one would build a backlog that only
+    // grows — the newest picture is the only one worth painting.
+    let decoding = false;
+
+    const stopFrames = window.switchboard.camera.onFrame((jpeg) => {
+      // The video track wins while it is producing. Both are on the wire at
+      // once, and painting from both would show two rates fighting over one
+      // canvas.
+      if (disposed || decoding || Date.now() - lastUnitAt < VIDEO_TRACK_GRACE_MS) return;
+      decoding = true;
+
+      createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }))
+        .then((bitmap) => {
+          // The JPEG track arrives already rotated and mirrored by the phone.
+          paint(bitmap, bitmap.width, bitmap.height, 0, false);
+          // Bitmaps hold decoded pixels outside the JS heap; at 30fps, leaving
+          // them to the collector exhausts the renderer within minutes.
+          bitmap.close();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          decoding = false;
+        });
+    });
+
     return () => {
-      stop();
-      if (previousUrl.current) URL.revokeObjectURL(previousUrl.current);
-      previousUrl.current = null;
+      disposed = true;
+      resetDecoder();
+      stopVideo();
+      stopFrames();
     };
   }, []);
 
@@ -124,13 +323,18 @@ export const CameraView = ({ state }: { state: LocalState }) => {
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="space-y-3">
-          <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-line bg-black">
-            {frameUrl && live ? (
-              <img src={frameUrl} alt="Phone camera" className="h-full w-full object-contain" />
-            ) : (
+          <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-line bg-black">
+            {/* Kept mounted so the frame handler always has a canvas to draw
+                into; remounting it on every start would drop the first frames. */}
+            <canvas
+              ref={canvasRef}
+              aria-label="Phone camera"
+              className={`h-full w-full object-contain ${live ? '' : 'hidden'}`}
+            />
+            {!live && (
               <p className="px-6 text-center text-tiny text-ink-faint">
                 {waiting
-                  ? 'Waiting for the phone. Open the Camera screen in the app — streaming runs only while it is on screen.'
+                  ? 'Waiting for the phone to start its camera.'
                   : camera?.error || 'No camera streaming.'}
               </p>
             )}
@@ -164,6 +368,7 @@ export const CameraView = ({ state }: { state: LocalState }) => {
               <span className="text-tiny text-ink-faint">
                 {camera.width}×{camera.height} · {camera.fps.toFixed(0)} fps ·{' '}
                 {(camera.bytesPerSec / 1_000_000).toFixed(1)} MB/s
+                {camera.codec === 'h264' ? ' · H.264' : camera.codec === 'jpeg' ? ' · MJPEG' : ''}
               </span>
             )}
           </div>
@@ -280,11 +485,16 @@ export const CameraView = ({ state }: { state: LocalState }) => {
                 checked={settings.mirror}
                 onChange={(mirror) => apply({ mirror })}
               />
-              <Toggle
-                label="Auto framing"
-                checked={settings.autoFraming}
-                onChange={(autoFraming) => apply({ autoFraming })}
-              />
+              {/* Hidden rather than disabled on a lens with no face detection:
+                  there is nothing for auto framing to follow, and a switch that
+                  flips without changing the picture is worse than no switch. */}
+              {camera?.hasAutoFraming && (
+                <Toggle
+                  label="Auto framing"
+                  checked={settings.autoFraming}
+                  onChange={(autoFraming) => apply({ autoFraming })}
+                />
+              )}
             </Group>
 
             <Group title="Image">
@@ -328,13 +538,18 @@ export const CameraView = ({ state }: { state: LocalState }) => {
               )}
             </Group>
 
-            <Group title="White balance">
-              <Chips
-                options={WHITE_BALANCE.map((mode) => [mode, mode] as [string, string])}
-                value={settings.whiteBalance}
-                onSelect={(whiteBalance) => apply({ whiteBalance })}
-              />
-            </Group>
+            {camera?.hasWhiteBalance && (
+              <Group title="White balance">
+                <Chips
+                  options={(camera.whiteBalanceModes?.length
+                    ? camera.whiteBalanceModes
+                    : WHITE_BALANCE
+                  ).map((mode) => [mode, mode] as [string, string])}
+                  value={settings.whiteBalance}
+                  onSelect={(whiteBalance) => apply({ whiteBalance })}
+                />
+              </Group>
+            )}
           </aside>
         )}
       </div>

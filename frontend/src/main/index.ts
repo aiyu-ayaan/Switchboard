@@ -301,48 +301,142 @@ function registerDaemonBridge(): void {
  * Pumps camera frames from the daemon to the renderer.
  *
  * The renderer keeps `default-src 'self'` and makes no network requests, so it
- * cannot open the daemon's MJPEG stream itself. This holds a long poll instead:
- * the daemon answers as soon as a frame newer than the last one exists, which
- * means the window is never a frame behind and never asks for one that has not
- * changed. Only one pump runs however many subscribers there are, and it stops
- * when the last one leaves — a camera nobody is watching should cost nothing.
+ * cannot open the daemon's MJPEG stream itself. This holds the stream open on
+ * its behalf and forwards each frame over IPC.
+ *
+ * One connection for the whole session, not a request per frame. The previous
+ * long poll asked for the next frame only after handing the last one over, so
+ * every frame paid a fresh request and anything the phone produced inside that
+ * gap was dropped by the daemon's latest-frame holder. Thirty times a second
+ * that is not a bandwidth problem, it is a *timing* one: frames arrived in an
+ * uneven rhythm, which is exactly what stutter is. A held stream delivers them
+ * at the rate they were captured.
+ *
+ * Only one pump runs however many subscribers there are, and it stops when the
+ * last one leaves — a camera nobody is watching should cost nothing.
  */
 let cameraSubscribers = 0;
 let cameraPump: Promise<void> | null = null;
 
+/**
+ * Cuts the held connections when the last viewer leaves.
+ *
+ * Without it, a phone that drops off Wi-Fi mid-stream leaves the daemon's
+ * handler waiting on frames that will never come and this side blocked reading
+ * a body that will never produce another chunk — a connection neither end has
+ * any reason to close.
+ */
+const cameraAborts = new Set<AbortController>();
+
+const abortCameraStreams = () => {
+  for (const abort of cameraAborts) abort.abort();
+  cameraAborts.clear();
+};
+
+/**
+ * The two tracks the daemon publishes.
+ *
+ * `video` is H.264 off the phone's hardware encoder and is what the live view
+ * renders: a software JPEG per frame could not keep up with the rates the UI
+ * offers, and cost a few hundred kilobytes each where these cost a few. The
+ * MJPEG track stays because it is the fallback for a phone with no hardware
+ * encoder, and it is what the virtual camera and OBS read.
+ */
+const CAMERA_TRACKS = [
+  { path: '/local/camera/video', channel: 'camera:video' },
+  { path: '/local/camera/stream', channel: 'camera:frame' }
+] as const;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const pumpAlive = () => cameraSubscribers > 0 && Boolean(mainWindow) && !mainWindow!.isDestroyed();
+
 async function pumpCameraFrames(): Promise<void> {
-  let after = 0;
-  while (cameraSubscribers > 0 && mainWindow && !mainWindow.isDestroyed()) {
-    try {
-      const res = await fetch(
-        `http://127.0.0.1:${DAEMON_PORT}/local/camera/frame?after=${after}`,
-        { signal: AbortSignal.timeout(20_000) }
-      );
-      if (res.status === 204) {
-        // The camera is live but pointed at something still. Nothing to send.
-        continue;
-      }
-      if (res.status === 409) {
-        // Nothing is streaming. Back off rather than hammering the daemon
-        // while the user decides whether to start a camera at all.
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        after = 0;
-        continue;
-      }
-      if (!res.ok) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        continue;
-      }
-      after = Number(res.headers.get('X-Sequence') ?? after) || after;
-      const jpeg = await res.arrayBuffer();
-      mainWindow?.webContents.send('camera:frame', jpeg);
-    } catch {
-      // A timeout on a quiet camera is normal; anything else settles down on
-      // the next pass. Either way the loop is the recovery.
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
+  await Promise.all(CAMERA_TRACKS.map((track) => pumpTrack(track.path, track.channel)));
   cameraPump = null;
+}
+
+async function pumpTrack(path: string, channel: string): Promise<void> {
+  while (pumpAlive()) {
+    try {
+      await readParts(path, channel);
+    } catch {
+      // The daemon restarted, or nothing is streaming yet. Either way the
+      // loop is the recovery; the pause keeps a dead camera from becoming a
+      // busy wait.
+    }
+    if (pumpAlive()) await sleep(1000);
+  }
+}
+
+/**
+ * Reads `multipart/x-mixed-replace` until the stream ends, emitting each part.
+ *
+ * The daemon always sends a `Content-Length`, so the boundary marker itself
+ * never has to be searched for inside the payload — which is just as well,
+ * since a boundary string can legitimately occur inside compressed data.
+ *
+ * The video track adds `X-` headers describing the access unit. They ride in
+ * the part header rather than a parallel channel so one frame's metadata can
+ * never arrive out of step with its bytes.
+ */
+const PART_HEADER_END = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a]); // CRLF CRLF
+
+const headerValue = (header: string, name: string): string | undefined =>
+  new RegExp(`^${name}:\\s*(.+)$`, 'im').exec(header)?.[1].trim();
+
+async function readParts(path: string, channel: string): Promise<void> {
+  const abort = new AbortController();
+  cameraAborts.add(abort);
+  try {
+    const res = await fetch(`http://127.0.0.1:${DAEMON_PORT}${path}`, { signal: abort.signal });
+    if (!res.ok || !res.body) throw new Error(`camera stream: ${res.status}`);
+
+    let buffer = Buffer.alloc(0);
+    let expected = -1; // bytes of payload still to collect, or -1 while in headers
+    let header = '';
+
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      if (!pumpAlive()) return;
+      buffer = Buffer.concat([buffer, chunk]);
+
+      // A single chunk can hold the tail of one frame and the head of the next,
+      // so each pass drains everything complete rather than one part per chunk.
+      for (;;) {
+        if (expected < 0) {
+          const headerEnd = buffer.indexOf(PART_HEADER_END);
+          if (headerEnd < 0) break;
+          header = buffer.subarray(0, headerEnd).toString('latin1');
+          const length = headerValue(header, 'content-length');
+          if (!length) throw new Error('camera stream: part without a length');
+          expected = Number(length);
+          buffer = buffer.subarray(headerEnd + PART_HEADER_END.length);
+        }
+        if (buffer.length < expected) break;
+
+        // Copied out of the accumulator: subarray shares memory with a buffer
+        // that is about to be concatenated over.
+        const payload = new Uint8Array(buffer.subarray(0, expected)).buffer;
+        if (channel === 'camera:video') {
+          mainWindow?.webContents.send(channel, {
+            data: payload,
+            key: headerValue(header, 'x-key') === '1',
+            rotation: Number(headerValue(header, 'x-rotation') ?? 0),
+            mirror: headerValue(header, 'x-mirror') === '1',
+            width: Number(headerValue(header, 'x-width') ?? 0),
+            height: Number(headerValue(header, 'x-height') ?? 0),
+            timestamp: Number(headerValue(header, 'x-timestamp') ?? 0)
+          });
+        } else {
+          mainWindow?.webContents.send(channel, payload);
+        }
+        buffer = buffer.subarray(expected);
+        expected = -1;
+      }
+    }
+  } finally {
+    cameraAborts.delete(abort);
+  }
 }
 
 function registerCameraBridge(): void {
@@ -352,6 +446,8 @@ function registerCameraBridge(): void {
   });
   ipcMain.on('camera:unsubscribe', () => {
     cameraSubscribers = Math.max(0, cameraSubscribers - 1);
+    // The pump is parked on a read that may never return on its own.
+    if (cameraSubscribers === 0) abortCameraStreams();
   });
 
   ipcMain.handle('camera:vcamStatus', async () => {
