@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,8 +96,7 @@ fun SettingsScreen(
             folderError = null
             onSetSaveDirectory(tree.toString())
         } else {
-            folderError = "Android would not grant that folder. Pick one under " +
-                "Internal storage — media folders such as Videos or Music cannot be used."
+            folderError = "Android could not grant persistent access to that folder. Transfers will continue saving to Downloads/Switchboard."
         }
     }
 
@@ -285,14 +285,23 @@ fun SettingsScreen(
                     ThemeModeOption(
                         title = folderLabel(transferConfig.saveDirectory),
                         description = if (transferConfig.saveDirectory.isEmpty()) {
-                            "Incoming files are refused until a folder is chosen"
+                            "Files sent from the desktop land in Downloads/Switchboard. Tap to customize."
                         } else {
-                            "Files sent from the desktop land here"
+                            "Files sent from the desktop land here. Tap to change."
                         },
                         icon = Icons.Filled.Folder,
-                        selected = transferConfig.saveDirectory.isNotEmpty(),
+                        selected = true,
                         onClick = { pickFolder.launch(initialSaveDirectory(transferConfig.saveDirectory)) }
                     )
+
+                    if (transferConfig.saveDirectory.isNotEmpty()) {
+                        TextButton(
+                            onClick = { onSetSaveDirectory("") },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Reset to Default (Downloads)")
+                        }
+                    }
 
                     folderError?.let { message ->
                         Text(
@@ -564,7 +573,7 @@ private const val EXTERNAL_STORAGE_PROVIDER = "com.android.externalstorage.docum
  * folder name; showing the raw URI would be unreadable.
  */
 private fun folderLabel(treeUri: String): String {
-    if (treeUri.isEmpty()) return "Choose a folder"
+    if (treeUri.isEmpty()) return "Downloads / Switchboard (Default)"
     val documentId = Uri.decode(treeUri.substringAfterLast('/'))
     return documentId.substringAfterLast(':').ifEmpty { documentId }
 }

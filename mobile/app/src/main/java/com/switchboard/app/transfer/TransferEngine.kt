@@ -3,6 +3,7 @@ package com.switchboard.app.transfer
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.util.Log
@@ -361,17 +362,6 @@ class TransferEngine private constructor(
             )
         )
 
-        if (prefs.config.value.saveDirectory.isEmpty()) {
-            emit(
-                Actions.FILE_ACCEPT,
-                FileAccept(offer.transferId, 0, false, "No save folder chosen on the phone"),
-                null
-            )
-            live.remove(offer.transferId)
-            finish(offer.transferId, TransferStatus.FAILED, "Choose a save folder in Settings, then ask again.")
-            return
-        }
-
         val part = File(partDir(), "${offer.transferId}.part")
         // A part file left by an interrupted attempt is the resume point; the
         // peer is told how much we hold so it seeks instead of restarting.
@@ -424,7 +414,7 @@ class TransferEngine private constructor(
             return
         }
 
-        val published = runCatching { publishToSaveDirectory(entry, part!!) }
+        val published = runCatching { publishReceivedFile(entry, part!!) }
         part?.delete()
         live.remove(id)
 
@@ -441,23 +431,79 @@ class TransferEngine private constructor(
     }
 
     /**
-     * Moves the verified file into the tree the user granted. Written through
-     * the SAF rather than a filesystem path so the app needs no broad storage
-     * permission on any supported release.
+     * Moves the verified file into storage: prefers the user's custom folder chosen in Settings,
+     * but falls back seamlessly to Downloads/Switchboard if none is configured or SAF write fails.
      */
-    private fun publishToSaveDirectory(entry: Live, part: File) {
-        val tree = Uri.parse(prefs.config.value.saveDirectory)
+    private fun publishReceivedFile(entry: Live, part: File) {
+        val customDir = prefs.saveDirectory
+        if (customDir.isNotEmpty()) {
+            val result = runCatching { publishToSaveDirectory(entry, part, customDir) }
+            if (result.isSuccess) return
+            Log.w(TAG, "Custom save directory failed ($customDir), falling back to Downloads: ${result.exceptionOrNull()?.message}")
+        }
+        val downloadsResult = runCatching { publishToDownloads(entry, part) }
+        if (downloadsResult.isSuccess) return
+        Log.w(TAG, "MediaStore downloads failed, falling back to app external files dir: ${downloadsResult.exceptionOrNull()?.message}")
+
+        publishToAppExternalDir(entry, part)
+    }
+
+    private fun publishToSaveDirectory(entry: Live, part: File, treeUriStr: String) {
+        val tree = Uri.parse(treeUriStr)
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val fileName = sanitizeFileName(entry.offer.name)
         val target = DocumentsContract.createDocument(
             context.contentResolver,
             parent,
             entry.offer.mimeType.ifEmpty { "application/octet-stream" },
-            entry.offer.name
+            fileName
         ) ?: error("Cannot write to the chosen save folder")
 
         context.contentResolver.openOutputStream(target)?.use { out ->
             part.inputStream().use { it.copyTo(out, CHUNK_SIZE) }
         } ?: error("Cannot write to the chosen save folder")
+    }
+
+    private fun publishToAppExternalDir(entry: Live, part: File) {
+        val fileName = sanitizeFileName(entry.offer.name)
+        val targetDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+            ?: context.filesDir
+        targetDir.mkdirs()
+        val target = File(targetDir, fileName)
+        part.copyTo(target, overwrite = true)
+    }
+
+    private fun publishToDownloads(entry: Live, part: File) {
+        val fileName = sanitizeFileName(entry.offer.name)
+        val mimeType = entry.offer.mimeType.ifEmpty { "application/octet-stream" }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Switchboard")
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = context.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: error("Failed to create download record in MediaStore")
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    part.inputStream().use { it.copyTo(out, CHUNK_SIZE) }
+                } ?: error("Failed to write download stream")
+                values.clear()
+                values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                context.contentResolver.update(uri, values, null, null)
+            } catch (e: Throwable) {
+                context.contentResolver.delete(uri, null, null)
+                throw e
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val baseDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val switchboardDir = File(baseDir, "Switchboard").apply { mkdirs() }
+            val target = File(switchboardDir, fileName)
+            part.copyTo(target, overwrite = true)
+        }
     }
 
     // ---- Control ----
@@ -623,7 +669,7 @@ class TransferEngine private constructor(
         fun get(context: Context): TransferEngine = instance ?: synchronized(this) {
             instance ?: TransferEngine(
                 context.applicationContext,
-                TransferPreferences(context.applicationContext)
+                TransferPreferences.get(context.applicationContext)
             ).also { instance = it }
         }
     }

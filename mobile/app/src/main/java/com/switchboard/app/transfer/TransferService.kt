@@ -47,7 +47,7 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         engine = TransferEngine.get(this)
-        preferences = TransferPreferences(this)
+        preferences = TransferPreferences.get(this)
         createChannels()
 
         // Foreground status must be claimed before the first transfer tick, or

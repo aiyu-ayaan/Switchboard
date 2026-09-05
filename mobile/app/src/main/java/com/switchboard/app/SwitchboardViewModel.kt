@@ -95,7 +95,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     private val connection = SwitchboardConnection.get(application)
     private val discovery = HostDiscovery(application)
     private val transfers = TransferEngine.get(application)
-    val transferPreferences = TransferPreferences(application)
+    val transferPreferences = TransferPreferences.get(application)
 
     /**
      * Bumped by [rescanHosts]. Emitting here restarts the browse through
