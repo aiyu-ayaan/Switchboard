@@ -97,7 +97,25 @@ Adjusts the volume level for an individual active application session.
 }
 ```
 
-#### 6. `media_control`
+#### 6. `audio.output.set`
+Moves the host's default playback endpoint. The reply is the refreshed device
+list, because changing the default changes which entry is marked, not just one.
+
+```json
+{
+  "type": "audio.output.set",
+  "id": "req-006",
+  "payload": {
+    "deviceId": "{0.0.0.00000000}.{87039890-5e96-4cc8-83f8-1aeca934c199}"
+  }
+}
+```
+
+All three Windows endpoint roles — console, multimedia and communications —
+move together, so the whole host follows the choice rather than splitting
+playback from calls. Guarded by the `outputs` capability.
+
+#### 7. `media_control`
 Dispatches a playback transport action to the active media session.
 
 ```json
@@ -111,7 +129,7 @@ Dispatches a playback transport action to the active media session.
 ```
 *Supported actions*: `"play"`, `"pause"`, `"play_pause"`, `"next"`, `"previous"`, `"stop"`.
 
-#### 7. `file_transfer_init`
+#### 8. `file_transfer_init`
 Initiates a peer-to-peer file transfer.
 
 ```json
@@ -132,7 +150,7 @@ Initiates a peer-to-peer file transfer.
 ### Host Broadcasts & Events (Desktop ➔ Phone)
 
 #### 1. `host_state`
-Pushed upon connection and whenever host state (displays, volume, mixer) changes.
+Pushed upon connection and whenever host state (displays, volume, mixer, output routing) changes.
 
 ```json
 {
@@ -166,6 +184,18 @@ Pushed upon connection and whenever host state (displays, volume, mixer) changes
         "level": 80,
         "muted": false,
         "active": true
+      }
+    ],
+    "outputs": [
+      {
+        "id": "{0.0.0.00000000}.{87039890-5e96-4cc8-83f8-1aeca934c199}",
+        "name": "Speakers (AB13X USB Audio)",
+        "default": true
+      },
+      {
+        "id": "{0.0.0.00000000}.{20325cd4-f5f6-487f-8f91-147998a8b9c4}",
+        "name": "Headphones (Realtek(R) Audio)",
+        "default": false
       }
     ],
     "media": {
@@ -227,6 +257,7 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `POST` | `/local/display/contrast` | Set monitor contrast. | `{"displayId": "...", "value": 50}` |
 | `POST` | `/local/volume` | Set master system volume. | `{"level": 50, "muted": false}` |
 | `POST` | `/local/mixer` | Set per-app audio volume. | `{"sessionId": "...", "level": 100, "muted": false}` |
+| `POST` | `/local/audio/output` | Route host audio to one endpoint. | `{"deviceId": "..."}` |
 | `POST` | `/local/media` | Send media transport command. | `{"action": "play_pause"}` |
 | `GET` | `/local/media/artwork` | Returns raw binary image bytes for current album artwork. | Query: `?id=...` |
 | `POST` | `/local/pairing/rotate` | Generates a fresh pairing code and QR payload. | `{}` |

@@ -20,10 +20,11 @@ Switchboard provides an ultra-low-latency, zero-password encrypted bridge betwee
 ### 2. Security & Protocols
 - [**Security & Pairing Protocol**](./security-pairing.md): Cryptographic specification, zero-password trust model, X25519 ECDH key exchange, AEAD encryption, and device revocation.
 - [**API & Wire Protocol Reference**](./api-protocol.md): JSON-over-WebSocket protocol, client command envelopes, host event streams, and loopback REST API endpoints.
+- [**Host Discovery (mDNS / DNS-SD)**](./discovery.md): `_switchboard._tcp` advertisement, the TXT record, why it carries no host key, and how the phone follows a desktop that changed address.
 
 ### 3. Hardware & System Subsystems
 - [**Displays & DDC/CI Hardware Controls**](./displays-ddcci.md): VESA MCCS monitor communication via `dxva2.dll`, multi-monitor detection, and WMI laptop display control.
-- [**Audio Mixer & SMTC Media Transport**](./audio-mixer.md): Windows Core Audio (WASAPI), per-process audio session control, and System Media Transport Controls (SMTC) integration.
+- [**Audio Mixer, Output Routing & SMTC Media Transport**](./audio-mixer.md): Windows Core Audio (WASAPI), per-process audio session control, default output endpoint switching via `IPolicyConfig`, and System Media Transport Controls (SMTC) integration.
 - [**Encrypted File Transfer Subsystem**](./file-transfer.md): Chunked P2P encrypted file streaming, SHA-256 integrity validation, and Android Storage Access Framework (SAF).
 
 ### 4. Operations & Support

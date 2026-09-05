@@ -77,12 +77,16 @@ Clean, fluid Material You interface that adapts to your wallpaper colors and sup
   Adjusts the real backlight and contrast hardware on your external screens using VESA DDC/CI commands over DisplayPort/HDMI/Type-C. Works with laptop built-in panels too (via WMI). Sliders automatically respect the real minimum and maximum ranges reported by each monitor.
 - **Per-Application Volume Mixer**:
   Shows volume sliders for every program playing sound right now (Chrome, Discord, games, Spotify). Turn down one noisy app without touching your master volume.
+- **Switch Your Sound Output**:
+  Move your PC's playback between speakers, a headset, or your monitor's HDMI audio straight from your phone — no digging through the Windows Sound settings. Playback, multimedia and call audio all follow the choice together.
 - **Media Playback & Album Art**:
   Syncs with Windows System Media Transport Controls (SMTC). Shows track titles, artists, playback controls (Play, Pause, Skip, Prev), and extracts full-res album art directly to your phone.
 - **Zero-Password QR Pairing**:
   Point your phone camera at your PC screen once to pair. The app does an ephemeral **X25519 (ECDH)** key exchange and derives symmetric keys on the spot. If you don't want to use the camera, there's a 10-character code you can type instead.
 - **Encrypted Local File Sharing**:
   Send files back and forth over your local network. Everything is encrypted end-to-end and verified with SHA-256 hashes. Uses Android's Storage Access Framework (SAF), so the app never asks for intrusive full-storage permissions.
+- **Finds Your PC By Itself**:
+  Desktops announce themselves on your Wi-Fi over mDNS, so pairing no longer starts with hunting for an IP address — your PC just shows up in the list. If your router hands your PC a new address later, your phone follows it instead of failing to reconnect.
 - **Multi-PC Switching**:
   Pair your phone with your desktop PC and your laptop. Switch between them with one tap from the top bar.
 - **Runs in System Tray**:
@@ -103,7 +107,8 @@ Clean, fluid Material You interface that adapts to your wallpaper colors and sup
         Desktop Daemon (Go)
           ├── SQLite (Pairing records & host identity)
           ├── Windows DDC/CI (dxva2.dll) & WMI (Display brightness)
-          ├── Windows WASAPI (Master volume & per-process mixer)
+          ├── Windows WASAPI (Master volume, per-process mixer & output routing)
+          ├── mDNS / DNS-SD (`_switchboard._tcp` host advertisement)
           └── Windows SMTC (Media playback & artwork)
           │
           ▼  Loopback HTTP (127.0.0.1:9427)
@@ -152,7 +157,7 @@ pnpm android:run
 
 ### Step 4: Pair & Use
 1. On your PC, click the **Paired Devices** icon on the left rail to show your pairing QR code.
-2. On your phone, tap **Scan QR code** and point your camera at the screen.
+2. On your phone, tap **Scan QR code** and point your camera at the screen — or pick your PC from **Found on this network** and type the 10-character code instead.
 3. You're connected! Your displays and sound mixer will show up on your phone instantly.
 
 ---
@@ -178,7 +183,8 @@ Need more details on how things are built? Check out the guides in [`docs/docs/`
 - 🔐 [**Security & Pairing**](docs/docs/security-pairing.md) - Cryptographic handshake and cipher specs
 - 📡 [**Wire Protocol Reference**](docs/docs/api-protocol.md) - WebSocket message formats and commands
 - 🖥️ [**DDC/CI Display Guide**](docs/docs/displays-ddcci.md) - VESA MCCS implementation details
-- 🎧 [**Audio Mixer & SMTC Guide**](docs/docs/audio-mixer.md) - Windows Core Audio and Media APIs
+- 🎧 [**Audio Mixer, Output Routing & SMTC Guide**](docs/docs/audio-mixer.md) - Windows Core Audio and Media APIs
+- 📶 [**Host Discovery**](docs/docs/discovery.md) - mDNS/DNS-SD advertisement and why it grants no trust
 - 📁 [**File Transfer Subsystem**](docs/docs/file-transfer.md) - Streaming, chunking, and SAF integration
 - ❓ [**Troubleshooting & FAQ**](docs/docs/troubleshooting.md) - Firewall hints, monitor quirks, and Wi-Fi tips
 
