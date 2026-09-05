@@ -75,6 +75,7 @@ export interface HostState {
   outputs: AudioDevice[];
   media: MediaState;
   capabilities: string[];
+  locked?: boolean;
 }
 
 export interface PairingInfo {

@@ -1,13 +1,18 @@
-import { Lock, Minus, Square, X } from 'lucide-react';
+import { Lock, LockOpen, Minus, Square, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export type ViewId = 'displays' | 'audio' | 'camera' | 'files' | 'devices' | 'settings';
 
 /** Frameless-window chrome. The bar itself is the OS drag handle. */
-export function TitleBar({ subtitle }: { subtitle: string }) {
-  const controls: Array<{ label: string; icon: LucideIcon; run: () => void; danger?: boolean }> = [
-    { label: 'Lock workstation', icon: Lock, run: () => window.switchboard.lockSystem() },
+export function TitleBar({ subtitle, locked }: { subtitle: string; locked?: boolean }) {
+  const controls: Array<{ label: string; icon: LucideIcon; run: () => void; danger?: boolean; highlight?: string }> = [
+    {
+      label: locked ? 'Workstation locked' : 'Lock workstation',
+      icon: locked ? Lock : LockOpen,
+      run: () => window.switchboard.lockSystem(),
+      highlight: locked ? 'text-danger hover:text-danger' : 'text-accent hover:text-accent'
+    },
     { label: 'Minimize', icon: Minus, run: () => window.switchboard.window.minimize() },
     { label: 'Maximize', icon: Square, run: () => window.switchboard.window.toggleMaximize() },
     { label: 'Close', icon: X, run: () => window.switchboard.window.close(), danger: true }
@@ -28,14 +33,18 @@ export function TitleBar({ subtitle }: { subtitle: string }) {
         <span className="text-ink-faint">{subtitle}</span>
       </div>
       <div className="app-no-drag flex h-full">
-        {controls.map(({ label, icon: Icon, run, danger }) => (
+        {controls.map(({ label, icon: Icon, run, danger, highlight }) => (
           <button
             key={label}
             type="button"
             onClick={run}
             aria-label={label}
-            className={`flex h-full w-11 items-center justify-center text-ink-dim transition-colors ${
-              danger ? 'hover:bg-danger hover:text-canvas' : 'hover:bg-raised hover:text-ink'
+            className={`flex h-full w-11 items-center justify-center transition-colors ${
+              danger
+                ? 'text-ink-dim hover:bg-danger hover:text-canvas'
+                : highlight
+                  ? `hover:bg-raised ${highlight}`
+                  : 'text-ink-dim hover:bg-raised hover:text-ink'
             }`}
           >
             <Icon aria-hidden="true" className="h-3.5 w-3.5" />

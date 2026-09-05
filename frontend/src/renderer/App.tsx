@@ -29,7 +29,7 @@ export const App = () => {
 
   return (
     <div className="flex h-full flex-col">
-      <TitleBar subtitle={state ? `— ${state.host.hostName}` : ''} />
+      <TitleBar subtitle={state ? `— ${state.host.hostName}` : ''} locked={state?.host.locked} />
 
       <div className="flex min-h-0 flex-1">
         <ActivityBar
