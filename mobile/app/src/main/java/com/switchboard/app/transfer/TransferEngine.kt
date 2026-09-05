@@ -31,6 +31,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,7 +77,7 @@ class TransferEngine private constructor(
 
     private val inbound = Channel<Inbound>(Channel.UNLIMITED)
     private val uploadQueue = Channel<String>(Channel.UNLIMITED)
-    private var queueWorkerJob: Job? = null
+    private val queueWorkers = mutableListOf<Job>()
 
     // Concurrent because bind/unbind arrive on the connection collector while
     // an upload coroutine is still touching its own entry.
@@ -103,7 +105,18 @@ class TransferEngine private constructor(
         var parked: Boolean = false,
         var cancelled: Boolean = false,
         var startedAt: Long = System.currentTimeMillis()
-    )
+    ) {
+        /**
+         * Receive-side counters. Only the inbound coroutine touches these, so
+         * they are plain fields: [acked] stays a flow because the *upload* path
+         * has a pump waiting on it from another coroutine.
+         */
+        var ackedTo: Long = 0
+        var emittedAt: Long = 0
+        var rateMark: Long = 0
+        var rateAt: Long = 0
+        var bps: Long = 0
+    }
 
     init {
         scope.launch {
@@ -173,26 +186,42 @@ class TransferEngine private constructor(
 
     // ---- Sending ----
 
+    /**
+     * Keeps [MAX_PARALLEL_UPLOADS] workers draining the queue.
+     *
+     * Sending was strictly one file at a time, which left the link idle through
+     * every digest pass and every handshake round trip — picking a folder meant
+     * watching files go one by one with a gap between each. Several workers on
+     * one channel overlap that dead time. The count is fixed rather than tuned
+     * from the observed rate: the window per transfer already adapts to a slow
+     * link, and a controller that guesses at concurrency is a second thing to
+     * get wrong.
+     */
     private fun ensureQueueWorker() {
         synchronized(this) {
-            if (queueWorkerJob?.isActive == true) return
-            queueWorkerJob = scope.launch {
-                for (transferId in uploadQueue) {
-                    val entry = live[transferId] ?: continue
-                    if (entry.parked || entry.cancelled) continue
-                    val uri = entry.uri ?: continue
+            queueWorkers.removeAll { !it.isActive }
+            repeat(MAX_PARALLEL_UPLOADS - queueWorkers.size) {
+                queueWorkers += scope.launch {
+                    for (transferId in uploadQueue) {
+                        val entry = live[transferId] ?: continue
+                        if (entry.parked || entry.cancelled) continue
+                        val uri = entry.uri ?: continue
 
-                    update(transferId) { it.copy(status = TransferStatus.ACTIVE) }
-                    val currentJob = launch {
-                        runCatching { upload(uri, entry) }
-                            .onFailure { failure ->
-                                if (failure is kotlinx.coroutines.CancellationException) throw failure
-                                finish(transferId, TransferStatus.FAILED, reasonOf(failure))
-                            }
-                        live.remove(transferId)
+                        update(transferId) { it.copy(status = TransferStatus.ACTIVE) }
+                        // A child job rather than the worker itself: cancelling
+                        // one file must free this worker for the next, not kill
+                        // it and shrink the pool.
+                        val currentJob = launch {
+                            runCatching { upload(uri, entry) }
+                                .onFailure { failure ->
+                                    if (failure is kotlinx.coroutines.CancellationException) throw failure
+                                    finish(transferId, TransferStatus.FAILED, reasonOf(failure))
+                                }
+                            live.remove(transferId)
+                        }
+                        entry.job = currentJob
+                        currentJob.join()
                     }
-                    entry.job = currentJob
-                    currentJob.join()
                 }
             }
         }
@@ -271,10 +300,13 @@ class TransferEngine private constructor(
     private suspend fun upload(uri: Uri, entry: Live) {
         val id = entry.offer.transferId
         val emit = sender ?: error("Not connected")
+        val job = currentCoroutineContext()[Job]
 
         // The digest is computed before the offer so the receiver can verify
         // without a second pass over a file it may not be able to buffer.
-        val sha = openStream(uri).use { TransferMath.sha256Hex(it) }
+        val sha = openStream(uri).use {
+            TransferMath.sha256Hex(it) { job?.ensureActive() }
+        }
         emit(Actions.FILE_OFFER, entry.offer.copy(sha256 = sha), null)
 
         val accept = withTimeout(HANDSHAKE_TIMEOUT_MS) { entry.accept.await() }
@@ -293,8 +325,16 @@ class TransferEngine private constructor(
             val buffer = ByteArray(CHUNK_SIZE)
             var marker = offset
             var markerAt = System.currentTimeMillis()
+            // Seeded at the start rather than zero: publishing after the first
+            // chunk would measure a few hundred kilobytes over a few
+            // milliseconds and open the row with an invented headline speed.
+            var emittedAt = markerAt
 
             while (offset < size) {
+                // Reading and sealing a chunk are both blocking and neither is
+                // a suspension point, so without this a cancelled upload runs
+                // to the end of the file before it notices.
+                job?.ensureActive()
                 entry.paused.first { !it }
 
                 val want = TransferMath.chunkLength(size, offset)
@@ -311,14 +351,21 @@ class TransferEngine private constructor(
                 )
                 offset += read
 
+                // Publishing every chunk meant rebuilding and recomposing the
+                // whole transfer list a hundred times a second on a fast link,
+                // which cost more than the transfer it was reporting on and
+                // made the list stutter under its own updates.
                 val now = System.currentTimeMillis()
-                if (now - markerAt >= RATE_WINDOW_MS) {
-                    val rate = TransferMath.bytesPerSec(offset - marker, now - markerAt)
+                if (now - emittedAt >= PROGRESS_INTERVAL_MS || offset >= size) {
+                    entry.bps = TransferMath.smoothRate(
+                        entry.bps,
+                        TransferMath.bytesPerSec(offset - marker, now - markerAt)
+                    )
                     marker = offset
                     markerAt = now
+                    emittedAt = now
+                    val rate = entry.bps
                     update(id) { it.copy(transferred = offset, bytesPerSec = rate) }
-                } else {
-                    update(id) { it.copy(transferred = offset) }
                 }
 
                 // Without this the sender would queue the whole file into the
@@ -371,6 +418,10 @@ class TransferEngine private constructor(
         entry.part = part
         entry.sink = RandomAccessFile(part, "rw")
         entry.acked.value = held
+        entry.ackedTo = held
+        entry.rateMark = held
+        entry.rateAt = System.currentTimeMillis()
+        entry.emittedAt = entry.rateAt
         update(offer.transferId) { it.copy(transferred = held) }
         emit(Actions.FILE_ACCEPT, FileAccept(offer.transferId, held), null)
     }
@@ -386,23 +437,60 @@ class TransferEngine private constructor(
         sink.write(bytes)
 
         val received = chunk.offset + bytes.size
-        entry.acked.value = received
-        emit(Actions.FILE_ACK, FileAck(chunk.transferId, received), null)
+        val last = chunk.last || received >= entry.offer.size
 
-        val elapsed = System.currentTimeMillis() - entry.startedAt
-        update(chunk.transferId) {
-            it.copy(transferred = received, bytesPerSec = TransferMath.bytesPerSec(received, elapsed))
+        // Confirming every chunk doubled the frame count for nothing: the host
+        // runs a 2 MB window, so an ack every 512 KB keeps it saturated at a
+        // quarter of the encryptions — and those acks share the socket with the
+        // chunks they are pacing.
+        if (last || received - entry.ackedTo >= ACK_INTERVAL) {
+            entry.ackedTo = received
+            entry.acked.value = received
+            emit(Actions.FILE_ACK, FileAck(chunk.transferId, received), null)
         }
 
-        if (chunk.last || received >= entry.offer.size) {
-            completeReceive(entry, emit)
+        publishReceiveProgress(entry, received, force = last)
+
+        if (last) {
+            // Verifying the digest and copying the file into the user's folder
+            // are two more full passes over it. Done here they block the
+            // inbound channel — where the *next* file's chunks are already
+            // queued — so a batch arrived in bursts with a long stall at every
+            // file boundary. The handle is closed first so the publish sees a
+            // fully flushed file.
+            live.remove(chunk.transferId)
+            runCatching { sink.close() }
+            entry.sink = null
+            scope.launch { completeReceive(entry, emit) }
         }
+    }
+
+    /**
+     * Reports a receive at most every [PROGRESS_INTERVAL_MS].
+     *
+     * The rate was previously the average since the transfer started, which
+     * only ever drifts towards a number and never shows the link recovering or
+     * stalling; this is a smoothed window, matching what the host reports for
+     * the same file.
+     */
+    private fun publishReceiveProgress(entry: Live, received: Long, force: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!force && now - entry.emittedAt < PROGRESS_INTERVAL_MS) return
+        entry.bps = TransferMath.smoothRate(
+            entry.bps,
+            TransferMath.bytesPerSec(received - entry.rateMark, now - entry.rateAt)
+        )
+        entry.rateMark = received
+        entry.rateAt = now
+        entry.emittedAt = now
+        val rate = entry.bps
+        update(entry.offer.transferId) { it.copy(transferred = received, bytesPerSec = rate) }
     }
 
     private fun completeReceive(entry: Live, emit: (String, WirePayload, ByteArray?) -> Unit) {
         val id = entry.offer.transferId
         val part = entry.part
-        entry.sink?.close()
+        runCatching { entry.sink?.close() }
         entry.sink = null
 
         val actual = part?.inputStream()?.use { TransferMath.sha256Hex(it) }.orEmpty()
@@ -510,7 +598,6 @@ class TransferEngine private constructor(
 
     fun control(transferId: String, action: String) {
         val entry = live[transferId]
-        sender?.invoke(Actions.FILE_CONTROL, FileControl(transferId, action), null)
         when (action) {
             Control.PAUSE -> {
                 entry?.paused?.value = true
@@ -523,10 +610,17 @@ class TransferEngine private constructor(
             Control.CANCEL -> {
                 entry?.cancelled = true
                 entry?.job?.cancel()
-                closeReceive(transferId, keepPart = false)
                 live.remove(transferId)
                 finish(transferId, TransferStatus.CANCELLED, "")
             }
+        }
+        // Sealing a frame contends with a pump that is holding the socket lock
+        // for every chunk it sends, and deleting a half-received file is disk
+        // work. This is called straight off a tap, so neither belongs on the
+        // main thread — the row above has already moved.
+        scope.launch {
+            sender?.invoke(Actions.FILE_CONTROL, FileControl(transferId, action), null)
+            if (action == Control.CANCEL) closeReceive(entry, keepPart = false)
         }
     }
 
@@ -591,8 +685,12 @@ class TransferEngine private constructor(
         }
     }
 
-    private fun closeReceive(transferId: String, keepPart: Boolean) {
-        val entry = live[transferId] ?: return
+    private fun closeReceive(transferId: String, keepPart: Boolean) =
+        closeReceive(live[transferId], keepPart)
+
+    /** Takes the entry directly, for callers that have already unlisted it. */
+    private fun closeReceive(entry: Live?, keepPart: Boolean) {
+        if (entry == null) return
         runCatching { entry.sink?.close() }
         entry.sink = null
         if (!keepPart) entry.part?.delete()
@@ -661,7 +759,15 @@ class TransferEngine private constructor(
         private const val SEND_WINDOW = 8L * CHUNK_SIZE
         private const val ACK_TIMEOUT_MS = 30_000L
         private const val HANDSHAKE_TIMEOUT_MS = 60_000L
-        private const val RATE_WINDOW_MS = 500L
+
+        /** Files streaming out at once. Matches the cap the host applies to its own sends. */
+        private const val MAX_PARALLEL_UPLOADS = 4
+
+        /** Bytes received before the peer is confirmed. Must stay under [SEND_WINDOW]. */
+        private const val ACK_INTERVAL = 512L * 1024
+
+        /** Floor on how often a transfer republishes itself to the UI. */
+        private const val PROGRESS_INTERVAL_MS = 250L
 
         @Volatile
         private var instance: TransferEngine? = null

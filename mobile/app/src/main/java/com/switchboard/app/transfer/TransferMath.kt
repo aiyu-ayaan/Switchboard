@@ -46,13 +46,30 @@ object TransferMath {
         if (elapsedMs <= 0 || bytes <= 0) 0 else bytes * 1000 / elapsedMs
 
     /**
+     * Blends a fresh sample into the running rate estimate.
+     *
+     * A rate measured over a quarter of a second swings with Wi-Fi and storage
+     * jitter, and a figure flickering between 4 and 90 MB/s reads as a broken
+     * transfer rather than a fast one. [weight] is how much of the previous
+     * estimate survives; the host smooths its own rate the same way, so the two
+     * ends of one transfer do not quote wildly different speeds.
+     */
+    fun smoothRate(previous: Long, sample: Long, weight: Double = 0.7): Long =
+        if (previous <= 0L) sample else (previous * weight + sample * (1 - weight)).toLong()
+
+    /**
      * Hex SHA-256 read in fixed blocks: the file may be larger than the heap,
      * so it is never materialised.
      */
-    fun sha256Hex(input: InputStream): String {
+    fun sha256Hex(input: InputStream, onBlock: () -> Unit = {}): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(CHUNK_SIZE)
         while (true) {
+            // Hashing a multi-gigabyte file is minutes of uninterrupted reads
+            // with no suspension point in it. The caller passes its own
+            // cancellation check here so a cancel tapped during the digest pass
+            // is acted on then, rather than after the whole file has been read.
+            onBlock()
             val read = input.read(buffer)
             if (read <= 0) break
             digest.update(buffer, 0, read)

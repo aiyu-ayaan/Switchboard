@@ -77,6 +77,31 @@ class TransferMathTest {
     }
 
     @Test
+    fun smoothRate_startsAtTheSampleThenDampensSwings() {
+        // The first sample has nothing to blend with, so it is taken whole;
+        // a bar that opened at zero would read as a stalled transfer.
+        assertEquals(4_000_000, TransferMath.smoothRate(0, 4_000_000))
+
+        // A single wild sample moves the estimate without becoming it.
+        val spiked = TransferMath.smoothRate(4_000_000, 40_000_000)
+        assertTrue("estimate should rise towards the sample", spiked > 4_000_000)
+        assertTrue("estimate should not jump to the sample", spiked < 40_000_000)
+
+        // A run of steady samples converges on them rather than drifting.
+        var rate = 4_000_000L
+        repeat(30) { rate = TransferMath.smoothRate(rate, 10_000_000) }
+        assertTrue("converged to $rate", kotlin.math.abs(rate - 10_000_000) < 100_000)
+    }
+
+    @Test
+    fun sha256Hex_runsTheCallersCancellationHookPerBlock() {
+        var blocks = 0
+        val hash = TransferMath.sha256Hex(ByteArray(3 * 1024 * 1024).inputStream()) { blocks++ }
+        assertEquals(64, hash.length)
+        assertTrue("hook ran $blocks times for a 3 MB stream", blocks > 1)
+    }
+
+    @Test
     fun formatRate_convertsBytesToBitsForTheNetworkUnit() {
         assertEquals("1.0 MB/s", TransferMath.formatRate(1_000_000, RateUnit.BYTES))
         assertEquals("8.0 Mb/s", TransferMath.formatRate(1_000_000, RateUnit.BITS))
