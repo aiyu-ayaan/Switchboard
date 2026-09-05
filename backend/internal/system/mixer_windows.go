@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -19,49 +18,17 @@ import (
 	"switchboard/backend/internal/protocol"
 )
 
-// mixerTTL bounds how stale a served session list may be.
-//
-// The host snapshot is reassembled every time the media watcher ticks (once a
-// second) and again on every broadcast, while a full COM walk activates a
-// session manager and queries two interfaces per running program. Without this
-// cache an idle daemon would spend its time enumerating Core Audio.
+// mixerTTL bounds how stale a served session list may be. A full COM walk
+// activates a session manager and queries two interfaces per running program,
+// and the host snapshot is rebuilt at least once a second.
 const mixerTTL = time.Second
 
-var sessionCache = mixerCache{ttl: mixerTTL}
-
-// mixerCache serves repeat reads from the last COM walk. Writes invalidate it
-// so a slider drag never reads back the level it just replaced.
-type mixerCache struct {
-	mu        sync.Mutex
-	ttl       time.Duration
-	fetchedAt time.Time
-	sessions  []protocol.AudioSession
-}
-
-func (c *mixerCache) get(load func() ([]protocol.AudioSession, error)) ([]protocol.AudioSession, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.fetchedAt.IsZero() && time.Since(c.fetchedAt) < c.ttl {
-		return c.sessions, nil
-	}
-	sessions, err := load()
-	if err != nil {
-		return nil, err
-	}
-	c.sessions, c.fetchedAt = sessions, time.Now()
-	return sessions, nil
-}
-
-func (c *mixerCache) store(sessions []protocol.AudioSession) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.sessions, c.fetchedAt = sessions, time.Now()
-}
+var sessionCache ttlCache[[]protocol.AudioSession]
 
 func mixerSupported() bool { return true }
 
 func mixerSessions() ([]protocol.AudioSession, error) {
-	return sessionCache.get(func() ([]protocol.AudioSession, error) {
+	return sessionCache.get(mixerTTL, func() ([]protocol.AudioSession, error) {
 		return walkSessions("", 0, false)
 	})
 }

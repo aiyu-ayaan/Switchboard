@@ -5,9 +5,6 @@ package system
 import (
 	"errors"
 	"testing"
-	"time"
-
-	"switchboard/backend/internal/protocol"
 )
 
 // TestMixerSessions exercises the real Core Audio path. It asserts the
@@ -70,69 +67,5 @@ func TestTidyExeName(t *testing.T) {
 func TestSetSessionVolumeRejectsEmptyID(t *testing.T) {
 	if _, err := setSessionVolume("", 50, false); err == nil {
 		t.Fatal("expected an error for an empty session id")
-	}
-}
-
-// TestMixerCacheServesRepeats proves the COM walk is skipped inside the TTL
-// and re-run once it lapses; without that, every one-second host snapshot
-// would enumerate Core Audio afresh.
-func TestMixerCacheServesRepeats(t *testing.T) {
-	calls := 0
-	load := func() ([]protocol.AudioSession, error) {
-		calls++
-		return []protocol.AudioSession{{ID: "a"}}, nil
-	}
-
-	c := mixerCache{ttl: 20 * time.Millisecond}
-	for i := 0; i < 3; i++ {
-		if _, err := c.get(load); err != nil {
-			t.Fatalf("get: %v", err)
-		}
-	}
-	if calls != 1 {
-		t.Errorf("loaded %d times inside the TTL, want 1", calls)
-	}
-
-	time.Sleep(30 * time.Millisecond)
-	if _, err := c.get(load); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if calls != 2 {
-		t.Errorf("loaded %d times after the TTL lapsed, want 2", calls)
-	}
-
-	// A write seeds the cache directly, so the next read must not walk COM.
-	c.store([]protocol.AudioSession{{ID: "b", Level: 10}})
-	got, err := c.get(load)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if calls != 2 {
-		t.Errorf("stored sessions did not suppress the reload: %d calls", calls)
-	}
-	if len(got) != 1 || got[0].ID != "b" {
-		t.Errorf("cache served %+v, want the stored session", got)
-	}
-}
-
-// TestMixerCacheReloadsAfterError keeps a transient COM failure from being
-// remembered as an empty mixer for the rest of the TTL.
-func TestMixerCacheReloadsAfterError(t *testing.T) {
-	c := mixerCache{ttl: time.Minute}
-	if _, err := c.get(func() ([]protocol.AudioSession, error) {
-		return nil, errors.New("boom")
-	}); err == nil {
-		t.Fatal("expected the load error to surface")
-	}
-
-	calls := 0
-	if _, err := c.get(func() ([]protocol.AudioSession, error) {
-		calls++
-		return []protocol.AudioSession{}, nil
-	}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if calls != 1 {
-		t.Error("a failed load was cached instead of retried")
 	}
 }
