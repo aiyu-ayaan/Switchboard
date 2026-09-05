@@ -53,6 +53,13 @@ const (
 	ActionFileProgress = "file.progress" // event: transfer telemetry
 	ActionFileList     = "file.list"     // history
 
+	// Air mouse. The phone owns the gesture vocabulary and sends already
+	// resolved intents; the host only injects them. See docs/docs/air-mouse.md.
+	ActionInputMove    = "input.move"    // relative pointer motion
+	ActionInputButton  = "input.button"  // press, release, click, double click
+	ActionInputScroll  = "input.scroll"  // wheel, vertical and horizontal
+	ActionInputGesture = "input.gesture" // named shell gesture (task view, ...)
+
 	ActionHostState = "host.state" // event: full snapshot pushed to clients
 	ActionPing      = "system.ping"
 )
@@ -244,6 +251,67 @@ type HostState struct {
 	Outputs      []AudioDevice `json:"outputs"`
 	Media        MediaState    `json:"media"`
 	Capabilities []string      `json:"capabilities"`
+}
+
+// ---- Air mouse ----
+
+// Mouse buttons carried by InputButton.Button.
+const (
+	ButtonLeft   = "left"
+	ButtonRight  = "right"
+	ButtonMiddle = "middle"
+)
+
+// Button actions. Down and Up exist separately so a tap-and-a-half drag can
+// hold the button across many input.move frames.
+const (
+	ButtonDown   = "down"
+	ButtonUp     = "up"
+	ButtonClick  = "click"
+	ButtonDouble = "double"
+)
+
+// Named shell gestures. The host maps each to whatever its window manager
+// uses; the phone never sends raw key codes, so this list is the whole of the
+// keyboard surface the air mouse exposes.
+const (
+	GestureTaskView     = "taskView"
+	GestureShowDesktop  = "showDesktop"
+	GestureDesktopLeft  = "desktopLeft"
+	GestureDesktopRight = "desktopRight"
+	GestureBack         = "back"
+	GestureForward      = "forward"
+)
+
+// InputMove is relative pointer motion in host pixels. The values are
+// fractional because a slow drag moves well under a pixel per frame: the host
+// accumulates the remainder rather than truncating it away, so a careful
+// finger still moves the cursor.
+type InputMove struct {
+	DX float64 `json:"dx"`
+	DY float64 `json:"dy"`
+}
+
+// InputButton presses, releases, or clicks one mouse button.
+type InputButton struct {
+	Button string `json:"button"`
+	Action string `json:"action"`
+}
+
+// InputScroll is wheel motion in notches, where one notch is one detent of a
+// physical wheel. Positive DY scrolls up and positive DX scrolls right; the
+// phone applies the user's natural-scroll preference before sending, so the
+// host never has to know about it. Ctrl asks for the wheel to be sent with
+// control held, which is how every desktop spells "zoom".
+type InputScroll struct {
+	DX   float64 `json:"dx"`
+	DY   float64 `json:"dy"`
+	Ctrl bool    `json:"ctrl,omitempty"`
+}
+
+// InputGesture triggers one named shell gesture.
+type InputGesture struct {
+	Name string `json:"name"`
 }
 
 // ---- File transfer ----

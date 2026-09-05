@@ -99,6 +99,27 @@ func (c *Controller) MediaState() (protocol.MediaState, error) { return mediaSta
 // rest of the state and changes only when the track does.
 func (c *Controller) MediaArtwork() (protocol.MediaArtwork, error) { return mediaArtwork() }
 
+// ---- Air mouse ----
+//
+// The phone resolves gestures and sends intents; these four calls are the
+// whole host surface. Injection is stateless apart from the sub-pixel
+// remainder the platform layer carries between moves.
+
+// MoveMouse nudges the pointer by a relative amount in host pixels.
+func (c *Controller) MoveMouse(dx, dy float64) error { return moveMouse(dx, dy) }
+
+// MouseButton presses, releases, clicks, or double-clicks a mouse button.
+func (c *Controller) MouseButton(button, action string) error {
+	return mouseButton(button, action)
+}
+
+// Scroll turns the wheel by a number of notches, optionally with control held
+// so the focused application reads it as zoom.
+func (c *Controller) Scroll(dx, dy float64, ctrl bool) error { return scrollMouse(dx, dy, ctrl) }
+
+// ShellGesture triggers one named window-manager gesture.
+func (c *Controller) ShellGesture(name string) error { return shellGesture(name) }
+
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
@@ -130,6 +151,9 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 		if outputs, err := c.Outputs(); err == nil {
 			state.Outputs = outputs
 		}
+	}
+	if inputSupported() {
+		state.Capabilities = append(state.Capabilities, "input")
 	}
 	if mediaSupported() {
 		state.Capabilities = append(state.Capabilities, "media")

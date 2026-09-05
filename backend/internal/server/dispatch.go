@@ -133,6 +133,51 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope) {
 		}
 		s.reply(c, env, artwork)
 
+	// Air mouse. These fire many times a second during a drag, so none of
+	// them broadcasts and none of them replies on success: the pointer moving
+	// on screen is the acknowledgement, and a reply per frame would double the
+	// traffic for nothing. Failures still come back, so a client on an
+	// unsupported host finds out.
+	case protocol.ActionInputMove:
+		var req protocol.InputMove
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.MoveMouse(req.DX, req.DY); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionInputButton:
+		var req protocol.InputButton
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.MouseButton(req.Button, req.Action); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionInputScroll:
+		var req protocol.InputScroll
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.Scroll(req.DX, req.DY, req.Ctrl); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionInputGesture:
+		var req protocol.InputGesture
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.ShellGesture(req.Name); err != nil {
+			s.fail(c, env, err)
+		}
+
 	// File transfer. These frames are relayed straight into the transfer
 	// manager, which owns all the state; the daemon replies only when the
 	// engine refuses outright, because the real answer to an offer or a chunk

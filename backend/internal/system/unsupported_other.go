@@ -49,3 +49,13 @@ func mediaState() (protocol.MediaState, error) { return protocol.MediaState{}, E
 func mediaArtwork() (protocol.MediaArtwork, error) { return protocol.MediaArtwork{}, ErrUnsupported }
 
 func mediaSupported() bool { return false }
+
+func inputSupported() bool { return false }
+
+func moveMouse(float64, float64) error { return ErrUnsupported }
+
+func mouseButton(string, string) error { return ErrUnsupported }
+
+func scrollMouse(float64, float64, bool) error { return ErrUnsupported }
+
+func shellGesture(string) error { return ErrUnsupported }
