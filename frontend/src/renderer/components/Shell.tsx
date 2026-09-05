@@ -1,4 +1,4 @@
-import { Minus, Square, X } from 'lucide-react';
+import { Lock, Minus, Square, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -7,6 +7,7 @@ export type ViewId = 'displays' | 'audio' | 'camera' | 'files' | 'devices' | 'se
 /** Frameless-window chrome. The bar itself is the OS drag handle. */
 export function TitleBar({ subtitle }: { subtitle: string }) {
   const controls: Array<{ label: string; icon: LucideIcon; run: () => void; danger?: boolean }> = [
+    { label: 'Lock workstation', icon: Lock, run: () => window.switchboard.lockSystem() },
     { label: 'Minimize', icon: Minus, run: () => window.switchboard.window.minimize() },
     { label: 'Maximize', icon: Square, run: () => window.switchboard.window.toggleMaximize() },
     { label: 'Close', icon: X, run: () => window.switchboard.window.close(), danger: true }

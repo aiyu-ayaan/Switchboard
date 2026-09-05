@@ -254,6 +254,7 @@ const ALLOWED_ROUTES = new Set([
   '/files/send',
   '/files/control',
   '/settings',
+  '/system/lock',
   '/camera/state',
   '/camera/vcam/status',
   '/camera/start',

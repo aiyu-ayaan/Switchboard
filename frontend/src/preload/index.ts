@@ -54,6 +54,7 @@ const bridge: SwitchboardBridge = {
     await call('/media', { action });
   },
   getMediaArtwork: () => call<MediaArtwork>('/media/artwork'),
+  lockSystem: () => call<{ status: string }>('/system/lock', {}),
   rotatePairing: () => call<PairingInfo>('/pairing/rotate', {}),
   revokeDevice: async (deviceId) => {
     await call('/devices/revoke', { deviceId });

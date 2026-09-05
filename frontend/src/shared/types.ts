@@ -227,6 +227,7 @@ export interface SwitchboardBridge {
   setAudioOutput(deviceId: string): Promise<AudioDevice[]>;
   media(action: MediaAction): Promise<void>;
   getMediaArtwork(): Promise<MediaArtwork>;
+  lockSystem(): Promise<{ status: string }>;
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;
   /**
