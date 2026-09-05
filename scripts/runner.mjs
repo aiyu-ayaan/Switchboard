@@ -117,7 +117,11 @@ async function spinBackend() {
 async function buildBackend() {
   log('backend', 'Compiling Go backend daemon...');
   const outPath = isWindows ? '..\\bin\\switchboard.exe' : '../bin/switchboard';
-  return runProcess('go', ['build', '-o', outPath, 'cmd/server/main.go'], {
+  // -s -w drop the symbol table and DWARF; -trimpath keeps build-machine
+  // paths out of the binary. Together they take the daemon from ~18 MB to
+  // ~12 MB, and nothing in the shipped product reads either.
+  const flags = ['-trimpath', '-ldflags=-s -w'];
+  return runProcess('go', ['build', ...flags, '-o', outPath, 'cmd/server/main.go'], {
     cwd: resolve(rootDir, 'backend'),
     name: 'backend'
   });
