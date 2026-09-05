@@ -24,6 +24,8 @@ export const CameraView = ({ state }: { state: LocalState }) => {
   const [camera, setCamera] = useState<CameraState | null>(null);
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [vcamBusy, setVcamBusy] = useState(false);
+  const [vcamMessage, setVcamMessage] = useState<string | null>(null);
   const previousUrl = useRef<string | null>(null);
 
   const online = state.devices.filter((d) => d.online);
@@ -33,6 +35,38 @@ export const CameraView = ({ state }: { state: LocalState }) => {
   const refresh = useCallback(async () => {
     setCamera(await window.switchboard.camera.getState());
   }, []);
+
+  const handleInstallVcam = async () => {
+    setVcamBusy(true);
+    setVcamMessage(null);
+    try {
+      const res = await window.switchboard.camera.installVcam();
+      if (!res.success && res.error) {
+        setVcamMessage(`Installation failed: ${res.error}`);
+      } else {
+        setVcamMessage('Installed! "Switchboard Camera" is now ready.');
+        await refresh();
+      }
+    } finally {
+      setVcamBusy(false);
+    }
+  };
+
+  const handleUninstallVcam = async () => {
+    setVcamBusy(true);
+    setVcamMessage(null);
+    try {
+      const res = await window.switchboard.camera.uninstallVcam();
+      if (!res.success && res.error) {
+        setVcamMessage(`Uninstallation failed: ${res.error}`);
+      } else {
+        setVcamMessage('Uninstalled virtual camera.');
+        await refresh();
+      }
+    } finally {
+      setVcamBusy(false);
+    }
+  };
 
   useEffect(() => {
     void refresh();
@@ -134,15 +168,55 @@ export const CameraView = ({ state }: { state: LocalState }) => {
             )}
           </div>
 
-          {/*
-            The path that makes this phone usable in software Switchboard knows
-            nothing about. A real system camera device would need a signed
-            Media Foundation or DirectShow filter, so OBS bridges the gap.
-          */}
+          <div className="rounded-lg border border-line bg-surface p-3 text-tiny space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-ink">System Virtual Camera</span>
+              <span
+                className={`inline-flex items-center gap-1 font-medium ${
+                  camera?.vcamInstalled ? 'text-emerald-400' : 'text-amber-400'
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    camera?.vcamInstalled ? 'bg-emerald-400' : 'bg-amber-400'
+                  }`}
+                />
+                {camera?.vcamInstalled ? 'Device Active ("Switchboard Camera")' : 'Not installed'}
+              </span>
+            </div>
+            <p className="text-ink-faint">
+              {camera?.vcamInstalled
+                ? 'Device entry registered in Windows. You can select "Switchboard Camera" directly in Chrome, Zoom, Google Meet, Microsoft Teams, Discord, or any webcam app without OBS.'
+                : 'Install the virtual camera device entry to use this phone camera directly in Chrome, Zoom, Google Meet, Teams, and other apps without needing OBS.'}
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              {!camera?.vcamInstalled ? (
+                <button
+                  type="button"
+                  onClick={handleInstallVcam}
+                  disabled={vcamBusy}
+                  className="rounded bg-accent px-2.5 py-1 text-tiny font-medium text-white hover:opacity-90 disabled:opacity-40"
+                >
+                  {vcamBusy ? 'Installing...' : 'Install Virtual Camera'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleUninstallVcam}
+                  disabled={vcamBusy}
+                  className="rounded border border-line px-2.5 py-1 text-tiny text-ink-faint hover:text-ink hover:bg-surface-elevated disabled:opacity-40"
+                >
+                  {vcamBusy ? 'Uninstalling...' : 'Uninstall Virtual Camera'}
+                </button>
+              )}
+              {vcamMessage && (
+                <span className="text-tiny text-ink-faint">{vcamMessage}</span>
+              )}
+            </div>
+          </div>
+
           <p className="text-tiny text-ink-faint">
-            Use in other apps: add <code className="text-ink">{STREAM_URL}</code> as a media
-            source in OBS or VLC, then enable OBS's virtual camera to make it available to
-            conferencing apps.
+            Alternative MJPEG stream: <code className="text-ink">{STREAM_URL}</code> for OBS or VLC.
           </p>
         </section>
 

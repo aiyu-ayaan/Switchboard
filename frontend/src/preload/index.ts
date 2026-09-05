@@ -56,6 +56,9 @@ const bridge: SwitchboardBridge = {
     start: (deviceId, settings) => call<CameraState>('/camera/start', { deviceId, settings }),
     stop: () => call<CameraState>('/camera/stop', {}),
     control: (settings) => call<CameraState>('/camera/control', settings),
+    getVcamStatus: () => ipcRenderer.invoke('camera:vcamStatus'),
+    installVcam: () => ipcRenderer.invoke('camera:installVcam'),
+    uninstallVcam: () => ipcRenderer.invoke('camera:uninstallVcam'),
     // Frames are pushed rather than requested: the main process holds the long
     // poll against the daemon, so the renderer never waits and never polls.
     onFrame: (handler) => {

@@ -14,7 +14,7 @@ import {
   shell,
   Tray
 } from 'electron';
-import { spawn, ChildProcess } from 'node:child_process';
+import { spawn, exec, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { HostSettings, LocalState } from '../shared/types';
@@ -74,6 +74,18 @@ function trayIconPath(): string | undefined {
     join(app.getAppPath(), 'dist', 'renderer', 'assets', 'tray.png'),
     join(__dirname, '..', 'renderer', 'assets', 'tray.png'),
     join(app.getAppPath(), 'src', 'renderer', 'assets', 'tray.png')
+  ];
+  return candidates.find(existsSync);
+}
+
+/** Resolves virtual camera installer scripts. */
+function vcamScriptPath(scriptName: string): string | undefined {
+  const candidates = [
+    join(app.getAppPath(), 'driver', 'vcam', scriptName),
+    join(app.getAppPath(), '..', 'driver', 'vcam', scriptName),
+    join(__dirname, '..', '..', 'driver', 'vcam', scriptName),
+    join(__dirname, '..', '..', '..', 'driver', 'vcam', scriptName),
+    join(process.cwd(), 'driver', 'vcam', scriptName)
   ];
   return candidates.find(existsSync);
 }
@@ -243,6 +255,7 @@ const ALLOWED_ROUTES = new Set([
   '/files/control',
   '/settings',
   '/camera/state',
+  '/camera/vcam/status',
   '/camera/start',
   '/camera/stop',
   '/camera/control'
@@ -339,6 +352,52 @@ function registerCameraBridge(): void {
   });
   ipcMain.on('camera:unsubscribe', () => {
     cameraSubscribers = Math.max(0, cameraSubscribers - 1);
+  });
+
+  ipcMain.handle('camera:vcamStatus', async () => {
+    try {
+      return await daemonFetch<{ installed: boolean; deviceName: string }>('/camera/vcam/status');
+    } catch {
+      return { installed: false, deviceName: 'Switchboard Camera' };
+    }
+  });
+
+  ipcMain.handle('camera:installVcam', async () => {
+    const script = vcamScriptPath('install-camera.bat');
+    if (!script) {
+      return { success: false, error: 'Installation script install-camera.bat not found' };
+    }
+    return new Promise((resolveResult) => {
+      exec(
+        `powershell -Command "Start-Process cmd -ArgumentList '/c \\"\\"${script}\\" /silent\\"' -Verb RunAs -Wait"`,
+        (error) => {
+          if (error) {
+            resolveResult({ success: false, error: error.message });
+          } else {
+            resolveResult({ success: true });
+          }
+        }
+      );
+    });
+  });
+
+  ipcMain.handle('camera:uninstallVcam', async () => {
+    const script = vcamScriptPath('uninstall-camera.bat');
+    if (!script) {
+      return { success: false, error: 'Uninstallation script uninstall-camera.bat not found' };
+    }
+    return new Promise((resolveResult) => {
+      exec(
+        `powershell -Command "Start-Process cmd -ArgumentList '/c \\"\\"${script}\\" /silent\\"' -Verb RunAs -Wait"`,
+        (error) => {
+          if (error) {
+            resolveResult({ success: false, error: error.message });
+          } else {
+            resolveResult({ success: true });
+          }
+        }
+      );
+    });
   });
 }
 

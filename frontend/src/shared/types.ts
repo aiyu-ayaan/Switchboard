@@ -186,6 +186,7 @@ export interface CameraState {
   /** Measured by the daemon from what the link actually delivered. */
   fps: number;
   bytesPerSec: number;
+  vcamInstalled?: boolean;
   error?: string;
 }
 
@@ -222,6 +223,9 @@ export interface SwitchboardBridge {
     start(deviceId: string, settings?: CameraSettings): Promise<CameraState>;
     stop(): Promise<CameraState>;
     control(settings: CameraSettings): Promise<CameraState>;
+    getVcamStatus(): Promise<{ installed: boolean; deviceName: string }>;
+    installVcam(): Promise<{ success: boolean; error?: string }>;
+    uninstallVcam(): Promise<{ success: boolean; error?: string }>;
     /**
      * Subscribes to the live frames.
      *
