@@ -178,7 +178,11 @@ class SwitchboardConnection private constructor(context: Context) {
         connection = scope.launch {
             android.util.Log.i(TAG, "Starting connection collect for credentials=$credentials")
             client.connect(credentials).collect { event ->
-                android.util.Log.i(TAG, "Collected event: $event")
+                // Deliberately not logged per event. This collector runs on the
+                // main thread, and file acks and chunks arrive tens of times a
+                // second — stringifying each one's JSON payload here put that
+                // work on the UI thread for the length of every transfer. The
+                // lifecycle branches below log themselves.
                 when (event) {
                     is ConnectionEvent.Connected -> {
                         // A manual pairing only knows a placeholder ID until the
