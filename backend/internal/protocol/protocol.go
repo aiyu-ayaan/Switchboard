@@ -362,7 +362,8 @@ type CameraState struct {
 	FPS         float64 `json:"fps"`
 	BytesPerSec int64   `json:"bytesPerSec"`
 
-	Error string `json:"error,omitempty"`
+	VCamInstalled bool   `json:"vcamInstalled"`
+	Error         string `json:"error,omitempty"`
 }
 
 // CameraFrame is the metadata for one encoded frame. The JPEG itself rides

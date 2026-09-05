@@ -41,6 +41,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/settings/download-dir", s.localCheckDownloadDir)
 
 	handle("GET /local/camera/state", s.localCameraState)
+	handle("GET /local/camera/vcam/status", s.localCameraVCamStatus)
 	handle("POST /local/camera/start", s.localCameraStart)
 	handle("POST /local/camera/stop", s.localCameraStop)
 	handle("POST /local/camera/control", s.localCameraControl)
@@ -340,6 +341,13 @@ func httpError(w http.ResponseWriter, err error, status int) {
 
 func (s *Server) localCameraState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.camera.State())
+}
+
+func (s *Server) localCameraVCamStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"installed":  s.camera.VCamInstalled(),
+		"deviceName": "Switchboard Camera",
+	})
 }
 
 func (s *Server) localCameraStart(w http.ResponseWriter, r *http.Request) {

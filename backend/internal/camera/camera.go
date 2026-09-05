@@ -51,10 +51,16 @@ type Hub struct {
 	windowStart time.Time
 	windowBytes int64
 	windowCount int
+
+	vcam *VCamFeeder
 }
 
 func NewHub(send func(deviceID, action string, payload any, blob []byte) error) *Hub {
-	h := &Hub{send: send, settings: protocol.DefaultCameraSettings()}
+	h := &Hub{
+		send:     send,
+		settings: protocol.DefaultCameraSettings(),
+		vcam:     NewVCamFeeder(),
+	}
 	h.cond = sync.NewCond(&h.mu)
 	return h
 }
@@ -135,6 +141,12 @@ func (h *Hub) Frame(deviceID string, meta protocol.CameraFrame, jpeg []byte) {
 
 	h.measureLocked(len(jpeg))
 	h.cond.Broadcast()
+
+	if h.vcam != nil {
+		go func(data []byte) {
+			_ = h.vcam.Feed(data)
+		}(jpeg)
+	}
 }
 
 // measureLocked keeps a one-second sliding window of what actually arrived.
@@ -196,7 +208,21 @@ func (h *Hub) State() protocol.CameraState {
 			state.Error = "no frames received"
 		}
 	}
+	state.VCamInstalled = h.VCamInstalled()
 	return state
+}
+
+// VCamInstalled reports whether the Switchboard virtual camera driver is registered in Windows DirectShow.
+func (h *Hub) VCamInstalled() bool {
+	return IsVCamInstalled()
+}
+
+// Close releases the Hub and virtual camera resources.
+func (h *Hub) Close() {
+	_ = h.Stop()
+	if h.vcam != nil {
+		h.vcam.Close()
+	}
 }
 
 // Await blocks until a frame newer than after exists, and returns it with its
