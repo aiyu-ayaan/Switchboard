@@ -64,20 +64,30 @@ for a video stream: latency matters, and nobody wants the backlog.
 
 ---
 
-## Using in other apps (OBS, VLC, conferencing)
+---
 
-The daemon exposes the stream as **MJPEG** at:
+## Using in other apps (Direct Virtual Camera & MJPEG)
+
+Switchboard provides a native DirectShow virtual camera device on Windows:
+
+### 1. Direct System Virtual Camera ("Switchboard Camera")
+Register the virtual camera device from the desktop app (click **"Install Virtual Camera"** in the Camera tab, which runs with a standard Windows UAC prompt) or run `driver/vcam/install-camera.bat`.
+
+Once registered, **"Switchboard Camera"** appears directly as a hardware/virtual webcam in:
+- **Google Chrome**, Microsoft Edge, Mozilla Firefox
+- **Zoom**, **Microsoft Teams**, **Google Meet**, **Discord**, **Skype**
+- Any Windows application that supports standard webcams
+
+The desktop backend automatically decodes incoming camera frames and streams them directly into the Windows DirectShow virtual camera filter via high-speed named shared memory (`UnityCapture_Data0`).
+
+### 2. MJPEG Stream (OBS & VLC Bridge)
+The daemon also serves a standard **MJPEG** stream at:
 
 ```
 http://127.0.0.1:9427/local/camera/stream
 ```
 
-Add this as a **Media Source** in OBS, then enable OBS's **Virtual Camera** to
-make it available to Zoom, Teams, Meet, or any app that reads system cameras.
-
-A true system camera device (DirectShow filter on Windows, Media Foundation
-source) would need a **signed** driver, which is a signing problem rather than
-a coding one. The MJPEG bridge through OBS is the practical path.
+Add this as a **Media Source** in OBS or VLC if you prefer streaming via media URL.
 
 ---
 
@@ -111,17 +121,12 @@ every apply.
 ---
 
 ## Lifecycle
-
-- Streaming runs **only while the camera screen is on screen**. There is no
-  background capture: a `camera` foreground service and a permanent notification
-  for a picture nobody is looking at is not worth the battery.
-- The desktop can request a stream at any time. If the phone hasn't opened the
-  camera screen or granted the permission yet, the desktop shows "Waiting for
-  the phone" and the stream starts automatically when the screen attaches.
-- Leaving the camera screen releases CameraX but keeps the request, so coming
-  back resumes the stream without a second tap.
-- A phone that drops off Wi-Fi mid-stream sends no goodbye. The hub detects
-  this as 5 seconds of silence and marks the stream stale.
+ 
+- Streaming starts once granted and requested, backed by **`CameraService` (a dedicated camera foreground service)** with an ongoing notification ("Switchboard Camera Active — Tap to return" and a Stop button).
+- **Lock / Turn off display mode**: Tapping "Turn off display" dims the screen to pitch black (`#000000` for OLED battery savings and burn-in prevention) and guards against accidental touches. Double-tapping anywhere restores screen brightness and unlocks the interface.
+- **Background capture**: When the user switches to other apps or locks the device with the physical power button, `CameraService` holds a CPU partial wake-lock and keeps CameraX capture streaming to the desktop without interruption.
+- Leaving the camera screen or locking the phone does not disconnect the stream until explicitly stopped by the user on the phone, via the notification's Stop button, or from the desktop.
+- A phone that drops off Wi-Fi mid-stream sends no goodbye. The hub detects this as 5 seconds of silence and marks the stream stale.
 
 ---
 
@@ -138,11 +143,7 @@ drags (zoom, exposure) must not rebind on every tick.
 
 ## Permissions
 
-The app declares `android.permission.CAMERA` in the manifest. The camera screen
-requests it at runtime and handles denial gracefully: the status card shows
-"Allow camera access" with a button that launches the system dialog. Granting
-the permission while the desktop is already waiting starts the stream
-immediately.
+The app declares `android.permission.CAMERA`, `android.permission.FOREGROUND_SERVICE_CAMERA`, and `android.permission.WAKE_LOCK` in the manifest. The camera screen requests camera permission at runtime and handles denial gracefully.
 
 ---
 
@@ -150,7 +151,6 @@ immediately.
 
 | Limitation | Why |
 | ---------- | --- |
-| No system camera device | Needs a signed DirectShow/Media Foundation driver. OBS bridges the gap. |
 | One stream at a time | A second phone streaming into the same sink would flicker between two rooms. |
 | No audio capture | Audio from the phone's microphone is not yet carried; the desktop's own mic is usually closer to the speaker anyway. |
 | JPEG only, no H.264 | Every frame stands alone, so a drop costs exactly itself rather than corrupting until the next keyframe. On a LAN, bandwidth is cheap and graceful degradation is worth more than compression. |
