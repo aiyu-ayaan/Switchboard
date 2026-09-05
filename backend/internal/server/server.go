@@ -398,11 +398,35 @@ func (s *Server) transferHistory() ([]protocol.FileProgress, error) {
 	if err != nil {
 		return nil, err
 	}
+	live := s.liveTransfers()
 	history := make([]protocol.FileProgress, 0, len(rows))
 	for _, r := range rows {
-		history = append(history, transferProgress(r))
+		history = append(history, freshest(transferProgress(r), live))
 	}
 	return history, nil
+}
+
+// liveTransfers indexes the in-flight numbers by transfer id.
+func (s *Server) liveTransfers() map[string]protocol.FileProgress {
+	live := map[string]protocol.FileProgress{}
+	for _, p := range s.transfers.Live() {
+		live[p.TransferID] = p
+	}
+	return live
+}
+
+// freshest prefers the in-memory numbers over the stored row.
+//
+// Rows are persisted on the same quarter-second throttle the phone's progress
+// frames use and carry no rate column, so a UI polling history alone shows a
+// byte count that lags and a speed that is always zero. The row still supplies
+// what only it knows: the device and the path it landed at.
+func freshest(row protocol.FileProgress, live map[string]protocol.FileProgress) protocol.FileProgress {
+	p, ok := live[row.TransferID]
+	if !ok {
+		return row
+	}
+	return p
 }
 
 // LocalTransfer is a history row as the desktop UI sees it: the wire progress
@@ -432,10 +456,11 @@ func (s *Server) localTransferHistory() ([]LocalTransfer, error) {
 			names[d.ID] = d.Name
 		}
 	}
+	live := s.liveTransfers()
 	history := make([]LocalTransfer, 0, len(rows))
 	for _, r := range rows {
 		history = append(history, LocalTransfer{
-			FileProgress: transferProgress(r),
+			FileProgress: freshest(transferProgress(r), live),
 			DeviceID:     r.DeviceID,
 			DeviceName:   names[r.DeviceID],
 			Path:         r.Path,

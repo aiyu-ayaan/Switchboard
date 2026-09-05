@@ -283,13 +283,16 @@ func (s *Server) localFileControl(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"transferId": req.TransferID, "action": req.Action})
 }
 
+// localFileHistory is the transfer list on its own, so the desktop can poll it
+// several times a second while a file is moving without dragging the whole
+// /state payload — displays, audio sessions and a DDC/CI probe — along with it.
 func (s *Server) localFileHistory(w http.ResponseWriter, r *http.Request) {
-	history, err := s.transferHistory()
+	history, err := s.localTransferHistory()
 	if err != nil {
 		httpError(w, err, http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, protocol.FileHistory{Transfers: history})
+	writeJSON(w, map[string]any{"transfers": history})
 }
 
 func (s *Server) localGetSettings(w http.ResponseWriter, r *http.Request) {
