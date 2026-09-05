@@ -36,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.switchboard.app.camera.CameraController
@@ -68,7 +68,6 @@ import com.switchboard.app.net.CameraWhiteBalance
 fun CameraScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val controller = remember { CameraController.get(context) }
-    val owner = LocalLifecycleOwner.current
 
     val state by controller.state.collectAsState()
     val settings by controller.settings.collectAsState()
@@ -85,29 +84,39 @@ fun CameraScreen(modifier: Modifier = Modifier) {
         if (allowed && requested) controller.request()
     }
 
-    // Capture is bound to this screen's lifecycle, so leaving releases the
-    // camera and returning resumes a stream the desktop is still waiting for.
-    DisposableEffect(owner, granted) {
-        if (granted) controller.attach(owner)
-        onDispose { controller.detach(owner) }
+    // A desktop request that arrived while the app was in the background could
+    // not start a camera foreground service then. Being on this screen is the
+    // moment it can, so the wait ends without the user having to tap a button
+    // for something they already asked for from the other end.
+    LaunchedEffect(pending, granted) {
+        if (pending && granted) controller.request()
     }
 
     var isDisplayLocked by remember { mutableStateOf(false) }
 
     val activity = context as? Activity
     DisposableEffect(isDisplayLocked) {
-        if (isDisplayLocked) {
-            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            activity?.window?.attributes = activity?.window?.attributes?.apply {
-                screenBrightness = 0.01f
-            }
-        } else {
-            activity?.window?.attributes = activity?.window?.attributes?.apply {
-                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-            }
+        // BRIGHTNESS_OVERRIDE_OFF, not "nearly off". The panel used to be set
+        // to 1% *and* pinned awake with FLAG_KEEP_SCREEN_ON, which is a
+        // contradiction: the window was asking the display to stay on and then
+        // dimming it, so all the button could ever do was darken the screen.
+        //
+        // Clearing that flag is the other half. With it gone the normal screen
+        // timeout applies and the display genuinely powers down, while capture
+        // carries on inside CameraService.
+        //
+        // ponytail: an app cannot switch the panel off on demand — that needs
+        // device-admin lockNow(). Zero brightness plus the system timeout is
+        // as close as this gets without asking for admin rights.
+        val window = activity?.window
+        window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window?.attributes = window?.attributes?.apply {
+            screenBrightness =
+                if (isDisplayLocked) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
+                else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }
         onDispose {
-            activity?.window?.attributes = activity?.window?.attributes?.apply {
+            window?.attributes = window?.attributes?.apply {
                 screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             }
         }
@@ -132,12 +141,14 @@ fun CameraScreen(modifier: Modifier = Modifier) {
 
             if (granted) {
                 CaptureCard(settings, state.hasFrontCamera, state.hasTorch) { controller.update(it) }
-                FramingCard(settings) { controller.update(it) }
+                FramingCard(settings, state.hasAutoFraming) { controller.update(it) }
                 if (state.hasManualFocus || state.hasManualExposure) {
                     ImageCard(state.hasManualFocus, state.hasManualExposure,
                         state.minExposure, state.maxExposure, settings) { controller.update(it) }
                 }
-                WhiteBalanceCard(settings) { controller.update(it) }
+                if (state.hasWhiteBalance) {
+                    WhiteBalanceCard(settings, state.whiteBalanceModes) { controller.update(it) }
+                }
             }
         }
 
@@ -208,7 +219,7 @@ private fun StatusCard(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "The desktop is waiting for this camera. Tap 'Start streaming' to begin. " +
-                        "Streaming will continue when locked or backgrounded.",
+                        "Streaming continues if you leave the app or lock the phone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -308,7 +319,11 @@ private fun CaptureCard(
 }
 
 @Composable
-private fun FramingCard(settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
+private fun FramingCard(
+    settings: CameraSettings,
+    hasAutoFraming: Boolean,
+    onChange: (CameraSettings) -> Unit
+) {
     SectionCard {
         CardTitle("Framing")
 
@@ -332,8 +347,13 @@ private fun FramingCard(settings: CameraSettings, onChange: (CameraSettings) -> 
         IconToggleRow(Icons.Filled.Rotate90DegreesCw, "Mirror", settings.mirror) {
             onChange(settings.copy(mirror = it))
         }
-        SwitchRow("Auto framing", settings.autoFraming) {
-            onChange(settings.copy(autoFraming = it))
+        // Hidden rather than disabled on a lens with no face detection: there
+        // is nothing for auto framing to follow, and a switch that flips
+        // without changing the picture is worse than no switch.
+        if (hasAutoFraming) {
+            SwitchRow("Auto framing", settings.autoFraming) {
+                onChange(settings.copy(autoFraming = it))
+            }
         }
     }
 }
@@ -382,11 +402,18 @@ private fun ImageCard(
 }
 
 @Composable
-private fun WhiteBalanceCard(settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
+private fun WhiteBalanceCard(
+    settings: CameraSettings,
+    modes: List<String>,
+    onChange: (CameraSettings) -> Unit
+) {
+    // Only what this lens listed. A preset it never advertised is accepted by
+    // the camera and then ignored, which reads as a control that does nothing.
+    val available = modes.ifEmpty { CameraWhiteBalance.all }
     SectionCard {
         CardTitle("White balance")
         ChipRow(
-            options = CameraWhiteBalance.all.map { it to it.replaceFirstChar(Char::uppercase) },
+            options = available.map { it to it.replaceFirstChar(Char::uppercase) },
             selected = settings.whiteBalance,
             onSelect = { onChange(settings.copy(whiteBalance = it)) }
         )

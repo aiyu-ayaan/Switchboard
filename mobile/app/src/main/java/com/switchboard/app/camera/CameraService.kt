@@ -130,10 +130,19 @@ class CameraService : LifecycleService() {
         const val ACTION_STOP = "com.switchboard.app.camera.STOP"
         private const val WAKELOCK_TAG = "switchboard:camera_stream"
 
-        fun start(context: Context) {
-            val intent = Intent(context, CameraService::class.java)
-            context.startForegroundService(intent)
-        }
+        /**
+         * Returns false when Android refused to start the service.
+         *
+         * A camera foreground service cannot be started while the app is in
+         * the background — that is a platform rule, not a bug to work around,
+         * and it is why a request arriving from the desktop while the phone is
+         * on another screen has to wait for the user. Throwing here would kill
+         * the connection thread the desktop's command arrived on, so the
+         * refusal is reported instead and shown as a prompt.
+         */
+        fun start(context: Context): Boolean = runCatching {
+            context.startForegroundService(Intent(context, CameraService::class.java))
+        }.isSuccess
 
         fun stop(context: Context) {
             val intent = Intent(context, CameraService::class.java)
