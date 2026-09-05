@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS unlock_keys (
+    device_id   TEXT PRIMARY KEY,
+    public_key  BLOB NOT NULL,
+    enrolled_at INTEGER NOT NULL
+);
 `
 
 // Open opens (creating if needed) the database at path and applies the schema.
@@ -160,7 +165,36 @@ func (d *Database) RevokeDevice(id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	// Forgetting a phone has to take its unlock key with it, or re-pairing
+	// the same device would silently inherit the right to open the lock
+	// screen from a trust decision the user has already withdrawn.
+	if _, err := d.sql.Exec(`DELETE FROM unlock_keys WHERE device_id = ?`, id); err != nil {
+		return err
+	}
 	return nil
+}
+
+// ---- Remote unlock ----
+
+// SaveUnlockKey stores a device's biometric-gated public key, replacing any
+// earlier one so a reinstalled app can re-enrol.
+func (d *Database) SaveUnlockKey(deviceID string, pub []byte) error {
+	_, err := d.sql.Exec(
+		`INSERT INTO unlock_keys (device_id, public_key, enrolled_at) VALUES (?, ?, ?)
+		 ON CONFLICT(device_id) DO UPDATE SET public_key = excluded.public_key,
+		                                      enrolled_at = excluded.enrolled_at`,
+		deviceID, pub, time.Now().Unix())
+	return err
+}
+
+// UnlockKey returns the device's enrolled public key, or ErrNotFound.
+func (d *Database) UnlockKey(deviceID string) ([]byte, error) {
+	var pub []byte
+	err := d.sql.QueryRow(`SELECT public_key FROM unlock_keys WHERE device_id = ?`, deviceID).Scan(&pub)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return pub, err
 }
 
 // ---- Transfers ----

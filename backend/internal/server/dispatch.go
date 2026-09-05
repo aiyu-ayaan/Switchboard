@@ -274,6 +274,41 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		s.reply(c, env, map[string]string{"status": "locked"})
 		s.Broadcast()
 
+	case protocol.ActionUnlockEnroll:
+		var req protocol.UnlockEnroll
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.enrollUnlock(c, req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "enrolled"})
+
+	case protocol.ActionUnlockChallenge:
+		challenge, err := s.issueUnlockChallenge(c)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, protocol.UnlockChallenge{Challenge: challenge})
+
+	case protocol.ActionSystemUnlock:
+		var req protocol.UnlockProof
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.unlock(c, req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "unlocked"})
+		// The lock screen takes a moment to fall; the broadcast that follows
+		// reports whatever it finds, and the poller in server.go corrects it.
+		s.Broadcast()
+
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
 	}

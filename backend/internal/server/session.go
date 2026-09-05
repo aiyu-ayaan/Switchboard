@@ -60,6 +60,11 @@ type client struct {
 	conn     *websocket.Conn
 	session  *crypto.Session
 
+	// unlockChallenge is the outstanding nonce for this connection, held
+	// nowhere else so it dies with the socket. Touched only from dispatch,
+	// which the read loop below calls one frame at a time.
+	unlockChallenge []byte
+
 	writeMu sync.Mutex
 	once    sync.Once
 }

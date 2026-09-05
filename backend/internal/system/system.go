@@ -130,6 +130,9 @@ func (c *Controller) IsLocked() bool { return isLocked() }
 // presented. The caller owns that check: this only carries out the request.
 func (c *Controller) Unlock() error { return unlockSystem() }
 
+// UnlockSupported reports whether a password has been enrolled on this host.
+func (c *Controller) UnlockSupported() bool { return unlockSupported() }
+
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
