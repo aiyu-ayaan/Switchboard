@@ -228,7 +228,29 @@ class TransferEngine private constructor(
     }
 
     /** Starts an upload for a document the user picked through the SAF. */
-    fun send(uri: Uri) {
+    fun send(uri: Uri) = sendAll(listOf(uri))
+
+    /**
+     * Queues documents for upload.
+     *
+     * Every step of queueing one is a binder call into whichever
+     * DocumentsProvider owns the file — taking the persistable permission,
+     * reading the display name, falling back to `openFileDescriptor` for a
+     * size the cursor omitted, resolving the MIME type — and the foreground
+     * service start is one more. This is reached straight from a Compose
+     * callback, so doing it inline was three or four round trips per file on
+     * the main thread: a multi-select of a few dozen visibly froze the app
+     * before a single byte moved.
+     */
+    fun sendAll(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        scope.launch {
+            TransferService.start(context)
+            uris.forEach(::enqueue)
+        }
+    }
+
+    private fun enqueue(uri: Uri) {
         runCatching {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -243,16 +265,10 @@ class TransferEngine private constructor(
         val offer = FileOffer(transferId, name, size, mimeOf(uri), "", Direction.UPLOAD)
         val entry = Live(offer, uri = uri)
         live[transferId] = entry
-        TransferService.start(context)
         publish(FileProgress(transferId, name, Direction.UPLOAD, TransferStatus.PENDING, 0, size, startedAt = entry.startedAt))
 
         uploadQueue.trySend(transferId)
         ensureQueueWorker()
-    }
-
-    /** Queues multiple documents for upload. */
-    fun sendAll(uris: List<Uri>) {
-        uris.forEach { send(it) }
     }
 
     /** Recursively collects all file document URIs within a SAF tree URI. */
@@ -287,14 +303,23 @@ class TransferEngine private constructor(
         return uris
     }
 
-    /** Scans a picked folder and queues all contained files for upload. */
-    fun sendFolder(treeUri: Uri): Int {
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    /**
+     * Scans a picked folder and queues everything in it.
+     *
+     * The walk is one cursor query per directory, so a deep tree is dozens of
+     * binder round trips before the first file is even named — it belongs
+     * nowhere near the thread drawing the screen.
+     */
+    fun sendFolder(treeUri: Uri) {
+        scope.launch {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val uris = collectFolderUris(treeUri)
+            if (uris.isEmpty()) return@launch
+            TransferService.start(context)
+            uris.forEach(::enqueue)
         }
-        val uris = collectFolderUris(treeUri)
-        sendAll(uris)
-        return uris.size
     }
 
     private suspend fun upload(uri: Uri, entry: Live) {
@@ -344,10 +369,13 @@ class TransferEngine private constructor(
                 emit(
                     Actions.FILE_CHUNK,
                     FileChunk(transferId = id, offset = offset, last = offset + read >= size),
-                    // Copied because the read buffer is reused on the next
-                    // pass, and the frame is not serialised until the socket
-                    // gets to it.
-                    buffer.copyOf(read)
+                    // `Frame.encode` copies the blob into the outgoing frame
+                    // before `send` returns, so the read buffer is free again
+                    // the moment this call is — only a short final chunk needs
+                    // an array cut to size. Copying every full chunk was
+                    // another quarter-megabyte of garbage per chunk for a
+                    // buffer nothing was still holding.
+                    if (read == buffer.size) buffer else buffer.copyOf(read)
                 )
                 offset += read
 

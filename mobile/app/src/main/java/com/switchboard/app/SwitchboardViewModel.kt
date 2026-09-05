@@ -440,7 +440,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     fun sendFiles(uris: List<Uri>) = transfers.sendAll(uris)
 
-    fun sendFolder(treeUri: Uri): Int = transfers.sendFolder(treeUri)
+    fun sendFolder(treeUri: Uri) = transfers.sendFolder(treeUri)
 
     fun controlTransfer(transferId: String, action: String) = transfers.control(transferId, action)
 
