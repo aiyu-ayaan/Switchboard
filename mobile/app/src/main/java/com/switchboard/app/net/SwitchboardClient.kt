@@ -337,7 +337,16 @@ class SwitchboardClient(
             payload = payload?.let(::encodePayload),
             timestamp = System.currentTimeMillis()
         )
-        socket?.send(active.seal(Frame.encode(envelope, blob)).toByteString())
+        val frame = Frame.encode(envelope, blob)
+        // Sealing and writing must not be separable. The nonce is a counter and
+        // the host closes the connection outright on a frame whose counter has
+        // gone backwards, so two threads that seal in one order and reach the
+        // socket in the other end the session. Camera frames now come off the
+        // hardware encoder's thread and the analyser's at once, which turns
+        // that from a rare race into a matter of seconds.
+        synchronized(active) {
+            socket?.send(active.seal(frame).toByteString())
+        }
     }
 
     // Exhaustive over the sealed WirePayload: a new payload type without a

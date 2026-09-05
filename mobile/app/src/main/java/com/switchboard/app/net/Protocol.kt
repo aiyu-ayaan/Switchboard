@@ -300,6 +300,13 @@ data class CameraState(
     val hasManualFocus: Boolean = false,
     val hasManualExposure: Boolean = false,
     val hasWhiteBalance: Boolean = false,
+    /**
+     * The white balance presets this lens will actually honour. A mode the
+     * hardware does not list is silently ignored by the camera, so offering it
+     * gives the user a control that does nothing.
+     */
+    val whiteBalanceModes: List<String> = emptyList(),
+    val hasAutoFraming: Boolean = false,
     val hasFrontCamera: Boolean = false,
     /** Measured by the desktop, not here; sent as zero and overwritten there. */
     val fps: Double = 0.0,
@@ -308,15 +315,38 @@ data class CameraState(
 ) : WirePayload
 
 /**
- * Metadata for one encoded frame. The JPEG rides beside it as a blob: at 30fps
- * base64 would add a third to the bandwidth of the heaviest thing on the wire.
+ * Frame codecs. Both tracks run at once: [H264] carries the desktop's live view
+ * off this device's hardware encoder, and [JPEG] feeds the consumers that can
+ * only take whole pictures - the virtual camera and the MJPEG endpoint.
+ */
+object CameraCodec {
+    const val JPEG = "jpeg"
+    const val H264 = "h264"
+}
+
+/**
+ * Metadata for one encoded frame. The payload rides beside it as a blob: at
+ * 30fps base64 would add a third to the bandwidth of the heaviest thing on the
+ * wire.
  */
 @Serializable
 data class CameraFrame(
     val seq: Long = 0,
     val width: Int = 0,
     val height: Int = 0,
-    val ts: Long = 0
+    val ts: Long = 0,
+    val codec: String = CameraCodec.JPEG,
+    /** True when this access unit decodes on its own. H.264 only. */
+    val key: Boolean = false,
+    /**
+     * Orientation the *video* track still needs applied, clockwise. The camera
+     * writes straight into the encoder's input surface, so there is no pass in
+     * which to bake it in - and a display transform costs nothing where a pixel
+     * loop costs the frame rate. The JPEG track carries it already applied,
+     * because a virtual camera has nowhere to put a transform.
+     */
+    val rotation: Int = 0,
+    val mirror: Boolean = false
 ) : WirePayload
 
 // ---- Air mouse ----
