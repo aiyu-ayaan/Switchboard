@@ -30,6 +30,10 @@ const (
 	ActionMixerList = "audio.mixer.list"
 	ActionMixerSet  = "audio.mixer.set"
 
+	// Output routing: which endpoint the host plays through.
+	ActionOutputList = "audio.output.list"
+	ActionOutputSet  = "audio.output.set"
+
 	ActionMediaCommand = "media.playback.command"
 	// ActionMediaArtwork fetches the cover art for the track named by
 	// MediaState.ArtworkID. Artwork is pulled on demand rather than carried in
@@ -167,6 +171,20 @@ type AudioSession struct {
 	Active bool `json:"active"`
 }
 
+// AudioDevice is one output endpoint the host can play through — a speaker
+// set, a headset, an HDMI sink. ID is the OS endpoint identifier, which
+// survives a reboot and a re-plug, unlike the position in the list.
+type AudioDevice struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Default bool   `json:"default"`
+}
+
+// OutputSet is the payload for audio.output.set.
+type OutputSet struct {
+	DeviceID string `json:"deviceId"`
+}
+
 // MixerSet is the payload for audio.mixer.set.
 type MixerSet struct {
 	SessionID string `json:"sessionId"`
@@ -220,9 +238,12 @@ type HostState struct {
 	Volume   Volume    `json:"volume"`
 	// Mixer is empty on a host with no per-application control, which is what
 	// the "mixer" capability tells a client to expect.
-	Mixer        []AudioSession `json:"mixer"`
-	Media        MediaState     `json:"media"`
-	Capabilities []string       `json:"capabilities"`
+	Mixer []AudioSession `json:"mixer"`
+	// Outputs are the endpoints the host can route sound to, guarded by the
+	// "outputs" capability. Exactly one carries Default.
+	Outputs      []AudioDevice `json:"outputs"`
+	Media        MediaState    `json:"media"`
+	Capabilities []string      `json:"capabilities"`
 }
 
 // ---- File transfer ----

@@ -77,6 +77,15 @@ func (c *Controller) SetSessionVolume(id string, level int, muted bool) ([]proto
 	return setSessionVolume(id, level, muted)
 }
 
+// Outputs lists the audio endpoints the host can play through.
+func (c *Controller) Outputs() ([]protocol.AudioDevice, error) { return audioOutputs() }
+
+// SetOutput routes host audio to one endpoint and returns the refreshed list,
+// because moving the default changes which row is marked, not just one row.
+func (c *Controller) SetOutput(id string) ([]protocol.AudioDevice, error) {
+	return setAudioOutput(id)
+}
+
 // Media sends a transport command to the active media session.
 func (c *Controller) Media(action string) error { return sendMediaCommand(action) }
 
@@ -99,6 +108,7 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 		DaemonID:     daemonID,
 		Displays:     []protocol.Display{},
 		Mixer:        []protocol.AudioSession{},
+		Outputs:      []protocol.AudioDevice{},
 		Capabilities: []string{},
 	}
 	if displays, err := c.Displays(); err == nil {
@@ -113,6 +123,12 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 		state.Capabilities = append(state.Capabilities, "mixer")
 		if sessions, err := c.Mixer(); err == nil {
 			state.Mixer = sessions
+		}
+	}
+	if outputsSupported() {
+		state.Capabilities = append(state.Capabilities, "outputs")
+		if outputs, err := c.Outputs(); err == nil {
+			state.Outputs = outputs
 		}
 	}
 	if mediaSupported() {

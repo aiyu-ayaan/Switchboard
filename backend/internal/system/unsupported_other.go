@@ -36,6 +36,12 @@ func setSessionVolume(string, int, bool) ([]protocol.AudioSession, error) {
 
 func mixerSupported() bool { return false }
 
+func audioOutputs() ([]protocol.AudioDevice, error) { return nil, ErrUnsupported }
+
+func setAudioOutput(string) ([]protocol.AudioDevice, error) { return nil, ErrUnsupported }
+
+func outputsSupported() bool { return false }
+
 func sendMediaCommand(string) error { return ErrUnsupported }
 
 func mediaState() (protocol.MediaState, error) { return protocol.MediaState{}, ErrUnsupported }

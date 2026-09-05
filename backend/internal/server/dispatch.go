@@ -86,6 +86,30 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope) {
 		s.reply(c, env, sessions)
 		s.Broadcast()
 
+	case protocol.ActionOutputList:
+		outputs, err := s.control.Outputs()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, outputs)
+
+	case protocol.ActionOutputSet:
+		var req protocol.OutputSet
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		outputs, err := s.control.SetOutput(req.DeviceID)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, outputs)
+		// The whole audio picture moved with the endpoint: master level and
+		// the mixer now belong to a different device.
+		s.Broadcast()
+
 	case protocol.ActionMediaCommand:
 		var req protocol.MediaCommand
 		if err := env.Decode(&req); err != nil {
