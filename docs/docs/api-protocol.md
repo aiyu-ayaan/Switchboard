@@ -187,7 +187,36 @@ Locks the host workstation console session (equivalent to `user32!LockWorkStatio
 }
 ```
 
-#### 10. `file_transfer_init`
+#### 10. `system.unlock.enroll`, `system.unlock.challenge`, `system.unlock`
+Opens the host's lock screen, proving a fingerprint was presented. Guarded by
+the `unlock` capability, which the host advertises only once a password has
+been enrolled on it. See [Remote Unlock](./remote-unlock.md).
+
+Unlocking takes a round trip the other controls do not, because the phone has
+to sign something the host chose. `system.unlock.enroll` registers the phone's
+biometric-gated public key (base64 PKIX DER, ECDSA P-256) and is refused while
+the desktop is locked. `system.unlock.challenge` returns a single-use nonce.
+`system.unlock` answers it.
+
+```json
+{
+  "type": "command",
+  "action": "system.unlock",
+  "id": "req-009",
+  "payload": {
+    "challenge": "3Xy...==",
+    "signature": "MEUCIQD...=="
+  }
+}
+```
+
+The signature is ASN.1 ECDSA over
+`"switchboard-unlock-v1" ‖ 0x00 ‖ daemonId ‖ 0x00 ‖ challenge`. The label keeps
+an unlock signature from ever reading as one made for another purpose, and the
+daemon ID stops a proof captured on one desktop from opening a different one.
+The nonce is spent when it is checked, pass or fail.
+
+#### 11. `file_transfer_init`
 Initiates a peer-to-peer file transfer.
 
 ```json
