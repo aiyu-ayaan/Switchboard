@@ -104,6 +104,11 @@ object SessionCrypto {
         private val clientToHost: ByteArray,
         private val proofKey: ByteArray
     ) {
+        // Guarded by `synchronized(this)` via the @Synchronized on seal/open.
+        // Camera frames, each concurrent file upload, and UI commands all reach
+        // seal() from different threads; a torn `sendCounter++` would hand two
+        // frames the same nonce, and AES-GCM nonce reuse leaks the GHASH
+        // subkey, not merely the plaintext XOR.
         private var sendCounter = 0L
         private var receiveCounter = 0L
 
@@ -124,6 +129,7 @@ object SessionCrypto {
             received: ByteArray
         ): Boolean = constantTimeEquals(proof(label, daemonId, clientPublicKey), received)
 
+        @Synchronized
         fun seal(plaintext: ByteArray): ByteArray {
             val nonce = nonceFor(sendCounter++)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -136,6 +142,7 @@ object SessionCrypto {
         }
 
         /** Rejects replayed and reordered frames by requiring a rising counter. */
+        @Synchronized
         fun open(frame: ByteArray): ByteArray {
             require(frame.size > NONCE_SIZE + 16) { "frame too short" }
             val nonce = frame.copyOfRange(0, NONCE_SIZE)
