@@ -100,6 +100,7 @@ class SectionActions(
     val onContrast: (Display, Int) -> Unit,
     val onVolume: (Int, Boolean) -> Unit,
     val onMixerSession: (sessionId: String, level: Int, muted: Boolean) -> Unit,
+    val onAudioOutput: (deviceId: String) -> Unit,
     val onMedia: (String) -> Unit,
     val onSendFile: (Uri) -> Unit,
     val onTransferControl: (String, String) -> Unit,
@@ -324,6 +325,13 @@ private fun SectionBody(
                         level = state.host.volume.level,
                         muted = state.host.volume.muted,
                         onVolume = actions.onVolume
+                    )
+                }
+
+                if (state.canRouteOutput) {
+                    OutputCard(
+                        outputs = state.host.outputs,
+                        onSelect = actions.onAudioOutput
                     )
                 }
 

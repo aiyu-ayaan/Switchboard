@@ -129,6 +129,7 @@ fun SwitchboardApp(
             onContrast = viewModel::setContrast,
             onVolume = viewModel::setVolume,
             onMixerSession = viewModel::setSessionVolume,
+            onAudioOutput = viewModel::setAudioOutput,
             onMedia = viewModel::media,
             onSendFile = viewModel::sendFile,
             onTransferControl = viewModel::controlTransfer,

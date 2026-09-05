@@ -13,6 +13,8 @@ object Actions {
     const val VOLUME_SET = "system.volume.set"
     const val MIXER_LIST = "audio.mixer.list"
     const val MIXER_SET = "audio.mixer.set"
+    const val OUTPUT_LIST = "audio.output.list"
+    const val OUTPUT_SET = "audio.output.set"
     const val MEDIA_COMMAND = "media.playback.command"
     const val MEDIA_ARTWORK = "media.artwork"
     const val HOST_STATE = "host.state"
@@ -121,6 +123,22 @@ data class AudioSession(
     val active: Boolean = false
 )
 
+/**
+ * One output endpoint the desktop can play through.
+ *
+ * [id] is the OS endpoint identifier, which survives a reboot and a re-plug;
+ * the position in the list does not, so selection is always sent by id.
+ */
+@Serializable
+data class AudioDevice(
+    val id: String,
+    val name: String = "",
+    val default: Boolean = false
+)
+
+@Serializable
+data class OutputSet(val deviceId: String)
+
 @Serializable
 data class MixerSet(val sessionId: String, val level: Int, val muted: Boolean = false)
 
@@ -174,6 +192,7 @@ data class HostState(
     val displays: List<Display> = emptyList(),
     val volume: Volume = Volume(),
     val mixer: List<AudioSession> = emptyList(),
+    val outputs: List<AudioDevice> = emptyList(),
     val media: MediaState = MediaState(),
     val capabilities: List<String> = emptyList()
 )

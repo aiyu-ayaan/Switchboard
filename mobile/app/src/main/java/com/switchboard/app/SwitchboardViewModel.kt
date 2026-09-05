@@ -13,6 +13,7 @@ import com.switchboard.app.net.DisplaySet
 import com.switchboard.app.net.HostState
 import com.switchboard.app.net.MediaCommand
 import com.switchboard.app.net.MixerSet
+import com.switchboard.app.net.OutputSet
 import com.switchboard.app.net.Playback
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.FileProgress
@@ -53,6 +54,7 @@ data class UiState(
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
     val canControlMedia: Boolean get() = host.capabilities.contains("media")
     val canControlMixer: Boolean get() = host.capabilities.contains("mixer")
+    val canRouteOutput: Boolean get() = host.capabilities.contains("outputs")
 }
 
 /**
@@ -257,6 +259,20 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
             })
         }
         connection.send(Actions.MIXER_SET, MixerSet(sessionId, level, muted))
+    }
+
+    /**
+     * Moves the desktop's default output endpoint.
+     *
+     * The tick is patched locally first: Windows takes a moment to move the
+     * endpoint, and the next broadcast would otherwise still mark the old
+     * device, so the row the user tapped would flick back under their finger.
+     */
+    fun setAudioOutput(deviceId: String) {
+        connection.patchHost { host ->
+            host.copy(outputs = host.outputs.map { it.copy(default = it.id == deviceId) })
+        }
+        connection.send(Actions.OUTPUT_SET, OutputSet(deviceId))
     }
 
     /**

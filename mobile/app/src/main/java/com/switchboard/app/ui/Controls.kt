@@ -1,6 +1,7 @@
 package com.switchboard.app.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -33,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.LightMode
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,12 +69,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.switchboard.app.net.AudioDevice
 import com.switchboard.app.net.AudioSession
 import com.switchboard.app.net.Display
 import com.switchboard.app.net.MediaState
@@ -601,6 +607,108 @@ private fun TransportButton(icon: ImageVector, label: String, onClick: () -> Uni
                 tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(22.dp)
             )
+        }
+    }
+}
+
+/**
+ * Output routing card: which endpoint the desktop plays through.
+ *
+ * A radio group rather than a dropdown — the list is short, and a menu would
+ * hide the current device behind a tap on a screen that exists to show it.
+ */
+@Composable
+fun OutputCard(
+    outputs: List<AudioDevice>,
+    onSelect: (deviceId: String) -> Unit
+) {
+    SectionCard {
+        Text(
+            text = "Output device",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        if (outputs.isEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "The desktop reports no active playback devices.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@SectionCard
+        }
+
+        outputs.forEach { device ->
+            Spacer(Modifier.height(8.dp))
+            OutputRow(device = device, onSelect = onSelect)
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Playback, multimedia and communications all follow the choice.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun OutputRow(device: AudioDevice, onSelect: (deviceId: String) -> Unit) {
+    val isCurrent = device.default
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (isCurrent)
+            MaterialTheme.colorScheme.secondaryContainer
+        else
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { role = Role.RadioButton }
+            .bouncyClickable(enabled = !isCurrent) { onSelect(device.id) }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Speaker,
+                contentDescription = null,
+                tint = if (isCurrent)
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = device.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (isCurrent)
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            // The tick animates in so a switch reads as a change rather than
+            // two rows that silently swapped styling.
+            AnimatedVisibility(
+                visible = isCurrent,
+                enter = scaleIn(ExpressiveMotion.Bouncy) + fadeIn(tween(180)),
+                exit = scaleOut(ExpressiveMotion.Snappy) + fadeOut(tween(120))
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "Current output",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .size(20.dp)
+                )
+            }
         }
     }
 }
