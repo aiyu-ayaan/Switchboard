@@ -88,6 +88,7 @@ class SwitchboardClient(
     private val http = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS) // the socket is long-lived
+        .socketFactory(NoDelaySocketFactory)
         .build()
 
     @Volatile
