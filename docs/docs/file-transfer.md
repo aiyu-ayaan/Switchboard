@@ -57,7 +57,32 @@ This document covers the design, protocol, and Android integration of Switchboar
 - **Nothing is ever whole in memory.** Both ends move one chunk at a time and
   hash as bytes pass, which is what makes a multi-GB file a bounded-memory
   operation rather than an allocation failure.
-- Transfer throughput and speed calculations (MB/s or Mb/s) are sampled over rolling time windows and broadcast to the user interface.
+- **Four files move at a time, per device.** Offering a whole folder at once
+  put a dozen pumps on one socket: each crawled against the others, the phone's
+  single frame reader serialised them, and every bar advanced in bursts. Both
+  ends now admit four and queue the rest, which is enough to cover the digest
+  pass and handshake round trip of one file with the bytes of another.
+- **Acks are batched at 512 KiB.** Confirming every 256 KiB chunk doubled the
+  frame count for no gain — those acks share the socket with the chunks they
+  are pacing — while staying comfortably inside the 2 MiB window.
+- **Progress is reported at most four times a second.** Republishing on every
+  chunk rebuilt and recomposed the whole transfer list a hundred times a second
+  on a fast link, which cost more than the transfer it was reporting on.
+- **Speeds are smoothed, not averaged.** Both ends blend each window's sample
+  into a running estimate (70% previous), so a figure that would otherwise
+  flicker between 4 and 90 MB/s reads as one number. A cumulative average since
+  the start cannot show a link recovering or stalling at all.
+- **Verifying and publishing a received file happen off the frame path.** The
+  digest pass and the copy into the user's folder are two more full reads of
+  the file; run inline they blocked the channel where the *next* file's chunks
+  were already queued, which is what made a batch arrive in bursts with a long
+  stall at each file boundary.
+
+The desktop reads the moving numbers from the live transfer map rather than
+from stored history: rows are persisted on the same quarter-second throttle and
+carry no rate column at all. `GET /local/files/history` returns the transfer
+list on its own so the UI can poll it four times a second while a file is
+moving, without dragging a DDC/CI display probe along with it.
 
 ### 3. Surviving a dropped connection
 
@@ -115,7 +140,7 @@ When sending files from phone to PC:
 1. **Multi-File Selection**: The user taps **Files** to launch `ACTION_OPEN_DOCUMENT` / `ACTION_OPEN_MULTIPLE_DOCUMENTS` to select one or multiple files at once.
 2. **Folder Selection**: The user taps **Folder** to launch `ACTION_OPEN_DOCUMENT_TREE`. Switchboard recursively traverses all files inside the selected directory and queues them for transfer.
 3. **Android Share Sheet**: Switchboard declares `ACTION_SEND` and `ACTION_SEND_MULTIPLE` intent filters, allowing users to share media and files directly from Gallery or File Managers into Switchboard.
-4. **Sequential Transfer Queue**: Multiple selected files stream sequentially off disk through an upload queue, avoiding socket contention and ack-window starvation.
+4. **Bounded Parallel Transfer Queue**: Selected files stream off disk through an upload queue drained by four workers, so one file's digest pass or handshake wait does not leave the link idle — while the cap still prevents the socket contention and ack-window starvation an unbounded fan-out causes.
 5. **Safe File Naming**: File names with colons (common in camera and screen recording timestamps) and path prefixes are sanitized automatically so they are accepted safely by the desktop daemon.
 
 ---
