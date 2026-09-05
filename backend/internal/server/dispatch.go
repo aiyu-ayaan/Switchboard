@@ -272,6 +272,7 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 			return
 		}
 		s.reply(c, env, map[string]string{"status": "locked"})
+		s.Broadcast()
 
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))

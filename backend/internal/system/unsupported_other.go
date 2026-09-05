@@ -63,3 +63,5 @@ func shellGesture(string) error { return ErrUnsupported }
 func lockSystem() error { return ErrUnsupported }
 
 func lockSupported() bool { return false }
+
+func isLocked() bool { return false }

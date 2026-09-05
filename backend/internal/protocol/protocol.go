@@ -260,6 +260,7 @@ type HostState struct {
 	// "outputs" capability. Exactly one carries Default.
 	Outputs      []AudioDevice `json:"outputs"`
 	Media        MediaState    `json:"media"`
+	Locked       bool          `json:"locked"`
 	Capabilities []string      `json:"capabilities"`
 }
 

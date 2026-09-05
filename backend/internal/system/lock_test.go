@@ -35,3 +35,10 @@ func TestLockCapability(t *testing.T) {
 		}
 	}
 }
+
+func TestIsLocked(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows only")
+	}
+	t.Logf("isLocked() = %v", isLocked())
+}

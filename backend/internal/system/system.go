@@ -123,6 +123,9 @@ func (c *Controller) ShellGesture(name string) error { return shellGesture(name)
 // Lock locks the workstation display.
 func (c *Controller) Lock() error { return lockSystem() }
 
+// IsLocked reports whether the workstation console session is locked.
+func (c *Controller) IsLocked() bool { return isLocked() }
+
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
@@ -166,6 +169,7 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 	}
 	if lockSupported() {
 		state.Capabilities = append(state.Capabilities, "lock")
+		state.Locked = isLocked()
 	}
 	return state
 }

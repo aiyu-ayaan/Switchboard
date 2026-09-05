@@ -467,9 +467,11 @@ func (s *Server) WatchMedia(ctx context.Context) {
 	ticker := time.NewTicker(mediaPollInterval)
 	defer ticker.Stop()
 
-	var last protocol.MediaState
-	var lastErr string
-
+	var (
+		last       protocol.MediaState
+		lastLocked bool
+		lastErr    string
+	)
 	for {
 		select {
 		case <-ctx.Done():
@@ -490,8 +492,10 @@ func (s *Server) WatchMedia(ctx context.Context) {
 				continue
 			}
 			lastErr = ""
-			if current != last {
+			locked := s.control.IsLocked()
+			if current != last || locked != lastLocked {
 				last = current
+				lastLocked = locked
 				s.Broadcast()
 			}
 		}
