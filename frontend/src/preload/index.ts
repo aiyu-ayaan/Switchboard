@@ -17,6 +17,7 @@ import type {
   MediaArtwork,
   PairingInfo,
   SwitchboardBridge,
+  UnlockStatus,
   Volume
 } from '../shared/types';
 
@@ -55,6 +56,11 @@ const bridge: SwitchboardBridge = {
   },
   getMediaArtwork: () => call<MediaArtwork>('/media/artwork'),
   lockSystem: () => call<{ status: string }>('/system/lock', {}),
+  unlock: {
+    status: () => call<UnlockStatus>('/unlock/status'),
+    setup: () => call<{ status: string }>('/unlock/setup', {}),
+    disable: () => call<{ status: string }>('/unlock/disable', {})
+  },
   rotatePairing: () => call<PairingInfo>('/pairing/rotate', {}),
   revokeDevice: async (deviceId) => {
     await call('/devices/revoke', { deviceId });

@@ -217,6 +217,14 @@ export interface CameraVideoUnit {
   timestamp: number;
 }
 
+/** Whether this host can do fingerprint unlock, and whether it is set up. */
+export interface UnlockStatus {
+  /** False off Windows; the Settings section is hidden entirely. */
+  supported: boolean;
+  /** A password is stored, which is exactly when phones are offered unlock. */
+  enrolled: boolean;
+}
+
 export interface SwitchboardBridge {
   getState(): Promise<LocalState>;
   setBrightness(displayId: string, value: number): Promise<Display>;
@@ -229,6 +237,19 @@ export interface SwitchboardBridge {
   media(action: MediaAction): Promise<void>;
   getMediaArtwork(): Promise<MediaArtwork>;
   lockSystem(): Promise<{ status: string }>;
+  /**
+   * Fingerprint unlock setup.
+   *
+   * Both setup steps need administrator rights, so `setupUnlock` does not
+   * perform them — it asks the daemon to launch the elevated helper, which
+   * raises UAC and prompts for the Windows password in its own console. The
+   * password never passes through this app.
+   */
+  unlock: {
+    status(): Promise<UnlockStatus>;
+    setup(): Promise<{ status: string }>;
+    disable(): Promise<{ status: string }>;
+  };
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;
   /**
