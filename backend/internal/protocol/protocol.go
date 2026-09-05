@@ -60,6 +60,15 @@ const (
 	ActionInputScroll  = "input.scroll"  // wheel, vertical and horizontal
 	ActionInputGesture = "input.gesture" // named shell gesture (task view, ...)
 
+	// Wi-Fi camera. The phone is the capture device and the desktop is the
+	// sink, so start/stop/control travel desktop -> phone and frames come
+	// back the other way. See docs/docs/wifi-camera.md.
+	ActionCameraStart   = "camera.start"   // desktop -> phone: begin capture
+	ActionCameraStop    = "camera.stop"    // desktop -> phone: release the camera
+	ActionCameraControl = "camera.control" // desktop -> phone: change a setting
+	ActionCameraFrame   = "camera.frame"   // phone -> desktop: one encoded frame
+	ActionCameraState   = "camera.state"   // phone -> desktop: capabilities and settings
+
 	ActionHostState = "host.state" // event: full snapshot pushed to clients
 	ActionPing      = "system.ping"
 )
@@ -251,6 +260,119 @@ type HostState struct {
 	Outputs      []AudioDevice `json:"outputs"`
 	Media        MediaState    `json:"media"`
 	Capabilities []string      `json:"capabilities"`
+}
+
+// ---- Wi-Fi camera ----
+
+// Quality presets. These pick a capture resolution and a JPEG quality
+// together, because the two trade off against the same thing — bandwidth —
+// and exposing them separately invites combinations that make no sense.
+const (
+	QualityFull     = "full"     // native sensor resolution, high quality
+	QualityBalanced = "balanced" // 720p
+	QualityLow      = "low"      // 480p, for a congested link
+)
+
+// White balance presets, named after the Camera2 modes they map to.
+const (
+	WhiteBalanceAuto         = "auto"
+	WhiteBalanceIncandescent = "incandescent"
+	WhiteBalanceFluorescent  = "fluorescent"
+	WhiteBalanceDaylight     = "daylight"
+	WhiteBalanceCloudy       = "cloudy"
+	WhiteBalanceShade        = "shade"
+)
+
+// Camera facings.
+const (
+	FacingBack  = "back"
+	FacingFront = "front"
+)
+
+// CameraSettings is the full control surface, sent whole rather than as
+// individual patches: the phone applies it as one camera reconfiguration, and
+// a partial update would need every field to be nullable to tell "unset" from
+// "set to zero".
+type CameraSettings struct {
+	Facing  string `json:"facing"`
+	Quality string `json:"quality"`
+	FPS     int    `json:"fps"`
+
+	// Rotation is applied by the phone before encoding, in degrees clockwise.
+	// Doing it at the source means the desktop never has to rotate a decoded
+	// frame, and a rotated stream costs the same bandwidth as an upright one.
+	Rotation int  `json:"rotation"`
+	Mirror   bool `json:"mirror"`
+
+	// Zoom is normalised 0-1 across the sensor's own range rather than a
+	// ratio, because the maximum differs per lens and a desktop slider should
+	// not have to know which phone is on the other end.
+	Zoom  float64 `json:"zoom"`
+	Torch bool    `json:"torch"`
+
+	AutoFocus     bool    `json:"autoFocus"`
+	FocusDistance float64 `json:"focusDistance"` // 0 (near) - 1 (infinity)
+
+	AutoExposure bool `json:"autoExposure"`
+	// Exposure is an index into the sensor's compensation range, which is
+	// what Camera2 exposes; MinExposure and MaxExposure in CameraState give
+	// it meaning.
+	Exposure int `json:"exposure"`
+
+	WhiteBalance string `json:"whiteBalance"`
+
+	// AutoFraming keeps a detected face centred by cropping, so the subject
+	// stays in shot without a gimbal.
+	AutoFraming bool `json:"autoFraming"`
+}
+
+// DefaultCameraSettings is what a stream starts at: full quality, as the
+// feature was specified, with everything automatic.
+func DefaultCameraSettings() CameraSettings {
+	return CameraSettings{
+		Facing: FacingBack, Quality: QualityFull, FPS: 30,
+		AutoFocus: true, AutoExposure: true, WhiteBalance: WhiteBalanceAuto,
+	}
+}
+
+// CameraState is what the phone reports back: the settings in force plus the
+// ranges this particular lens can actually honour, so the desktop hides a
+// control the hardware does not have rather than offering a dead slider.
+type CameraState struct {
+	Streaming bool           `json:"streaming"`
+	DeviceID  string         `json:"deviceId,omitempty"`
+	Settings  CameraSettings `json:"settings"`
+
+	Width  int `json:"width"`
+	Height int `json:"height"`
+
+	MaxZoomRatio float64 `json:"maxZoomRatio"`
+	MinExposure  int     `json:"minExposure"`
+	MaxExposure  int     `json:"maxExposure"`
+
+	HasTorch          bool `json:"hasTorch"`
+	HasManualFocus    bool `json:"hasManualFocus"`
+	HasManualExposure bool `json:"hasManualExposure"`
+	HasWhiteBalance   bool `json:"hasWhiteBalance"`
+	HasFrontCamera    bool `json:"hasFrontCamera"`
+
+	// FPS and BytesPerSec are measured, not requested: what the link is
+	// actually carrying, which is the number that tells a user to drop the
+	// quality preset.
+	FPS         float64 `json:"fps"`
+	BytesPerSec int64   `json:"bytesPerSec"`
+
+	Error string `json:"error,omitempty"`
+}
+
+// CameraFrame is the metadata for one encoded frame. The JPEG itself rides
+// beside it as a FrameBlob — at 30fps, base64 would add a third to the
+// bandwidth of the single heaviest thing on the wire.
+type CameraFrame struct {
+	Sequence  int64 `json:"seq"`
+	Width     int   `json:"width"`
+	Height    int   `json:"height"`
+	Timestamp int64 `json:"ts"`
 }
 
 // ---- Air mouse ----

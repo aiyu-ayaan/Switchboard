@@ -2,7 +2,7 @@ import { Minus, Square, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-export type ViewId = 'displays' | 'audio' | 'files' | 'devices' | 'settings';
+export type ViewId = 'displays' | 'audio' | 'camera' | 'files' | 'devices' | 'settings';
 
 /** Frameless-window chrome. The bar itself is the OS drag handle. */
 export function TitleBar({ subtitle }: { subtitle: string }) {

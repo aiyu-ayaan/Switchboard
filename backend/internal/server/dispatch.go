@@ -178,6 +178,25 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 			s.fail(c, env, err)
 		}
 
+	// Wi-Fi camera. Frames are the heaviest thing on the wire and arrive
+	// dozens of times a second, so like the air mouse they neither reply nor
+	// broadcast: the picture updating is the acknowledgement.
+	case protocol.ActionCameraFrame:
+		var meta protocol.CameraFrame
+		if err := env.Decode(&meta); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.camera.Frame(c.deviceID, meta, blob)
+
+	case protocol.ActionCameraState:
+		var state protocol.CameraState
+		if err := env.Decode(&state); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.camera.ReportState(c.deviceID, state)
+
 	// File transfer. These frames are relayed straight into the transfer
 	// manager, which owns all the state; the daemon replies only when the
 	// engine refuses outright, because the real answer to an offer or a chunk

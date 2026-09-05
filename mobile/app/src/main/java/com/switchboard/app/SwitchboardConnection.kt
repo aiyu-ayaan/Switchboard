@@ -17,6 +17,7 @@ import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.WirePayload
 import com.switchboard.app.net.SwitchboardJson
 import com.switchboard.app.net.TransferStatus
+import com.switchboard.app.camera.CameraController
 import com.switchboard.app.transfer.TransferEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,7 @@ class SwitchboardConnection private constructor(context: Context) {
 
     private val store = HostStore(context)
     private val transfers = TransferEngine.get(context)
+    val camera = CameraController.get(context)
     private val client = SwitchboardClient(store.identity, "${Build.MANUFACTURER} ${Build.MODEL}")
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -199,6 +201,7 @@ class SwitchboardConnection private constructor(context: Context) {
                         // The engine only learns how to reach the desktop here;
                         // before the handshake there is no session to write to.
                         transfers.bind { action, payload, blob -> client.send(action, payload, blob) }
+                        camera.bind { action, payload, blob -> client.send(action, payload, blob) }
                         store.save(saved)
                         store.lastHostId = saved.daemonId
                         _state.update {
@@ -228,8 +231,12 @@ class SwitchboardConnection private constructor(context: Context) {
                     is ConnectionEvent.FileFrame ->
                         transfers.onFrame(event.action, event.payload, event.blob)
 
+                    is ConnectionEvent.CameraCommand ->
+                        camera.onCommand(event.action, event.payload)
+
                     is ConnectionEvent.Failed -> {
                         transfers.unbind()
+                        camera.unbind()
                         _state.update {
                             it.copy(
                                 status = ConnectionStatus.Disconnected,
@@ -241,6 +248,7 @@ class SwitchboardConnection private constructor(context: Context) {
 
                     ConnectionEvent.Disconnected -> {
                         transfers.unbind()
+                        camera.unbind()
                         _state.update {
                             it.copy(status = ConnectionStatus.Disconnected, activeHost = null)
                         }
@@ -254,6 +262,7 @@ class SwitchboardConnection private constructor(context: Context) {
         connection?.cancel()
         connection = null
         transfers.unbind()
+        camera.unbind()
         client.disconnect()
         _state.update { it.copy(status = ConnectionStatus.Disconnected, activeHost = null) }
     }

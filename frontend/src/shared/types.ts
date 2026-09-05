@@ -146,6 +146,49 @@ export interface LocalState {
 export type MediaAction = 'play' | 'pause' | 'toggle' | 'next' | 'prev' | 'stop';
 
 /** The surface the preload bridge exposes on `window.switchboard`. */
+/** The phone camera's full control surface, mirrored from the Go protocol. */
+export interface CameraSettings {
+  facing: 'back' | 'front';
+  quality: 'full' | 'balanced' | 'low';
+  fps: number;
+  rotation: number;
+  mirror: boolean;
+  /** Normalised 0-1 across the lens's own range, not a ratio. */
+  zoom: number;
+  torch: boolean;
+  autoFocus: boolean;
+  focusDistance: number;
+  autoExposure: boolean;
+  exposure: number;
+  whiteBalance: string;
+  autoFraming: boolean;
+}
+
+/**
+ * What the phone reports back: the settings in force plus what its lens can
+ * actually honour, so a control the hardware lacks is hidden rather than shown
+ * dead.
+ */
+export interface CameraState {
+  streaming: boolean;
+  deviceId?: string;
+  settings: CameraSettings;
+  width: number;
+  height: number;
+  maxZoomRatio: number;
+  minExposure: number;
+  maxExposure: number;
+  hasTorch: boolean;
+  hasManualFocus: boolean;
+  hasManualExposure: boolean;
+  hasWhiteBalance: boolean;
+  hasFrontCamera: boolean;
+  /** Measured by the daemon from what the link actually delivered. */
+  fps: number;
+  bytesPerSec: number;
+  error?: string;
+}
+
 export interface SwitchboardBridge {
   getState(): Promise<LocalState>;
   setBrightness(displayId: string, value: number): Promise<Display>;
@@ -174,6 +217,20 @@ export interface SwitchboardBridge {
   chooseDownloadDir(): Promise<string | null>;
   /** Reveals a completed transfer in the OS file manager. */
   revealTransfer(transferId: string): Promise<void>;
+  camera: {
+    getState(): Promise<CameraState>;
+    start(deviceId: string, settings?: CameraSettings): Promise<CameraState>;
+    stop(): Promise<CameraState>;
+    control(settings: CameraSettings): Promise<CameraState>;
+    /**
+     * Subscribes to the live frames.
+     *
+     * The renderer makes no network requests of its own, so frames arrive over
+     * IPC as raw JPEG bytes and are wrapped in a blob URL here. Returns an
+     * unsubscribe function.
+     */
+    onFrame(handler: (jpeg: ArrayBuffer) => void): () => void;
+  };
   window: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<boolean>;

@@ -7,6 +7,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   AudioDevice,
+  CameraState,
   AudioSession,
   Display,
   FileTransfer,
@@ -50,6 +51,23 @@ const bridge: SwitchboardBridge = {
   updateSettings: (patch) => call<HostSettings>('/settings', patch),
   chooseDownloadDir: () => ipcRenderer.invoke('dialog:downloadDir'),
   revealTransfer: (transferId) => ipcRenderer.invoke('transfer:reveal', transferId),
+  camera: {
+    getState: () => call<CameraState>('/camera/state'),
+    start: (deviceId, settings) => call<CameraState>('/camera/start', { deviceId, settings }),
+    stop: () => call<CameraState>('/camera/stop', {}),
+    control: (settings) => call<CameraState>('/camera/control', settings),
+    // Frames are pushed rather than requested: the main process holds the long
+    // poll against the daemon, so the renderer never waits and never polls.
+    onFrame: (handler) => {
+      const listener = (_event: unknown, jpeg: ArrayBuffer) => handler(jpeg);
+      ipcRenderer.on('camera:frame', listener);
+      ipcRenderer.send('camera:subscribe');
+      return () => {
+        ipcRenderer.removeListener('camera:frame', listener);
+        ipcRenderer.send('camera:unsubscribe');
+      };
+    }
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),

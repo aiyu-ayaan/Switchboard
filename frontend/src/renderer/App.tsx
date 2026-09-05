@@ -1,9 +1,10 @@
-import { Monitor, Send, Settings, Smartphone, Volume2 } from 'lucide-react';
+import { Camera, Monitor, Send, Settings, Smartphone, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { ActivityBar, StatusBar, TitleBar } from './components/Shell';
 import type { ViewId } from './components/Shell';
 import { DisplaysView } from './components/DisplaysView';
 import { AudioView } from './components/AudioView';
+import { CameraView } from './components/CameraView';
 import { FilesView } from './components/FilesView';
 import { DevicesView } from './components/DevicesView';
 import { SettingsView } from './components/SettingsView';
@@ -12,6 +13,7 @@ import { useHostState } from './useHostState';
 const SECTIONS = [
   { id: 'displays' as const, label: 'Displays', icon: Monitor },
   { id: 'audio' as const, label: 'Audio and media', icon: Volume2 },
+  { id: 'camera' as const, label: 'Camera', icon: Camera },
   { id: 'files' as const, label: 'File transfers', icon: Send },
   { id: 'devices' as const, label: 'Paired devices', icon: Smartphone },
   { id: 'settings' as const, label: 'Settings', icon: Settings }
@@ -46,6 +48,7 @@ export const App = () => {
               <DisplaysView state={state} patch={patch} setPaused={setPaused} refresh={refresh} />
             )}
             {view === 'audio' && <AudioView state={state} patch={patch} setPaused={setPaused} />}
+            {view === 'camera' && <CameraView state={state} />}
             {view === 'files' && <FilesView state={state} refresh={refresh} />}
             {view === 'devices' && <DevicesView state={state} refresh={refresh} />}
             {view === 'settings' && <SettingsView state={state} patch={patch} />}

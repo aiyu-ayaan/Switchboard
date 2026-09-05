@@ -5,7 +5,10 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
+	"time"
 
+	"switchboard/backend/internal/camera"
 	"switchboard/backend/internal/db"
 	"switchboard/backend/internal/protocol"
 )
@@ -36,6 +39,13 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("GET /local/settings", s.localGetSettings)
 	handle("POST /local/settings", s.localUpdateSettings)
 	handle("POST /local/settings/download-dir", s.localCheckDownloadDir)
+
+	handle("GET /local/camera/state", s.localCameraState)
+	handle("POST /local/camera/start", s.localCameraStart)
+	handle("POST /local/camera/stop", s.localCameraStop)
+	handle("POST /local/camera/control", s.localCameraControl)
+	handle("GET /local/camera/frame", s.localCameraFrame)
+	handle("GET /local/camera/stream", s.localCameraStream)
 }
 
 // loopbackOnly rejects any request that did not originate on this machine.
@@ -324,4 +334,92 @@ func httpError(w http.ResponseWriter, err error, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// ---- Wi-Fi camera ----
+
+func (s *Server) localCameraState(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.camera.State())
+}
+
+func (s *Server) localCameraStart(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceID string                   `json:"deviceId"`
+		Settings *protocol.CameraSettings `json:"settings"`
+	}
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	// Starting without a settings block means "as it comes": full quality,
+	// everything automatic, which is what the feature specifies as default.
+	settings := protocol.DefaultCameraSettings()
+	if req.Settings != nil {
+		settings = *req.Settings
+	}
+	if err := s.camera.Start(req.DeviceID, settings); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, s.camera.State())
+}
+
+func (s *Server) localCameraStop(w http.ResponseWriter, r *http.Request) {
+	if err := s.camera.Stop(); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, s.camera.State())
+}
+
+func (s *Server) localCameraControl(w http.ResponseWriter, r *http.Request) {
+	var settings protocol.CameraSettings
+	if err := decode(r, &settings); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.camera.Control(settings); err != nil {
+		httpError(w, err, http.StatusConflict)
+		return
+	}
+	writeJSON(w, s.camera.State())
+}
+
+// localCameraFrame hands over the next frame after the sequence the caller
+// already has, blocking until one exists.
+//
+// The desktop renderer holds a strict content policy and makes no network
+// requests of its own, so frames reach it through the Electron main process.
+// Long-polling rather than a timer means the UI is never a frame behind and
+// never asks for one that has not changed.
+func (s *Server) localCameraFrame(w http.ResponseWriter, r *http.Request) {
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+
+	frame, seq, err := s.camera.Await(after, 10*time.Second)
+	switch {
+	case errors.Is(err, camera.ErrNotStreaming):
+		httpError(w, err, http.StatusConflict)
+		return
+	case errors.Is(err, camera.ErrNoNewFrame):
+		// Not a failure: the camera is live but pointed at something still.
+		// 204 lets the caller loop without treating it as an error.
+		w.Header().Set("X-Sequence", strconv.FormatInt(seq, 10))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	case err != nil:
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Sequence", strconv.FormatInt(seq, 10))
+	w.Write(frame)
+}
+
+// localCameraStream is the MJPEG endpoint OBS, VLC and any browser can open
+// directly. It is what makes the phone usable in applications Switchboard
+// knows nothing about.
+func (s *Server) localCameraStream(w http.ResponseWriter, r *http.Request) {
+	s.camera.ServeMJPEG(w, r)
 }

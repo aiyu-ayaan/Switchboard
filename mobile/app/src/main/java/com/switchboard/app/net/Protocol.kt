@@ -26,6 +26,14 @@ object Actions {
     const val INPUT_SCROLL = "input.scroll"
     const val INPUT_GESTURE = "input.gesture"
 
+    // Wi-Fi camera. This device captures; the desktop is the sink, so
+    // start/stop/control arrive here and frames go the other way.
+    const val CAMERA_START = "camera.start"
+    const val CAMERA_STOP = "camera.stop"
+    const val CAMERA_CONTROL = "camera.control"
+    const val CAMERA_FRAME = "camera.frame"
+    const val CAMERA_STATE = "camera.state"
+
     // File transfer. Both directions use the same frames; the side holding
     // the file sends the offer and the receiver paces it with acks.
     const val FILE_OFFER = "file.offer"
@@ -219,6 +227,97 @@ data class DisplaySet(val displayId: String, val value: Int) : WirePayload
 
 @Serializable
 data class MediaCommand(val action: String) : WirePayload
+
+// ---- Wi-Fi camera ----
+
+/**
+ * Quality presets. Resolution and JPEG quality move together because they
+ * trade off against the same thing — bandwidth — and separate controls invite
+ * combinations that make no sense.
+ */
+object CameraQuality {
+    const val FULL = "full"
+    const val BALANCED = "balanced"
+    const val LOW = "low"
+}
+
+object CameraFacing {
+    const val BACK = "back"
+    const val FRONT = "front"
+}
+
+object CameraWhiteBalance {
+    const val AUTO = "auto"
+    const val INCANDESCENT = "incandescent"
+    const val FLUORESCENT = "fluorescent"
+    const val DAYLIGHT = "daylight"
+    const val CLOUDY = "cloudy"
+    const val SHADE = "shade"
+
+    val all = listOf(AUTO, INCANDESCENT, FLUORESCENT, DAYLIGHT, CLOUDY, SHADE)
+}
+
+/**
+ * The whole control surface, sent as one block rather than as patches: the
+ * camera is reconfigured as a unit, and a partial update would need every
+ * field nullable to tell "unset" from "set to zero".
+ */
+@Serializable
+data class CameraSettings(
+    val facing: String = CameraFacing.BACK,
+    val quality: String = CameraQuality.FULL,
+    val fps: Int = 30,
+    /** Applied here before encoding, so the desktop never rotates a decoded frame. */
+    val rotation: Int = 0,
+    val mirror: Boolean = false,
+    /** Normalised 0-1 across this lens's own range, not a ratio. */
+    val zoom: Double = 0.0,
+    val torch: Boolean = false,
+    val autoFocus: Boolean = true,
+    val focusDistance: Double = 0.0,
+    val autoExposure: Boolean = true,
+    val exposure: Int = 0,
+    val whiteBalance: String = CameraWhiteBalance.AUTO,
+    val autoFraming: Boolean = false
+) : WirePayload
+
+/**
+ * What this device reports back: the settings in force plus what the lens can
+ * actually honour, so the desktop hides a control the hardware lacks rather
+ * than offering a dead slider.
+ */
+@Serializable
+data class CameraState(
+    val streaming: Boolean = false,
+    val deviceId: String = "",
+    val settings: CameraSettings = CameraSettings(),
+    val width: Int = 0,
+    val height: Int = 0,
+    val maxZoomRatio: Double = 1.0,
+    val minExposure: Int = 0,
+    val maxExposure: Int = 0,
+    val hasTorch: Boolean = false,
+    val hasManualFocus: Boolean = false,
+    val hasManualExposure: Boolean = false,
+    val hasWhiteBalance: Boolean = false,
+    val hasFrontCamera: Boolean = false,
+    /** Measured by the desktop, not here; sent as zero and overwritten there. */
+    val fps: Double = 0.0,
+    val bytesPerSec: Long = 0,
+    val error: String = ""
+) : WirePayload
+
+/**
+ * Metadata for one encoded frame. The JPEG rides beside it as a blob: at 30fps
+ * base64 would add a third to the bandwidth of the heaviest thing on the wire.
+ */
+@Serializable
+data class CameraFrame(
+    val seq: Long = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    val ts: Long = 0
+) : WirePayload
 
 // ---- Air mouse ----
 

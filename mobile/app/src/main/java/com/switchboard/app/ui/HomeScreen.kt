@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,6 +65,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Audio("Audio & Media", Icons.AutoMirrored.Filled.VolumeUp),
     Media("Media", Icons.Filled.MusicNote),
     Touchpad("Touchpad", Icons.Filled.Mouse),
+    Camera("Camera", Icons.Filled.PhotoCamera),
     Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
@@ -72,6 +74,9 @@ enum class Section(val title: String, val icon: ImageVector) {
         // When media is active/playing or integrated into Audio, hide separate Media row if Audio is available
         Media -> state.canControlMedia && !state.canControlVolume
         Touchpad -> state.canDriveInput
+        // Always available: the camera is this phone's, so nothing about the
+        // desktop's capabilities decides whether it can be offered.
+        Camera -> true
         Files -> true
     }
 
@@ -91,6 +96,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         }
         Media -> state.host.media.summary
         Touchpad -> "Drive the pointer and shell gestures"
+        Camera -> "Use this phone as a webcam"
         Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
             0 -> "Send and receive files"
             1 -> "1 transfer in progress"
@@ -389,6 +395,8 @@ private fun SectionBody(
                 title = "Touchpad",
                 body = "Open the Touchpad section for the pointer, gestures and buttons."
             )
+
+            Section.Camera -> CameraScreen()
 
             Section.Files -> FilesBody(
                 transfers = state.transfers,

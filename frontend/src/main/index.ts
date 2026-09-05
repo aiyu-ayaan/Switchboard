@@ -241,7 +241,11 @@ const ALLOWED_ROUTES = new Set([
   '/devices/revoke',
   '/files/send',
   '/files/control',
-  '/settings'
+  '/settings',
+  '/camera/state',
+  '/camera/start',
+  '/camera/stop',
+  '/camera/control'
 ]);
 
 async function daemonFetch<T>(route: string, body?: unknown): Promise<T> {
@@ -280,6 +284,64 @@ function registerDaemonBridge(): void {
   });
 }
 
+/**
+ * Pumps camera frames from the daemon to the renderer.
+ *
+ * The renderer keeps `default-src 'self'` and makes no network requests, so it
+ * cannot open the daemon's MJPEG stream itself. This holds a long poll instead:
+ * the daemon answers as soon as a frame newer than the last one exists, which
+ * means the window is never a frame behind and never asks for one that has not
+ * changed. Only one pump runs however many subscribers there are, and it stops
+ * when the last one leaves — a camera nobody is watching should cost nothing.
+ */
+let cameraSubscribers = 0;
+let cameraPump: Promise<void> | null = null;
+
+async function pumpCameraFrames(): Promise<void> {
+  let after = 0;
+  while (cameraSubscribers > 0 && mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:${DAEMON_PORT}/local/camera/frame?after=${after}`,
+        { signal: AbortSignal.timeout(20_000) }
+      );
+      if (res.status === 204) {
+        // The camera is live but pointed at something still. Nothing to send.
+        continue;
+      }
+      if (res.status === 409) {
+        // Nothing is streaming. Back off rather than hammering the daemon
+        // while the user decides whether to start a camera at all.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        after = 0;
+        continue;
+      }
+      if (!res.ok) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        continue;
+      }
+      after = Number(res.headers.get('X-Sequence') ?? after) || after;
+      const jpeg = await res.arrayBuffer();
+      mainWindow?.webContents.send('camera:frame', jpeg);
+    } catch {
+      // A timeout on a quiet camera is normal; anything else settles down on
+      // the next pass. Either way the loop is the recovery.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  cameraPump = null;
+}
+
+function registerCameraBridge(): void {
+  ipcMain.on('camera:subscribe', () => {
+    cameraSubscribers += 1;
+    if (!cameraPump) cameraPump = pumpCameraFrames();
+  });
+  ipcMain.on('camera:unsubscribe', () => {
+    cameraSubscribers = Math.max(0, cameraSubscribers - 1);
+  });
+}
+
 /** The file-system reach the renderer must not have: a picker and a reveal. */
 function registerFileBridge(): void {
   ipcMain.handle('dialog:downloadDir', async () => {
@@ -310,6 +372,7 @@ function registerFileBridge(): void {
 app.whenReady().then(async () => {
   registerWindowControls();
   registerDaemonBridge();
+  registerCameraBridge();
   registerFileBridge();
   await startDaemon();
   createWindow();

@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	"switchboard/backend/internal/camera"
 	"switchboard/backend/internal/config"
 	"switchboard/backend/internal/crypto"
 	"switchboard/backend/internal/db"
@@ -39,6 +40,7 @@ type Server struct {
 
 	http      *http.Server
 	transfers *transfer.Manager
+	camera    *camera.Hub
 
 	mu       sync.RWMutex
 	pairing  pairingToken
@@ -92,6 +94,7 @@ func newServer(cfg *config.Config, store *db.Database, control *system.Controlle
 		clients:  map[string]*client{},
 	}
 	s.transfers = transfer.NewManager(s.downloadDir, s.sendToDevice, s.onTransferEvent)
+	s.camera = camera.NewHub(s.sendToDevice)
 	if _, err := s.RotatePairing(); err != nil {
 		return nil, err
 	}
@@ -277,6 +280,7 @@ func (s *Server) removeClient(c *client) {
 	// reconnects before the old socket is reaped briefly holds two.
 	if remaining == 0 {
 		s.transfers.Detach(c.deviceID)
+		s.camera.Detach(c.deviceID)
 	}
 }
 

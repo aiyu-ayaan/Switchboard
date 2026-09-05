@@ -52,6 +52,9 @@ sealed interface ConnectionEvent {
         override fun equals(other: Any?) = this === other
         override fun hashCode() = System.identityHashCode(this)
     }
+    /** A `camera.*` command from the desktop. Payload is null for stop. */
+    data class CameraCommand(val action: String, val payload: JsonElement?) : ConnectionEvent
+
     data class Failed(val reason: String) : ConnectionEvent
     data object Disconnected : ConnectionEvent
 }
@@ -277,6 +280,9 @@ class SwitchboardClient(
                             )
                         )
 
+                        envelope.action.startsWith("camera.") ->
+                            trySend(ConnectionEvent.CameraCommand(envelope.action, payload))
+
                         envelope.action.startsWith("file.") && payload != null ->
                             trySend(ConnectionEvent.FileFrame(envelope.action, payload, frame.blob))
                     }
@@ -348,6 +354,9 @@ class SwitchboardClient(
         is InputButton -> SwitchboardJson.encodeToJsonElement(InputButton.serializer(), payload)
         is InputScroll -> SwitchboardJson.encodeToJsonElement(InputScroll.serializer(), payload)
         is InputGesture -> SwitchboardJson.encodeToJsonElement(InputGesture.serializer(), payload)
+        is CameraSettings -> SwitchboardJson.encodeToJsonElement(CameraSettings.serializer(), payload)
+        is CameraState -> SwitchboardJson.encodeToJsonElement(CameraState.serializer(), payload)
+        is CameraFrame -> SwitchboardJson.encodeToJsonElement(CameraFrame.serializer(), payload)
     }
 
     fun disconnect() {

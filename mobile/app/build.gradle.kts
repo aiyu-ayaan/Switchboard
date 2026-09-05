@@ -55,5 +55,9 @@ dependencies {
     implementation(libs.bouncycastle)
     implementation(libs.zxing.embedded)
 
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+
     testImplementation(libs.junit)
 }
