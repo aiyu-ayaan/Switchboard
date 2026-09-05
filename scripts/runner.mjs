@@ -107,7 +107,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 async function spinBackend() {
-  return runProcess('go', ['run', 'cmd/server/main.go'], {
+  return runProcess('go', ['run', './cmd/server'], {
     cwd: resolve(rootDir, 'backend'),
     name: 'backend',
     streamPrefix: true
@@ -120,8 +120,8 @@ async function buildBackend() {
   // -s -w drop the symbol table and DWARF; -trimpath keeps build-machine
   // paths out of the binary. Together they take the daemon from ~18 MB to
   // ~12 MB, and nothing in the shipped product reads either.
-  const flags = ['-trimpath', '-ldflags=-s -w'];
-  return runProcess('go', ['build', ...flags, '-o', outPath, 'cmd/server/main.go'], {
+  const flags = ['-trimpath', '"-ldflags=-s -w"'];
+  return runProcess('go', ['build', ...flags, '-o', outPath, './cmd/server'], {
     cwd: resolve(rootDir, 'backend'),
     name: 'backend'
   });

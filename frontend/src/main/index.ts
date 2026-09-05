@@ -120,7 +120,15 @@ async function startDaemon(): Promise<void> {
     console.warn('[switchboard] daemon binary not found; run `pnpm build:backend`');
     return;
   }
-  daemon = spawn(bin, ['--port', String(DAEMON_PORT)], { stdio: 'inherit' });
+  // windowsHide, because the daemon is a console-subsystem binary: spawned
+  // from a packaged Electron app, which has no console of its own, Windows
+  // hands it a fresh one and an empty terminal window sits beside the app for
+  // the whole session. Inherited stdio still reaches a dev terminal when there
+  // is one, so this costs no logging.
+  daemon = spawn(bin, ['--port', String(DAEMON_PORT)], {
+    stdio: 'inherit',
+    windowsHide: true
+  });
   daemon.on('exit', (code) => {
     console.warn('[switchboard] daemon exited with', code);
     daemon = null;
