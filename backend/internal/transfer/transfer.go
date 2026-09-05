@@ -53,6 +53,13 @@ const (
 	// sample. Raw per-window rates swing wildly with disk and Wi-Fi jitter,
 	// which reads as a broken transfer rather than a fast one.
 	rateSmoothing = 0.7
+
+	// maxParallelSends caps how many files stream to one device at once.
+	// Dropping a folder used to offer every file immediately: a dozen pumps
+	// interleave on the one socket, the phone's single frame reader serialises
+	// them, and each bar crawls then jumps as the scheduler comes round again.
+	// Four keeps the link saturated while one slow file cannot starve the rest.
+	maxParallelSends = 4
 )
 
 // Event is one progress update plus the fields history needs but the wire
@@ -78,6 +85,10 @@ type Manager struct {
 
 	mu     sync.Mutex
 	active map[string]*transfer
+	// slots admits at most maxParallelSends outgoing files per device. It is
+	// per-device rather than global so a phone that walks out of range cannot
+	// hold the queue for a second phone that is still listening.
+	slots map[string]chan struct{}
 }
 
 // NewManager wires the engine to its transport and its telemetry sink.
@@ -89,6 +100,7 @@ func NewManager(downloadDir func() string,
 		send:        send,
 		onEvent:     onEvent,
 		active:      map[string]*transfer{},
+		slots:       map[string]chan struct{}{},
 	}
 	go func() {
 		for range time.Tick(time.Minute) {
@@ -135,6 +147,11 @@ type transfer struct {
 	parkedAt time.Time
 
 	startedAt, finishedAt int64
+
+	// slot is the device's send-concurrency semaphore; holdsSlot records
+	// whether this transfer is one of the ones currently admitted through it.
+	slot      chan struct{}
+	holdsSlot bool
 
 	lastEmit  time.Time
 	rateAt    time.Time
@@ -363,20 +380,60 @@ func (m *Manager) Send(deviceID, path string) (string, error) {
 		startedAt: time.Now().UnixMilli(),
 	}
 	t.cond = sync.NewCond(&t.mu)
+	t.slot = m.slotFor(deviceID)
 	m.add(t)
 
 	t.mu.Lock()
 	t.emitLocked(true)
 	t.mu.Unlock()
 
-	if err := m.send(deviceID, protocol.ActionFileOffer, protocol.FileOffer{
-		TransferID: t.id, Name: t.name, Size: t.size, SHA256: sum,
-		Direction: protocol.DirectionDownload,
-	}, nil); err != nil {
-		t.fail(err)
-		return "", err
-	}
+	// The offer waits for a free slot instead of going out immediately, so a
+	// batch shows up as four moving files and a queue rather than twenty that
+	// all claim to be transferring. The row is already published as pending,
+	// which is what the UI renders as "Queued".
+	go func() {
+		t.slot <- struct{}{}
+		t.mu.Lock()
+		t.holdsSlot = true
+		t.mu.Unlock()
+		if m.get(t.id) != t {
+			// Cancelled while it was still waiting its turn.
+			t.releaseSlot()
+			return
+		}
+		if err := m.send(deviceID, protocol.ActionFileOffer, protocol.FileOffer{
+			TransferID: t.id, Name: t.name, Size: t.size, SHA256: sum,
+			Direction: protocol.DirectionDownload,
+		}, nil); err != nil {
+			t.fail(err)
+		}
+	}()
 	return t.id, nil
+}
+
+// slotFor hands back the device's send semaphore, creating it on first use.
+func (m *Manager) slotFor(deviceID string) chan struct{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ch, ok := m.slots[deviceID]
+	if !ok {
+		ch = make(chan struct{}, maxParallelSends)
+		m.slots[deviceID] = ch
+	}
+	return ch
+}
+
+// releaseSlot lets the next queued file through. It is idempotent: every
+// terminal path funnels through Manager.remove, and a transfer that never got
+// as far as holding a slot must not free somebody else's.
+func (t *transfer) releaseSlot() {
+	t.mu.Lock()
+	held := t.holdsSlot
+	t.holdsSlot = false
+	t.mu.Unlock()
+	if held {
+		<-t.slot
+	}
 }
 
 // Accept starts streaming from the offset the receiver already holds.
@@ -718,8 +775,15 @@ func (m *Manager) get(id string) *transfer {
 
 func (m *Manager) remove(id string) {
 	m.mu.Lock()
+	t := m.active[id]
 	delete(m.active, id)
 	m.mu.Unlock()
+	// Removal is the one point every terminal path shares — completed,
+	// failed, cancelled, digest mismatch — so the queue advances from here
+	// rather than from four separate call sites that could each forget.
+	if t != nil {
+		t.releaseSlot()
+	}
 }
 
 func (t *transfer) fail(cause error) error {
@@ -763,22 +827,44 @@ func (t *transfer) emitLocked(force bool) {
 	t.rateAt, t.rateBytes, t.lastEmit = now, t.done, now
 
 	t.mgr.onEvent(Event{
-		FileProgress: protocol.FileProgress{
-			TransferID:  t.id,
-			Name:        t.name,
-			Direction:   t.direction,
-			Status:      t.status,
-			Transferred: t.done,
-			Size:        t.size,
-			BytesPerSec: int64(t.bps),
-			Error:       t.errMsg,
-			StartedAt:   t.startedAt,
-			FinishedAt:  t.finishedAt,
-		},
-		DeviceID: t.deviceID,
-		Path:     t.path,
-		SHA256:   t.wantSHA,
+		FileProgress: t.progressLocked(),
+		DeviceID:     t.deviceID,
+		Path:         t.path,
+		SHA256:       t.wantSHA,
 	})
+}
+
+// progressLocked is the transfer's current numbers, with no side effects, so
+// a reader can sample it without disturbing the rate estimate.
+func (t *transfer) progressLocked() protocol.FileProgress {
+	return protocol.FileProgress{
+		TransferID:  t.id,
+		Name:        t.name,
+		Direction:   t.direction,
+		Status:      t.status,
+		Transferred: t.done,
+		Size:        t.size,
+		BytesPerSec: int64(t.bps),
+		Error:       t.errMsg,
+		StartedAt:   t.startedAt,
+		FinishedAt:  t.finishedAt,
+	}
+}
+
+// Live is the in-flight view of every transfer this device has going.
+//
+// History comes back out of SQLite, which is written on a throttle and has no
+// column for a rate at all — so a UI reading only the stored rows shows a
+// stale byte count and a speed of zero. The moving numbers live here.
+func (m *Manager) Live() []protocol.FileProgress {
+	all := m.all()
+	list := make([]protocol.FileProgress, 0, len(all))
+	for _, t := range all {
+		t.mu.Lock()
+		list = append(list, t.progressLocked())
+		t.mu.Unlock()
+	}
+	return list
 }
 
 // destPath resolves an offered file name to a path inside dir.
