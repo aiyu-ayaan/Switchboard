@@ -1,13 +1,19 @@
 package com.switchboard.app.ui
 
+import android.Manifest
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,14 +27,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Monitor
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -37,28 +49,36 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.switchboard.app.UiState
-import android.net.Uri
 import com.switchboard.app.net.Display
+import com.switchboard.app.net.ShellGesture
 import com.switchboard.app.net.TransferStatus
 import com.switchboard.app.transfer.RateUnit
+import kotlin.math.roundToInt
 
 enum class Section(val title: String, val icon: ImageVector) {
     Displays("Displays", Icons.Filled.Monitor),
@@ -118,6 +138,13 @@ class SectionActions(
     val rateUnit: RateUnit
 )
 
+/**
+ * Expressive Utility Control Deck for Switchboard.
+ *
+ * Replaces the passive multi-screen drill-down launcher with an interactive,
+ * high-speed dashboard: inline media playback & master volume slider, multi-display
+ * brightness selector with quick presets, and tactile bento action tiles.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -126,15 +153,32 @@ fun HomeScreen(
     onOpen: (Section) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var quick by remember { mutableStateOf<Section?>(null) }
-    val sections = Section.entries.filter { it.availableIn(state) }
+    // 1-tap Send File launcher for the Bento tile
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) actions.onSendFile(uri)
+    }
+    val notifications = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        picker.launch(arrayOf("*/*"))
+    }
+    val onTriggerSendFile: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            picker.launch(arrayOf("*/*"))
+        }
+    }
+
+    val hasAnyControls = state.canControlDisplay || state.canControlVolume ||
+        state.canControlMedia || state.canDriveInput
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (sections.isEmpty()) {
+        if (!hasAnyControls && state.host.displays.isEmpty()) {
             item {
                 EmptyCard(
                     title = "No controls available",
@@ -142,136 +186,714 @@ fun HomeScreen(
                         "Switchboard daemon is running with access to your display and audio devices."
                 )
             }
-        }
+        } else {
+            // 1. Hero Connection Status Banner
+            item {
+                HostHeroCard(state = state)
+            }
 
-        items(sections, key = { it.name }) { section ->
-            SectionRow(
-                section = section,
-                summary = section.summaryOf(state),
-                onClick = { onOpen(section) },
-                onLongClick = { quick = section }
-            )
-        }
-    }
-
-    quick?.let { section ->
-        ModalBottomSheet(
-            onDismissRequest = { quick = null },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, bottom = 36.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = section.icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = section.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+            // 2. Active Now Playing & Audio Controls Pod (0-Click Media + Master Volume)
+            if (state.canControlVolume || state.canControlMedia) {
+                item {
+                    ActiveAudioPod(
+                        state = state,
+                        actions = actions,
+                        onOpen = { onOpen(Section.Audio) }
                     )
                 }
-                SectionBody(section, state, actions, compact = true)
+            }
+
+            // 3. Multi-Monitor Displays Pod (0-Click Brightness & Multi-Display Selector)
+            if (state.canControlDisplay && state.host.displays.isNotEmpty()) {
+                item {
+                    DisplaysControlPod(
+                        displays = state.host.displays,
+                        onBrightness = actions.onBrightness,
+                        onOpen = { onOpen(Section.Displays) }
+                    )
+                }
+            }
+
+            // 4. Bento Utility Grid (Touchpad, Files, Camera, Mixer)
+            item {
+                BentoUtilityGrid(
+                    state = state,
+                    actions = actions,
+                    onOpen = onOpen,
+                    onSendFile = onTriggerSendFile
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Tonal hero banner indicating real-time host connectivity and key hardware summary.
+ */
 @Composable
-private fun SectionRow(
-    section: Section,
-    summary: String,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
+private fun HostHeroCard(
+    state: UiState,
+    modifier: Modifier = Modifier
 ) {
-    val haptics = LocalHapticFeedback.current
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     Card(
         shape = RoundedCornerShape(24.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .bouncyCombinedClickable(
-                onClick = onClick,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongClick()
-                }
-            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = section.icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .graphicsLayer { alpha = pulseAlpha }
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 }
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = section.title,
+                    text = state.activeHost?.hostName ?: "Switchboard Desktop",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Connected",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
                     )
+                    if (state.host.displays.isNotEmpty()) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "${state.host.displays.size} panels",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (state.canControlVolume) {
+                        Text(
+                            text = "•",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (state.host.volume.muted) "Muted" else "${state.host.volume.level}% vol",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (state.host.volume.muted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Unified live audio control pod: artwork, transport, animated equalizer,
+ * and inline master volume slider.
+ */
+@Composable
+private fun ActiveAudioPod(
+    state: UiState,
+    actions: SectionActions,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val media = state.host.media
+    val hasMedia = state.canControlMedia && (media.active || media.title.isNotEmpty())
+
+    SectionCard(modifier = modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (hasMedia) Icons.Filled.MusicNote else Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = if (hasMedia) "Now Playing" else "Audio Controls",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (!hasMedia && state.canRouteOutput) {
+                    val defaultOut = state.host.outputs.firstOrNull { it.default }?.name
+                    if (!defaultOut.isNullOrEmpty()) {
+                        Text(
+                            text = defaultOut,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .bouncyClickable(onClick = onOpen)
+                    .padding(vertical = 4.dp, horizontal = 4.dp)
+            ) {
+                Text(
+                    text = "Mixer",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open audio mixer and devices",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        if (hasMedia) {
+            Spacer(Modifier.height(14.dp))
+            NowPlaying(
+                media = media,
+                artwork = state.artwork,
+                artSize = 64.dp
+            )
+            Spacer(Modifier.height(12.dp))
+            TransportRow(
+                playing = media.isPlaying,
+                onMedia = actions.onMedia
+            )
+        }
+
+        if (state.canControlVolume) {
+            Spacer(Modifier.height(14.dp))
+            InlineVolumeSlider(
+                level = state.host.volume.level,
+                muted = state.host.volume.muted,
+                onVolume = actions.onVolume
+            )
+        }
+    }
+}
+
+/**
+ * High-tactility inline volume slider with quick mute container and percentage readout.
+ */
+@Composable
+private fun InlineVolumeSlider(
+    level: Int,
+    muted: Boolean,
+    onVolume: (Int, Boolean) -> Unit
+) {
+    var dragging by remember { mutableFloatStateOf(Float.NaN) }
+    val shown = if (dragging.isNaN()) level.toFloat() else dragging
+    val haptics = LocalHapticFeedback.current
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier
+                .size(42.dp)
+                .bouncyClickable {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onVolume(level, !muted)
+                }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                    contentDescription = if (muted) "Unmute master volume" else "Mute master volume",
+                    tint = if (muted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Slider(
+            value = shown,
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                if (!dragging.isNaN()) {
+                    onVolume(dragging.roundToInt(), muted)
+                    dragging = Float.NaN
+                }
+            },
+            valueRange = 0f..100f,
+            enabled = !muted,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            ),
+            modifier = Modifier
+                .weight(1f)
+                .semantics { contentDescription = "Master volume slider" }
+        )
+        Spacer(Modifier.width(10.dp))
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.width(52.dp)
+        ) {
+            Text(
+                text = if (muted) "MUTED" else "${shown.roundToInt()}%",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = if (muted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * Multi-display control pod with instant panel selector tabs, inline brightness,
+ * and 1-tap quick preset pills (25%, 50%, 75%, 100%).
+ */
+@Composable
+private fun DisplaysControlPod(
+    displays: List<Display>,
+    onBrightness: (Display, Int) -> Unit,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selectedIndex by remember(displays.size) { mutableIntStateOf(0) }
+    val safeIndex = selectedIndex.coerceIn(0, (displays.size - 1).coerceAtLeast(0))
+    val display = displays.getOrNull(safeIndex) ?: return
+    val haptics = LocalHapticFeedback.current
+
+    SectionCard(modifier = modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (display.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "Displays",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (displays.size == 1) display.name else "${displays.size} panels connected",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .bouncyClickable(onClick = onOpen)
+                    .padding(vertical = 4.dp, horizontal = 4.dp)
+            ) {
+                Text(
+                    text = "All Panels",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open all display controls",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        if (displays.size > 1) {
+            Spacer(Modifier.height(12.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                itemsIndexed(displays) { index, disp ->
+                    val isSelected = index == safeIndex
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
+                        modifier = Modifier.bouncyClickable {
+                            selectedIndex = index
+                        }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (disp.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
+                                contentDescription = null,
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = disp.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        LevelRow(
+            icon = Icons.Filled.LightMode,
+            label = "${display.name} brightness",
+            value = display.brightness,
+            min = display.minBrightness,
+            max = display.maxBrightness,
+            onChange = { onBrightness(display, it) }
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val presets = listOf(25 to "25%", 50 to "50%", 75 to "75%", 100 to "100%")
+            presets.forEach { (pct, label) ->
+                val targetVal = ((pct / 100f) * (display.maxBrightness - display.minBrightness) + display.minBrightness).roundToInt()
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .bouncyClickable {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onBrightness(display, targetVal)
+                        }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Responsive 2-column bento grid for high-frequency tools: Touchpad, File drop,
+ * Webcam mode, and App Audio Mixer.
+ */
+@Composable
+private fun BentoUtilityGrid(
+    state: UiState,
+    actions: SectionActions,
+    onOpen: (Section) -> Unit,
+    onSendFile: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptics = LocalHapticFeedback.current
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Row 1: Touchpad & Files
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Touchpad Tile
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Filled.Mouse,
+                title = "Touchpad",
+                subtitle = "Drive pointer & gestures",
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                onClick = { onOpen(Section.Touchpad) }
+            ) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(30.dp)
+                            .bouncyClickable {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                actions.touchpad.onGesture(ShellGesture.SHOW_DESKTOP)
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Desktop",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(30.dp)
+                            .bouncyClickable {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                actions.touchpad.onGesture(ShellGesture.TASK_VIEW)
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Tasks",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Files Tile
+            val activeTransfers = state.transfers.filterNot { TransferStatus.isTerminal(it.status) }
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Filled.Folder,
+                title = "Send Files",
+                subtitle = if (activeTransfers.isNotEmpty()) {
+                    "${activeTransfers.size} transferring"
+                } else {
+                    "Drop to desktop"
+                },
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                onClick = { onOpen(Section.Files) }
+            ) {
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp)
+                        .bouncyClickable(onClick = onSendFile)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CloudUpload,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "Choose",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        }
+
+        // Row 2: Camera & App Mixer
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Camera Tile
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Filled.PhotoCamera,
+                title = "Webcam",
+                subtitle = "Stream to PC",
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                onClick = { onOpen(Section.Camera) }
+            )
+
+            // App Mixer Tile
+            val sessionCount = state.host.mixer.size
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Filled.GraphicEq,
+                title = "App Mixer",
+                subtitle = when (sessionCount) {
+                    0 -> "No apps active"
+                    1 -> "1 active app"
+                    else -> "$sessionCount active apps"
+                },
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                onClick = { onOpen(Section.Audio) }
+            )
+        }
+    }
+}
+
+/**
+ * Expressive tactile bento card container.
+ */
+@Composable
+private fun BentoTile(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    onClick: () -> Unit,
+    content: (@Composable () -> Unit)? = null
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier.bouncyClickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (content != null) {
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Detail sub-screen container, keeping the full dedicated screen layouts
+ * intact for users drilling down into individual sections.
+ */
 @Composable
 fun SectionScreen(
     section: Section,
@@ -389,8 +1011,7 @@ private fun SectionBody(
             }
 
             // Reachable only from the quick-controls sheet: the full screen
-            // short-circuits above. A pad inside a draggable sheet would fight
-            // the sheet for every stroke, so this points at the real one.
+            // short-circuits above.
             Section.Touchpad -> EmptyCard(
                 title = "Touchpad",
                 body = "Open the Touchpad section for the pointer, gestures and buttons."
