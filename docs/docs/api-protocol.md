@@ -176,13 +176,24 @@ stop the cursor creeping at all.
 and that table is the entire keyboard surface the air mouse exposes, so a
 malformed frame cannot turn the pointer channel into a general keyboard.
 
-#### 9. `file_transfer_init`
+#### 9. `system.lock`
+Locks the host workstation console session (equivalent to `user32!LockWorkStation` or Win+L). Guarded by the `lock` capability.
+
+```json
+{
+  "type": "command",
+  "action": "system.lock",
+  "id": "req-008"
+}
+```
+
+#### 10. `file_transfer_init`
 Initiates a peer-to-peer file transfer.
 
 ```json
 {
   "type": "file_transfer_init",
-  "id": "req-007",
+  "id": "req-009",
   "payload": {
     "name": "photo.jpg",
     "size": 4194304,
@@ -313,3 +324,4 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `POST` | `/local/files/control` | Pause, resume, or cancel a transfer. | `{"transferId": "...", "action": "cancel"}` |
 | `GET` | `/local/settings` | Retrieve host preferences. | None |
 | `POST` | `/local/settings` | Update host preferences. | `{"downloadDir": "...", "runInBackground": true}` |
+| `POST` | `/local/system/lock` | Lock the host workstation session. | `{}` |

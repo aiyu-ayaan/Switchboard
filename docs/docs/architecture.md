@@ -73,6 +73,7 @@ The host daemon is a lightweight, compiled Go service designed for minimal memor
 - **`internal/system`**:
   - Native Windows bindings to hardware and OS subsystems.
   - Wraps `dxva2.dll` for external monitors, WMI for laptop internal displays, and COM interfaces for WASAPI Core Audio and Windows Media SMTC.
+  - Exposes workstation console locking via `user32!LockWorkStation` and mouse/keyboard injection via `user32!SendInput`.
 - **`internal/transfer`**:
   - Manages asynchronous file uploads and downloads.
   - Enforces chunk validation, stream throttling, and SHA-256 checksum computation.
