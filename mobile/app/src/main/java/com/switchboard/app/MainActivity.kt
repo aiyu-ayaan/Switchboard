@@ -307,6 +307,7 @@ fun SwitchboardApp(
                         if (!connected) {
                             PairingScreen(
                                 hosts = state.hosts,
+                                discovered = state.discovered,
                                 liveHostIds = state.liveHostIds,
                                 error = state.error,
                                 onScan = { scanner(Unit) },

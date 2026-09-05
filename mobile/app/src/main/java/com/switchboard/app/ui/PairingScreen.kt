@@ -58,9 +58,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.switchboard.app.SwitchboardViewModel
 import com.switchboard.app.data.KnownHost
+import com.switchboard.app.net.DiscoveredHost
 
 /**
  * Shown when no host is connected: scan a new desktop, or pick one already
@@ -69,6 +71,7 @@ import com.switchboard.app.data.KnownHost
 @Composable
 fun PairingScreen(
     hosts: List<KnownHost>,
+    discovered: List<DiscoveredHost> = emptyList(),
     liveHostIds: Set<String> = emptySet(),
     error: String?,
     onScan: () -> Unit,
@@ -80,6 +83,13 @@ fun PairingScreen(
 ) {
     var confirmForget by remember { mutableStateOf<KnownHost?>(null) }
     var manualOpen by remember { mutableStateOf(false) }
+    // Set when the user taps a discovered desktop: the dialog opens with the
+    // address already filled, leaving only the code to type.
+    var prefilledAddress by remember { mutableStateOf("") }
+
+    // A desktop already paired needs no address and no code, so it belongs in
+    // the paired list rather than here.
+    val unpaired = discovered.filter { found -> hosts.none { it.daemonId == found.daemonId } }
 
     LazyColumn(
         modifier = modifier
@@ -206,6 +216,24 @@ fun PairingScreen(
             }
         }
 
+        if (unpaired.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Found on this network",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp, start = 4.dp)
+                )
+            }
+            items(unpaired, key = { it.daemonId }) { found ->
+                DiscoveredRow(host = found) {
+                    prefilledAddress = found.address
+                    manualOpen = true
+                }
+            }
+        }
+
         if (hosts.isNotEmpty()) {
             item {
                 Row(
@@ -298,9 +326,14 @@ fun PairingScreen(
 
     if (manualOpen) {
         ManualPairingDialog(
-            onDismiss = { manualOpen = false },
+            initialAddress = prefilledAddress,
+            onDismiss = {
+                manualOpen = false
+                prefilledAddress = ""
+            },
             onSubmit = { address, code ->
                 manualOpen = false
+                prefilledAddress = ""
                 onManual(address, code)
             }
         )
@@ -446,11 +479,76 @@ private fun HostRow(
     }
 }
 
+/**
+ * A desktop advertising itself over mDNS that this phone has not paired with.
+ *
+ * Tapping it only fills the address in: discovery proves nothing, so the
+ * pairing code is still typed and still does all the authenticating.
+ */
 @Composable
-private fun ManualPairingDialog(onDismiss: () -> Unit, onSubmit: (String, String) -> Unit) {
-    var address by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("") }
-    var addPortToo by remember { mutableStateOf(false) }
+private fun DiscoveredRow(host: DiscoveredHost, onSelect: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bouncyClickable(onClick = onSelect)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Computer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = host.hostName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${host.address} - tap to pair",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManualPairingDialog(
+    initialAddress: String = "",
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit
+) {
+    var address by remember { mutableStateOf(initialAddress.substringBefore(':')) }
+    var port by remember { mutableStateOf(initialAddress.substringAfter(':', "")) }
+    var addPortToo by remember { mutableStateOf(initialAddress.contains(':')) }
     var code by remember { mutableStateOf("") }
 
     val isPortValid = !addPortToo || port.isBlank() || (port.toIntOrNull() != null && port.toInt() in 1..65535)

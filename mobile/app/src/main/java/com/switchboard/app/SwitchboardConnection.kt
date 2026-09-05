@@ -267,6 +267,24 @@ class SwitchboardConnection private constructor(context: Context) {
         _state.update { it.copy(hosts = store.hosts()) }
     }
 
+    /**
+     * Moves a stored host to the address mDNS just reported it at.
+     *
+     * DHCP hands the desktop a new lease and every stored endpoint goes stale;
+     * without this, discovery would find the host while reconnect kept dialling
+     * the old address. The host key is untouched, so the handshake still has to
+     * prove the machine at the new address is the same one.
+     */
+    fun adoptDiscoveredAddress(daemonId: String, host: String, port: Int) {
+        val known = store.hosts().find { it.daemonId == daemonId } ?: return
+        if (known.host == host && known.port == port) return
+        // Only the stored record moves. A live socket keeps the address it
+        // dialled; the next connect reads the store, which is where reconnect
+        // picks its host from.
+        store.save(known.copy(host = host, port = port))
+        _state.update { it.copy(hosts = store.hosts()) }
+    }
+
     fun clearError() = _state.update { it.copy(error = null) }
 
     fun hosts(): List<KnownHost> = store.hosts()

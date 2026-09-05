@@ -8,8 +8,10 @@ import androidx.lifecycle.viewModelScope
 import com.switchboard.app.data.TransferPreferences
 import com.switchboard.app.data.KnownHost
 import com.switchboard.app.net.Actions
+import com.switchboard.app.net.DiscoveredHost
 import com.switchboard.app.net.Display
 import com.switchboard.app.net.DisplaySet
+import com.switchboard.app.net.HostDiscovery
 import com.switchboard.app.net.HostState
 import com.switchboard.app.net.MediaCommand
 import com.switchboard.app.net.MixerSet
@@ -48,7 +50,9 @@ data class UiState(
     val error: String? = null,
     val scanning: Boolean = false,
     /** Live transfers first, then the terminal ones the Files history shows. */
-    val transfers: List<FileProgress> = emptyList()
+    val transfers: List<FileProgress> = emptyList(),
+    /** Desktops seen over mDNS, so pairing does not need a typed IP address. */
+    val discovered: List<DiscoveredHost> = emptyList()
 ) {
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
@@ -72,6 +76,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private val connection = SwitchboardConnection.get(application)
+    private val discovery = HostDiscovery(application)
     private val transfers = TransferEngine.get(application)
     val transferPreferences = TransferPreferences(application)
 
@@ -100,6 +105,17 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             transfers.transfers.collect { list -> _uiState.update { it.copy(transfers = list) } }
+        }
+
+        // Browsing lives on the ViewModel rather than the connection: it is
+        // only meaningful while a screen is up, and it stops with the screen.
+        viewModelScope.launch {
+            discovery.hosts().collect { hosts ->
+                // A paired desktop that moved to a new DHCP lease is followed
+                // here, so reconnect stops dialling the address it has left.
+                hosts.forEach { connection.adoptDiscoveredAddress(it.daemonId, it.host, it.port) }
+                _uiState.update { it.copy(discovered = hosts) }
+            }
         }
     }
 
