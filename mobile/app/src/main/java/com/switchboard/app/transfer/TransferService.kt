@@ -22,8 +22,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Keeps the process alive for the duration of a transfer.
@@ -42,6 +42,19 @@ class TransferService : Service() {
     /** Terminal states are notified once; the flow re-emits on every progress tick. */
     private val announced = mutableSetOf<String>()
 
+    /**
+     * Posting a notification is four binder round trips to the system server —
+     * one per PendingIntent plus the notify itself. The transfer flow ticks
+     * four times a second per file, so with several in flight that was over
+     * sixty synchronous IPCs a second on the main thread, which is what froze
+     * the UI while bytes were moving. The intents are built once and the repost
+     * is rate-limited to [NOTIFY_INTERVAL_MS]; a status change still goes
+     * straight through, because that is when the action buttons change.
+     */
+    private val intents = mutableMapOf<String, PendingIntent>()
+    private var lastPostAt = 0L
+    private var lastPostKey = ""
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -56,17 +69,27 @@ class TransferService : Service() {
         startForegroundCompat(buildProgressNotification(null))
 
         scope.launch {
-            engine.transfers.collectLatest { transfers ->
+            engine.transfers.collect { transfers ->
                 val active = transfers.firstOrNull { !TransferStatus.isTerminal(it.status) }
-                transfers.filter { TransferStatus.isTerminal(it.status) && announced.add(it.transferId) }
-                    .forEach(::notifyTerminal)
+                // `announced` is only ever read and written here, on the main
+                // thread, so the set needs no synchronisation of its own.
+                val finished = transfers
+                    .filter { TransferStatus.isTerminal(it.status) && announced.add(it.transferId) }
 
                 if (active == null) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
-                } else {
-                    NotificationManagerCompat.from(this@TransferService)
-                        .notify(PROGRESS_ID, buildProgressNotification(active))
+                }
+                val repost = active != null && dueForRepost(active)
+                if (finished.isEmpty() && !repost) return@collect
+
+                // Building and posting are the expensive half and neither needs
+                // the main thread. The collector stays on it only for the
+                // service lifecycle calls above.
+                withContext(Dispatchers.Default) {
+                    val manager = NotificationManagerCompat.from(this@TransferService)
+                    finished.forEach { notifyTerminal(manager, it) }
+                    if (repost) manager.notify(PROGRESS_ID, buildProgressNotification(active))
                 }
             }
         }
@@ -77,6 +100,22 @@ class TransferService : Service() {
         val control = intent?.getStringExtra(EXTRA_CONTROL)
         if (transferId != null && control != null) engine.control(transferId, control)
         return START_NOT_STICKY
+    }
+
+    /**
+     * Whether the ongoing notification is worth reposting yet.
+     *
+     * A progress bar redrawn four times a second is not four times as useful as
+     * one redrawn once, and the platform coalesces rapid posts anyway — the
+     * cost of the ones it drops is paid before it ever sees them.
+     */
+    private fun dueForRepost(progress: FileProgress): Boolean {
+        val key = progress.transferId + progress.status
+        val now = android.os.SystemClock.uptimeMillis()
+        if (key == lastPostKey && now - lastPostAt < NOTIFY_INTERVAL_MS) return false
+        lastPostKey = key
+        lastPostAt = now
+        return true
     }
 
     override fun onDestroy() {
@@ -133,7 +172,7 @@ class TransferService : Service() {
         return builder.build()
     }
 
-    private fun notifyTerminal(progress: FileProgress) {
+    private fun notifyTerminal(manager: NotificationManagerCompat, progress: FileProgress) {
         val text = when (progress.status) {
             TransferStatus.COMPLETED -> TransferMath.formatBytes(progress.size) + " transferred"
             TransferStatus.CANCELLED -> "Cancelled"
@@ -153,29 +192,39 @@ class TransferService : Service() {
             .setAutoCancel(true)
             .build()
 
-        NotificationManagerCompat.from(this).notify(progress.transferId.hashCode(), notification)
+        manager.notify(progress.transferId.hashCode(), notification)
     }
 
-    private fun openApp(): PendingIntent = PendingIntent.getActivity(
-        this,
-        0,
-        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+    /**
+     * Resolving a PendingIntent is a binder call into the system server, so the
+     * handful this service needs are resolved once and reused rather than on
+     * every progress tick.
+     */
+    private fun openApp(): PendingIntent = intents.getOrPut("open") {
+        PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
 
     /**
      * Each action gets its own request code: two PendingIntents that differ
      * only in their extras are the same intent to the system, so pause and
      * cancel would otherwise collapse into one.
      */
-    private fun controlIntent(transferId: String, control: String): PendingIntent = PendingIntent.getService(
-        this,
-        (transferId + control).hashCode(),
-        Intent(this, TransferService::class.java)
-            .putExtra(EXTRA_TRANSFER_ID, transferId)
-            .putExtra(EXTRA_CONTROL, control),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+    private fun controlIntent(transferId: String, control: String): PendingIntent =
+        intents.getOrPut(transferId + control) {
+            PendingIntent.getService(
+                this,
+                (transferId + control).hashCode(),
+                Intent(this, TransferService::class.java)
+                    .putExtra(EXTRA_TRANSFER_ID, transferId)
+                    .putExtra(EXTRA_CONTROL, control),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
     private fun createChannels() {
         val manager = getSystemService(NotificationManager::class.java)
@@ -193,6 +242,9 @@ class TransferService : Service() {
         private const val CHANNEL_DONE = "transfers.done"
         private const val EXTRA_TRANSFER_ID = "transferId"
         private const val EXTRA_CONTROL = "control"
+
+        /** Floor on how often the ongoing notification is reposted. */
+        private const val NOTIFY_INTERVAL_MS = 1_000L
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, TransferService::class.java))
