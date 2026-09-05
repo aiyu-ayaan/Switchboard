@@ -6,6 +6,7 @@
 // the loopback API.
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
+  AudioDevice,
   AudioSession,
   Display,
   FileTransfer,
@@ -29,6 +30,7 @@ const bridge: SwitchboardBridge = {
   setVolume: (level, muted) => call<Volume>('/volume', { level, muted }),
   setSessionVolume: (sessionId, level, muted) =>
     call<AudioSession[]>('/mixer', { sessionId, level, muted }),
+  setAudioOutput: (deviceId) => call<AudioDevice[]>('/audio/output', { deviceId }),
   media: async (action: MediaAction) => {
     await call('/media', { action });
   },

@@ -1,6 +1,8 @@
 import {
   AudioLines,
+  Check,
   Music,
+  Speaker,
   Pause,
   Play,
   SkipBack,
@@ -10,7 +12,7 @@ import {
   VolumeX
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import type { AudioSession, LocalState } from '../../shared/types';
+import type { AudioDevice, AudioSession, LocalState } from '../../shared/types';
 import { useThrottledCommit } from '../useHostState';
 import { Card, EmptyState, Pane, Sidebar, SidebarItem } from './Shell';
 import { LevelSlider } from './LevelSlider';
@@ -22,10 +24,12 @@ interface AudioViewProps {
 }
 
 export function AudioView({ state, patch, setPaused }: AudioViewProps) {
-  const { volume, mixer } = state.host;
+  const { volume, mixer, outputs } = state.host;
   const hasAudio = state.host.capabilities.includes('volume');
   const hasMedia = state.host.capabilities.includes('media');
   const hasMixer = state.host.capabilities.includes('mixer');
+  const hasOutputs = state.host.capabilities.includes('outputs');
+  const activeOutput = outputs.find((o) => o.default);
 
   const sendVolume = useThrottledCommit((level: number) =>
     window.switchboard.setVolume(level, volume.muted)
@@ -51,6 +55,21 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
     const next = !volume.muted;
     applyLocal(volume.level, next);
     await window.switchboard.setVolume(volume.level, next).catch(() => {});
+  };
+
+  // Moving the default endpoint takes Windows a moment, and the poll would
+  // otherwise show the old device still ticked. The list is patched first so
+  // the tick lands under the pointer, and the reply reconciles it.
+  const selectOutput = async (deviceId: string) => {
+    if (deviceId === activeOutput?.id) return;
+    patch((draft) => ({
+      ...draft,
+      host: {
+        ...draft.host,
+        outputs: draft.host.outputs.map((o) => ({ ...o, default: o.id === deviceId }))
+      }
+    }));
+    await window.switchboard.setAudioOutput(deviceId).catch(() => {});
   };
 
   const media = state.host.media;
@@ -85,6 +104,14 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
           selected
           onSelect={() => {}}
         />
+        {hasOutputs && (
+          <SidebarItem
+            label="Output device"
+            icon={Speaker}
+            detail={activeOutput?.name ?? 'None'}
+            onSelect={() => {}}
+          />
+        )}
       </Sidebar>
 
       <Pane
@@ -139,6 +166,28 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
               </p>
             )}
           </Card>
+
+          {hasOutputs && (
+            <Card title="Output device">
+              {outputs.length === 0 ? (
+                <EmptyState
+                  icon={Speaker}
+                  title="No playback devices"
+                  hint="Windows reports no active output endpoints. Plug in or enable a device and it appears on the next poll."
+                />
+              ) : (
+                <div className="grid gap-1">
+                  {outputs.map((device) => (
+                    <OutputRow key={device.id} device={device} onSelect={selectOutput} />
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-micro text-ink-faint">
+                Switching the output moves playback, communications and multimedia together,
+                so the whole host follows the choice.
+              </p>
+            </Card>
+          )}
 
           {hasMixer && (
             <Card title="Applications">
@@ -245,6 +294,32 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
         </div>
       </Pane>
     </>
+  );
+}
+
+function OutputRow({
+  device,
+  onSelect
+}: {
+  device: AudioDevice;
+  onSelect: (deviceId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={device.default}
+      onClick={() => onSelect(device.id)}
+      className={`flex items-center gap-2 rounded border px-2.5 py-2 text-left text-xs transition-colors ${
+        device.default
+          ? 'border-accent/50 bg-accent/10 text-ink'
+          : 'border-edge text-ink-dim hover:bg-raised hover:text-ink'
+      }`}
+    >
+      <Speaker aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{device.name}</span>
+      {device.default && <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />}
+    </button>
   );
 }
 

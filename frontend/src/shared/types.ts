@@ -53,6 +53,17 @@ export interface AudioSession {
   active: boolean;
 }
 
+/**
+ * One output endpoint the host can play through. `id` is the OS endpoint
+ * identifier, which survives a reboot and a re-plug — unlike the position in
+ * the list, which does not.
+ */
+export interface AudioDevice {
+  id: string;
+  name: string;
+  default: boolean;
+}
+
 export interface HostState {
   hostName: string;
   daemonId: string;
@@ -60,6 +71,8 @@ export interface HostState {
   volume: Volume;
   /** Empty on a host without per-application control; see `capabilities`. */
   mixer: AudioSession[];
+  /** Endpoints the host can route sound to; exactly one carries `default`. */
+  outputs: AudioDevice[];
   media: MediaState;
   capabilities: string[];
 }
@@ -140,6 +153,8 @@ export interface SwitchboardBridge {
   refreshDisplays(): Promise<Display[]>;
   setVolume(level: number, muted: boolean): Promise<Volume>;
   setSessionVolume(sessionId: string, level: number, muted: boolean): Promise<AudioSession[]>;
+  /** Routes host audio to one endpoint; resolves with the refreshed list. */
+  setAudioOutput(deviceId: string): Promise<AudioDevice[]>;
   media(action: MediaAction): Promise<void>;
   getMediaArtwork(): Promise<MediaArtwork>;
   rotatePairing(): Promise<PairingInfo>;

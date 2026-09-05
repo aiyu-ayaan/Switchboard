@@ -234,6 +234,7 @@ const ALLOWED_ROUTES = new Set([
   '/display/contrast',
   '/volume',
   '/mixer',
+  '/audio/output',
   '/media',
   '/media/artwork',
   '/pairing/rotate',
