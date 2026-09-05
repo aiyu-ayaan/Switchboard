@@ -3,6 +3,7 @@ package com.switchboard.app.ui
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -41,6 +42,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,18 +71,32 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var folderError by remember { mutableStateOf<String?>(null) }
+
     val pickFolder = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { tree ->
-        if (tree != null) {
-            // Without persisting the grant the folder is unwritable after the
-            // next process death, and an incoming file would fail on a setting
-            // the user believes they already made.
+        if (tree == null) return@rememberLauncherForActivityResult
+
+        // Without persisting the grant the folder is unwritable after the next
+        // process death, and an incoming file would fail on a setting the user
+        // believes they already made. Not every picker hands back a tree that
+        // can be persisted, and taking one that cannot throws — so the folder
+        // is only stored once the grant is actually held, and the failure is
+        // said out loud rather than leaving a tap that did nothing.
+        val granted = runCatching {
             context.contentResolver.takePersistableUriPermission(
                 tree,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
+        }.isSuccess
+
+        if (granted) {
+            folderError = null
             onSetSaveDirectory(tree.toString())
+        } else {
+            folderError = "Android would not grant that folder. Pick one under " +
+                "Internal storage — media folders such as Videos or Music cannot be used."
         }
     }
 
@@ -272,8 +291,17 @@ fun SettingsScreen(
                         },
                         icon = Icons.Filled.Folder,
                         selected = transferConfig.saveDirectory.isNotEmpty(),
-                        onClick = { pickFolder.launch(null) }
+                        onClick = { pickFolder.launch(initialSaveDirectory(transferConfig.saveDirectory)) }
                     )
+
+                    folderError?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
 
                     Spacer(Modifier.height(2.dp))
                     Text(
@@ -506,6 +534,30 @@ private fun PaletteChip(
         }
     }
 }
+
+/**
+ * Where the folder picker should open.
+ *
+ * Launched with no hint it reopens wherever the picker was last left, which is
+ * wherever the send-a-file picker left it: some album under Videos or Images.
+ * Those are media roots, and a media root cannot be granted as a tree at all,
+ * so the picker offers no way to select the folder standing in front of you
+ * and the setting looks broken rather than unsupported. Downloads on primary
+ * storage is somewhere a grant is actually possible. A folder already chosen
+ * is better still, since the reason to reopen this is usually to move it
+ * somewhere nearby.
+ *
+ * It is only a hint: a picker is free to ignore it, and one that does lands
+ * exactly where it did before.
+ */
+private fun initialSaveDirectory(current: String): Uri =
+    if (current.isNotEmpty()) {
+        Uri.parse(current)
+    } else {
+        DocumentsContract.buildDocumentUri(EXTERNAL_STORAGE_PROVIDER, "primary:Download")
+    }
+
+private const val EXTERNAL_STORAGE_PROVIDER = "com.android.externalstorage.documents"
 
 /**
  * The tree URI's last path segment is the closest thing the SAF exposes to a

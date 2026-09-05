@@ -94,6 +94,22 @@ Switchboard avoids legacy or high-risk permissions like `READ_EXTERNAL_STORAGE` 
 2. The returned `Uri` is granted persistent read/write permissions via `contentResolver.takePersistableUriPermission(uri, ...)`.
 3. Incoming files are created inside the chosen directory using `DocumentFile.createFile()`.
 
+**The picker is opened with a starting location**, not with `null`. Launched
+with no hint it resumes wherever it was last left — which is wherever the
+send-a-file picker left it, typically an album under Videos or Images. Those
+are media roots, and **a media root cannot be granted as a tree at all**, so
+the picker shows no way to select the folder in front of you and the setting
+appears broken. `EXTRA_INITIAL_URI` therefore points at the already-chosen
+folder, or at `primary:Download` on the external storage provider when none
+has been chosen yet. It is a hint, and a picker may ignore it.
+
+**A tree that cannot be persisted is refused, not stored.** Not every picker
+returns a `Uri` carrying `FLAG_GRANT_PERSISTABLE_URI_PERMISSION`, and taking
+one that does not throws `SecurityException`. The save folder is recorded only
+once the grant is actually held; otherwise the settings row says so, rather
+than leaving a tap that silently did nothing and a folder that would fail on
+the next incoming file.
+
 ### Outgoing File Picker
 When sending files from phone to PC:
 1. The user taps **Choose** to launch `ACTION_OPEN_DOCUMENT`.
