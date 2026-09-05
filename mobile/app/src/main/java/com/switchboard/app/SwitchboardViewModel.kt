@@ -49,6 +49,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -442,9 +443,14 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     fun unlockSystem(activity: androidx.fragment.app.FragmentActivity) {
         val daemonId = _uiState.value.activeHost?.daemonId ?: return
         viewModelScope.launch {
-            connection.send(Actions.UNLOCK_CHALLENGE)
+            // The request goes out from onSubscription, not before it. The
+            // nonce flow replays nothing, so an answer that arrived while
+            // nothing was collecting would be dropped and this would sit here
+            // until the timeout — a race a fast desktop wins often enough.
             val encoded = withTimeoutOrNull(CHALLENGE_TIMEOUT_MS) {
-                connection.unlockChallenges.first()
+                connection.unlockChallenges
+                    .onSubscription { connection.send(Actions.UNLOCK_CHALLENGE) }
+                    .first()
             }
             if (encoded == null) {
                 connection.reportError("The desktop did not answer the unlock request.")

@@ -160,6 +160,11 @@ func RunUnlockService() error {
 				}
 			}
 		}
+		// Between closing this instance and creating the next there is a
+		// moment with no pipe, in which a client gets "file not found". The
+		// daemon says so plainly and the user taps again; unlock is a rare,
+		// deliberate act with a cooldown in front of it, so keeping a spare
+		// instance warm would buy nothing worth the extra state.
 		windows.DisconnectNamedPipe(pipe)
 		windows.CloseHandle(pipe)
 	}
