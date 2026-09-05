@@ -25,11 +25,14 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -75,14 +78,21 @@ import com.switchboard.app.transfer.TransferMath
 fun FilesBody(
     transfers: List<FileProgress>,
     rateUnit: RateUnit,
-    onSendFile: (Uri) -> Unit,
-    onControl: (String, String) -> Unit
+    onSendFiles: (List<Uri>) -> Unit,
+    onSendFolder: (Uri) -> Unit,
+    onControl: (String, String) -> Unit,
+    onSendFile: (Uri) -> Unit = { onSendFiles(listOf(it)) }
 ) {
     val context = LocalContext.current
     var blocked by remember { mutableStateOf(false) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) onSendFile(uri)
+    val filesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (!uris.isNullOrEmpty()) onSendFiles(uris)
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+        if (treeUri != null) onSendFolder(treeUri)
     }
 
     // Asked before the picker rather than after: a transfer that starts and
@@ -91,40 +101,58 @@ fun FilesBody(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         blocked = !granted
-        picker.launch(arrayOf("*/*"))
+        pendingAction?.invoke()
+        pendingAction = null
+    }
+
+    fun launchWithNotifications(action: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pendingAction = action
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            action()
+        }
     }
 
     val active = transfers.filterNot { TransferStatus.isTerminal(it.status) }
     val history = transfers.filter { TransferStatus.isTerminal(it.status) }
 
     SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "Send a file",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "Streamed straight to the desktop over the encrypted session.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Button(
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        picker.launch(arrayOf("*/*"))
-                    }
-                },
-                shape = RoundedCornerShape(16.dp)
+        Column {
+            Text(
+                text = "Send to Desktop",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Stream files or entire folders straight to your computer over the encrypted session.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Choose")
+                Button(
+                    onClick = { launchWithNotifications { filesPicker.launch(arrayOf("*/*")) } },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Files", maxLines = 1)
+                }
+                FilledTonalButton(
+                    onClick = { launchWithNotifications { folderPicker.launch(null) } },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Folder", maxLines = 1)
+                }
             }
         }
     }
@@ -219,9 +247,13 @@ private fun ActiveTransferCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${TransferMath.formatBytes(transfer.transferred)} of " +
-                        "${TransferMath.formatBytes(transfer.size)} - " +
-                        TransferMath.formatRate(transfer.bytesPerSec, rateUnit),
+                    text = if (transfer.status == TransferStatus.PENDING) {
+                        "Queued - ${TransferMath.formatBytes(transfer.size)}"
+                    } else {
+                        "${TransferMath.formatBytes(transfer.transferred)} of " +
+                            "${TransferMath.formatBytes(transfer.size)} - " +
+                            TransferMath.formatRate(transfer.bytesPerSec, rateUnit)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

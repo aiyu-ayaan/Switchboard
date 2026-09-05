@@ -1,6 +1,7 @@
 package com.switchboard.app.transfer
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -72,6 +73,8 @@ class TransferEngine private constructor(
     private data class Inbound(val action: String, val payload: JsonElement, val blob: ByteArray?)
 
     private val inbound = Channel<Inbound>(Channel.UNLIMITED)
+    private val uploadQueue = Channel<String>(Channel.UNLIMITED)
+    private var queueWorkerJob: Job? = null
 
     // Concurrent because bind/unbind arrive on the connection collector while
     // an upload coroutine is still touching its own entry.
@@ -97,6 +100,7 @@ class TransferEngine private constructor(
         var sink: RandomAccessFile? = null,
         /** Set while the socket is down and this transfer is waiting it out. */
         var parked: Boolean = false,
+        var cancelled: Boolean = false,
         var startedAt: Long = System.currentTimeMillis()
     )
 
@@ -157,8 +161,9 @@ class TransferEngine private constructor(
             entry.done = CompletableDeferred()
             update(id) { it.copy(status = TransferStatus.PENDING, error = "") }
             TransferService.start(context)
-            entry.job = launchUpload(uri, entry)
+            uploadQueue.trySend(id)
         }
+        ensureQueueWorker()
     }
 
     fun onFrame(action: String, payload: JsonElement, blob: ByteArray? = null) {
@@ -167,8 +172,36 @@ class TransferEngine private constructor(
 
     // ---- Sending ----
 
+    private fun ensureQueueWorker() {
+        synchronized(this) {
+            if (queueWorkerJob?.isActive == true) return
+            queueWorkerJob = scope.launch {
+                for (transferId in uploadQueue) {
+                    val entry = live[transferId] ?: continue
+                    if (entry.parked || entry.cancelled) continue
+                    val uri = entry.uri ?: continue
+
+                    update(transferId) { it.copy(status = TransferStatus.ACTIVE) }
+                    val currentJob = launch {
+                        runCatching { upload(uri, entry) }
+                            .onFailure { failure ->
+                                if (failure is kotlinx.coroutines.CancellationException) throw failure
+                                finish(transferId, TransferStatus.FAILED, reasonOf(failure))
+                            }
+                        live.remove(transferId)
+                    }
+                    entry.job = currentJob
+                    currentJob.join()
+                }
+            }
+        }
+    }
+
     /** Starts an upload for a document the user picked through the SAF. */
     fun send(uri: Uri) {
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         val transferId = UUID.randomUUID().toString()
         val (name, size) = readMetadata(uri)
 
@@ -183,24 +216,55 @@ class TransferEngine private constructor(
         TransferService.start(context)
         publish(FileProgress(transferId, name, Direction.UPLOAD, TransferStatus.PENDING, 0, size, startedAt = entry.startedAt))
 
-        entry.job = launchUpload(uri, entry)
+        uploadQueue.trySend(transferId)
+        ensureQueueWorker()
     }
 
-    /**
-     * Runs one upload attempt. A cancellation is rethrown rather than reported,
-     * which is what leaves the entry in [live] for [resumeParked] to pick up —
-     * a cancelled pump means the socket died, not that the user gave up.
-     */
-    private fun launchUpload(uri: Uri, entry: Live): Job {
-        val transferId = entry.offer.transferId
-        return scope.launch {
-            runCatching { upload(uri, entry) }
-                .onFailure { failure ->
-                    if (failure is kotlinx.coroutines.CancellationException) throw failure
-                    finish(transferId, TransferStatus.FAILED, reasonOf(failure))
+    /** Queues multiple documents for upload. */
+    fun sendAll(uris: List<Uri>) {
+        uris.forEach { send(it) }
+    }
+
+    /** Recursively collects all file document URIs within a SAF tree URI. */
+    fun collectFolderUris(treeUri: Uri): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull() ?: return emptyList()
+
+        fun traverse(parentDocId: String) {
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+            val projection = arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_MIME_TYPE
+            )
+            runCatching {
+                context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                    val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    val mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    while (cursor.moveToNext()) {
+                        val childId = cursor.getString(idIndex)
+                        val mime = cursor.getString(mimeIndex)
+                        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            traverse(childId)
+                        } else {
+                            uris.add(DocumentsContract.buildDocumentUriUsingTree(treeUri, childId))
+                        }
+                    }
                 }
-            live.remove(transferId)
+            }
         }
+
+        traverse(docId)
+        return uris
+    }
+
+    /** Scans a picked folder and queues all contained files for upload. */
+    fun sendFolder(treeUri: Uri): Int {
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val uris = collectFolderUris(treeUri)
+        sendAll(uris)
+        return uris.size
     }
 
     private suspend fun upload(uri: Uri, entry: Live) {
@@ -411,6 +475,7 @@ class TransferEngine private constructor(
                 update(transferId) { it.copy(status = TransferStatus.ACTIVE) }
             }
             Control.CANCEL -> {
+                entry?.cancelled = true
                 entry?.job?.cancel()
                 closeReceive(transferId, keepPart = false)
                 live.remove(transferId)
@@ -497,22 +562,47 @@ class TransferEngine private constructor(
     private fun mimeOf(uri: Uri): String =
         context.contentResolver.getType(uri) ?: "application/octet-stream"
 
+    private fun sanitizeFileName(raw: String): String {
+        var name = raw.substringAfterLast('/').substringAfterLast(':').trim()
+        name = name.replace(Regex("""[/\\:*?"<>|\x00-\x1F]"""), "-")
+        name = name.trim('.', ' ')
+        return name.ifEmpty { "file_${System.currentTimeMillis()}" }
+    }
+
     /**
-     * Falls back to the URI's last path segment: a provider is allowed to omit
-     * the display name, and an unnamed file on the desktop is worse than a
-     * clumsy one.
+     * Extracts a safe display name and accurate file size.
+     * Falls back to openFileDescriptor when OpenableColumns.SIZE is missing or 0,
+     * and sanitizes path prefixes and illegal filesystem characters.
      */
     private fun readMetadata(uri: Uri): Pair<String, Long> {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                val name = if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else 0L
-                if (!name.isNullOrEmpty()) return name to size
+        var rawName: String? = null
+        var size: Long = 0L
+
+        runCatching {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (nameIndex >= 0) rawName = cursor.getString(nameIndex)
+                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+                }
             }
         }
-        return (uri.lastPathSegment ?: "file") to 0L
+
+        if (rawName.isNullOrEmpty()) {
+            rawName = uri.lastPathSegment ?: "file"
+        }
+
+        if (size <= 0L) {
+            runCatching {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    size = pfd.statSize
+                }
+            }
+        }
+
+        val name = sanitizeFileName(rawName)
+        return name to maxOf(0L, size)
     }
 
     private fun reasonOf(failure: Throwable): String =

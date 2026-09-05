@@ -62,13 +62,21 @@ import com.switchboard.app.ui.Section
 import com.switchboard.app.ui.SectionActions
 import com.switchboard.app.ui.SectionScreen
 import com.switchboard.app.ui.SettingsScreen
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import com.switchboard.app.ui.TouchpadActions
 import com.switchboard.app.ui.SwitchboardTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class MainActivity : ComponentActivity() {
+    private val pendingSharedUris = MutableStateFlow<List<Uri>?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleShareIntent(intent)
         setContent {
             val context = LocalContext.current
             val themePreferences = remember { ThemePreferences(context) }
@@ -80,10 +88,45 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     SwitchboardApp(
-                        themePreferences = themePreferences
+                        themePreferences = themePreferences,
+                        sharedUrisFlow = pendingSharedUris
                     )
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShareIntent(intent)
+    }
+
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent == null) return
+        val uris = mutableListOf<Uri>()
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                }
+                if (uri != null) uris.add(uri)
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                }
+                if (!list.isNullOrEmpty()) uris.addAll(list)
+            }
+        }
+        if (uris.isNotEmpty()) {
+            pendingSharedUris.value = uris
         }
     }
 }
@@ -98,11 +141,13 @@ sealed interface AppScreen {
 @Composable
 fun SwitchboardApp(
     viewModel: SwitchboardViewModel = viewModel(),
-    themePreferences: ThemePreferences
+    themePreferences: ThemePreferences,
+    sharedUrisFlow: StateFlow<List<Uri>?> = MutableStateFlow(null)
 ) {
     val state by viewModel.uiState.collectAsState()
     val themeConfig by themePreferences.config.collectAsState()
     val transferConfig by viewModel.transferPreferences.config.collectAsState()
+    val sharedUris by sharedUrisFlow.collectAsState()
 
     val scanner = rememberLauncherForScan { contents ->
         if (contents != null) viewModel.pair(contents) else viewModel.setScanning(false)
@@ -113,6 +158,13 @@ fun SwitchboardApp(
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
     val homeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+
+    LaunchedEffect(sharedUris) {
+        val uris = sharedUris ?: return@LaunchedEffect
+        viewModel.sendFiles(uris)
+        currentScreen = AppScreen.Detail(Section.Files)
+        (sharedUrisFlow as? MutableStateFlow)?.value = null
+    }
 
     LaunchedEffect(connected) {
         if (!connected) {
@@ -136,6 +188,8 @@ fun SwitchboardApp(
             onAudioOutput = viewModel::setAudioOutput,
             onMedia = viewModel::media,
             onSendFile = viewModel::sendFile,
+            onSendFiles = viewModel::sendFiles,
+            onSendFolder = { uri -> viewModel.sendFolder(uri) },
             touchpad = TouchpadActions(
                 onMove = viewModel::movePointer,
                 onButton = viewModel::mouseButton,

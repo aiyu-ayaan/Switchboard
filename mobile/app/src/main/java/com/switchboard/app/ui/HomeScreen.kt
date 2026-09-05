@@ -135,6 +135,8 @@ class SectionActions(
     val onAudioOutput: (deviceId: String) -> Unit,
     val onMedia: (String) -> Unit,
     val onSendFile: (Uri) -> Unit,
+    val onSendFiles: (List<Uri>) -> Unit = { uris -> uris.forEach(onSendFile) },
+    val onSendFolder: (Uri) -> Unit = {},
     val touchpad: TouchpadActions,
     val onTransferControl: (String, String) -> Unit,
     val rateUnit: RateUnit
@@ -156,9 +158,9 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 ) {
-    // 1-tap Send File launcher for the Bento tile
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) actions.onSendFile(uri)
+    // 1-tap Send Files launcher for the Bento tile
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (!uris.isNullOrEmpty()) actions.onSendFiles(uris)
     }
     val notifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -1026,7 +1028,8 @@ private fun SectionBody(
             Section.Files -> FilesBody(
                 transfers = state.transfers,
                 rateUnit = actions.rateUnit,
-                onSendFile = actions.onSendFile,
+                onSendFiles = actions.onSendFiles,
+                onSendFolder = actions.onSendFolder,
                 onControl = actions.onTransferControl
             )
         }

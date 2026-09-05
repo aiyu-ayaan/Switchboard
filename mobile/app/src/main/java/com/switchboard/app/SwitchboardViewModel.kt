@@ -431,6 +431,10 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     fun sendFile(uri: Uri) = transfers.send(uri)
 
+    fun sendFiles(uris: List<Uri>) = transfers.sendAll(uris)
+
+    fun sendFolder(treeUri: Uri): Int = transfers.sendFolder(treeUri)
+
     fun controlTransfer(transferId: String, action: String) = transfers.control(transferId, action)
 
     private fun patchDisplay(id: String, transform: (Display) -> Display) {
