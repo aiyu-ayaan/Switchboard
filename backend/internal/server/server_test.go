@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -136,7 +135,7 @@ func (c *testClient) call(t *testing.T, action string, payload any) *protocol.En
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(req)
+	raw, err := protocol.EncodeFrame(req, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,12 +157,12 @@ func (c *testClient) call(t *testing.T, action string, payload any) *protocol.En
 		if err != nil {
 			t.Fatalf("decrypting reply to %s: %v", action, err)
 		}
-		var env protocol.Envelope
-		if err := json.Unmarshal(plain, &env); err != nil {
+		env, _, err := protocol.DecodeFrame(plain)
+		if err != nil {
 			t.Fatal(err)
 		}
 		if env.ID == req.ID {
-			return &env
+			return env
 		}
 	}
 }

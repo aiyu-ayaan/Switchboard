@@ -262,12 +262,22 @@ func (s *Server) addClient(c *client) {
 	s.mu.Lock()
 	s.clients[c.id] = c
 	s.mu.Unlock()
+	// Anything parked when this device dropped off is re-offered, so a
+	// transfer interrupted by a walk out of Wi-Fi range picks up where it
+	// stopped instead of starting the file again.
+	s.transfers.Reattach(c.deviceID)
 }
 
 func (s *Server) removeClient(c *client) {
 	s.mu.Lock()
 	delete(s.clients, c.id)
+	remaining := len(s.clientsForLocked(c.deviceID))
 	s.mu.Unlock()
+	// Only when the last socket for the device is gone: a phone that
+	// reconnects before the old socket is reaped briefly holds two.
+	if remaining == 0 {
+		s.transfers.Detach(c.deviceID)
+	}
 }
 
 // Broadcast pushes the current host state to every connected mobile client.
@@ -305,7 +315,7 @@ func (s *Server) hostState() protocol.HostState {
 // sendToDevice delivers one frame to every socket a device holds. It is what
 // the transfer manager writes through, so the engine never learns about
 // connections, sessions, or the WebSocket at all.
-func (s *Server) sendToDevice(deviceID, action string, payload any) error {
+func (s *Server) sendToDevice(deviceID, action string, payload any, blob []byte) error {
 	env, err := protocol.New(protocol.TypeCommand, action, payload)
 	if err != nil {
 		return err
@@ -315,7 +325,7 @@ func (s *Server) sendToDevice(deviceID, action string, payload any) error {
 		return fmt.Errorf("server: device %s is not connected", deviceID)
 	}
 	for _, c := range targets {
-		c.send(env)
+		c.send(env, blob)
 	}
 	return nil
 }
@@ -325,6 +335,11 @@ func (s *Server) sendToDevice(deviceID, action string, payload any) error {
 func (s *Server) clientsFor(deviceID string) []*client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.clientsForLocked(deviceID)
+}
+
+// clientsForLocked is the same walk for callers already holding s.mu.
+func (s *Server) clientsForLocked(deviceID string) []*client {
 	targets := make([]*client, 0, 1)
 	for _, c := range s.clients {
 		if c.deviceID == deviceID {

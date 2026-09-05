@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -69,9 +68,14 @@ func (c *client) close() {
 	c.once.Do(func() { c.conn.Close() })
 }
 
-// send encrypts and writes one envelope.
-func (c *client) send(env *protocol.Envelope) {
-	payload, err := json.Marshal(env)
+// send encrypts and writes one envelope, optionally carrying raw bytes
+// alongside it for bulk payloads such as file chunks and camera frames.
+func (c *client) send(env *protocol.Envelope, blob ...[]byte) {
+	var bytes []byte
+	if len(blob) > 0 {
+		bytes = blob[0]
+	}
+	payload, err := protocol.EncodeFrame(env, bytes)
 	if err != nil {
 		log.Printf("client %s: marshal: %v", c.id, err)
 		return
@@ -252,7 +256,10 @@ func reject(conn *websocket.Conn, reason string) error {
 // readLoop services encrypted command frames until the socket closes.
 func (s *Server) readLoop(c *client) {
 	const pongWait = 90 * time.Second
-	c.conn.SetReadLimit(1 << 20)
+	// Sized for the largest blob a peer may legitimately send — one file
+	// chunk plus its envelope — and no larger, so a hostile frame length is
+	// rejected by the socket before it becomes an allocation.
+	c.conn.SetReadLimit(protocol.MaxFrameSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -274,13 +281,13 @@ func (s *Server) readLoop(c *client) {
 			log.Printf("device %q: dropping frame: %v", c.deviceID, err)
 			return
 		}
-		var env protocol.Envelope
-		if err := json.Unmarshal(plaintext, &env); err != nil {
+		env, blob, err := protocol.DecodeFrame(plaintext)
+		if err != nil {
 			c.send(protocol.Errorf("", "", "malformed envelope"))
 			continue
 		}
 		c.conn.SetReadDeadline(time.Now().Add(pongWait))
-		s.dispatch(c, &env)
+		s.dispatch(c, env, blob)
 	}
 }
 

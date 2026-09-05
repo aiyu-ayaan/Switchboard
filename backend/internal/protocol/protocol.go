@@ -362,13 +362,16 @@ type FileAccept struct {
 	Reason     string `json:"reason,omitempty"`
 }
 
-// FileChunk is one slice of the file. Offset is authoritative — the receiver
-// writes at it rather than appending, so a duplicate or reordered frame cannot
-// corrupt the output.
+// FileChunk describes one slice of the file. The bytes themselves ride beside
+// this envelope as a FrameBlob rather than base64 inside it: the frame is
+// binary on the wire either way, so encoding them would inflate every byte by
+// a third and buy an encode on one CPU and a decode on the other for nothing.
+//
+// Offset is authoritative — the receiver writes at it rather than appending,
+// so a duplicate or reordered frame cannot corrupt the output.
 type FileChunk struct {
 	TransferID string `json:"transferId"`
 	Offset     int64  `json:"offset"`
-	Data       string `json:"data"` // base64
 	Last       bool   `json:"last,omitempty"`
 }
 

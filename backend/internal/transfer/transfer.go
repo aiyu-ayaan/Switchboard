@@ -9,7 +9,6 @@ package transfer
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -45,6 +44,11 @@ const (
 	// more CPU than the transfer it is reporting on.
 	progressInterval = 250 * time.Millisecond
 
+	// parkTTL is how long a transfer waits for its device to come back before
+	// it is failed. A parked receive holds an open file handle, so a phone
+	// that never returns must not pin one forever.
+	parkTTL = 10 * time.Minute
+
 	// rateSmoothing weights the previous rate estimate against the newest
 	// sample. Raw per-window rates swing wildly with disk and Wi-Fi jitter,
 	// which reads as a broken transfer rather than a fast one.
@@ -65,22 +69,33 @@ type Manager struct {
 	// downloadDir is read per offer rather than captured once, so changing
 	// the setting takes effect on the next file instead of at next restart.
 	downloadDir func() string
-	send        func(deviceID, action string, payload any) error
-	onEvent     func(Event)
+	// send carries an optional blob beside the envelope. Chunk bytes travel
+	// there rather than base64 inside the JSON: the transport is binary
+	// either way, so encoding them would inflate every byte by a third and
+	// buy a decode on the phone's CPU for nothing.
+	send    func(deviceID, action string, payload any, blob []byte) error
+	onEvent func(Event)
 
 	mu     sync.Mutex
 	active map[string]*transfer
 }
 
 // NewManager wires the engine to its transport and its telemetry sink.
-func NewManager(downloadDir func() string, send func(deviceID, action string, payload any) error,
+func NewManager(downloadDir func() string,
+	send func(deviceID, action string, payload any, blob []byte) error,
 	onEvent func(Event)) *Manager {
-	return &Manager{
+	m := &Manager{
 		downloadDir: downloadDir,
 		send:        send,
 		onEvent:     onEvent,
 		active:      map[string]*transfer{},
 	}
+	go func() {
+		for range time.Tick(time.Minute) {
+			m.reapParked()
+		}
+	}()
+	return m
 }
 
 // transfer is one file in flight. Every mutable field is guarded by mu; cond
@@ -113,6 +128,12 @@ type transfer struct {
 	status string
 	errMsg string
 
+	// parked marks a transfer whose device dropped off. It is distinct from
+	// paused: a pause is the user's decision and waits indefinitely, while a
+	// park is the network's and expires.
+	parked   bool
+	parkedAt time.Time
+
 	startedAt, finishedAt int64
 
 	lastEmit  time.Time
@@ -129,6 +150,13 @@ type transfer struct {
 func (m *Manager) Offer(deviceID string, o protocol.FileOffer) error {
 	if o.TransferID == "" {
 		return errors.New("transfer: offer carries no transfer id")
+	}
+	// A re-offer of an id already in flight is a resume after a dropped
+	// socket. The old handle is dropped but its .part is kept: reopening it
+	// below is exactly what makes the transfer pick up where it stopped.
+	if old := m.get(o.TransferID); old != nil {
+		old.release()
+		m.remove(old.id)
 	}
 	dir := m.downloadDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -194,27 +222,23 @@ func (m *Manager) Offer(deviceID string, o protocol.FileOffer) error {
 
 	return m.send(deviceID, protocol.ActionFileAccept, protocol.FileAccept{
 		TransferID: o.TransferID, Offset: offset, Accepted: true,
-	})
+	}, nil)
 }
 
 func (m *Manager) refuse(deviceID string, o protocol.FileOffer, cause error) error {
 	m.send(deviceID, protocol.ActionFileAccept, protocol.FileAccept{
 		TransferID: o.TransferID, Accepted: false, Reason: cause.Error(),
-	})
+	}, nil)
 	return cause
 }
 
 // Chunk writes one slice at its authoritative offset. Offset is trusted over
 // arrival order, so a duplicated or reordered frame overwrites the same bytes
 // instead of corrupting the file.
-func (m *Manager) Chunk(c protocol.FileChunk) error {
+func (m *Manager) Chunk(c protocol.FileChunk, data []byte) error {
 	t := m.get(c.TransferID)
 	if t == nil {
 		return fmt.Errorf("transfer: chunk for unknown transfer %s", c.TransferID)
-	}
-	data, err := base64.StdEncoding.DecodeString(c.Data)
-	if err != nil {
-		return t.fail(fmt.Errorf("transfer: malformed chunk: %w", err))
 	}
 
 	t.mu.Lock()
@@ -248,7 +272,7 @@ func (m *Manager) Chunk(c protocol.FileChunk) error {
 	if ack && !done {
 		m.send(t.deviceID, protocol.ActionFileAck, protocol.FileAck{
 			TransferID: t.id, Received: received,
-		})
+		}, nil)
 	}
 	if done {
 		return t.finish()
@@ -281,7 +305,7 @@ func (t *transfer) finish() error {
 		t.mgr.remove(t.id)
 		return t.mgr.send(t.deviceID, protocol.ActionFileComplete, protocol.FileComplete{
 			TransferID: t.id, OK: false, SHA256: sum, Error: "digest mismatch",
-		})
+		}, nil)
 	}
 	if err := t.file.Close(); err != nil {
 		t.mu.Unlock()
@@ -307,7 +331,7 @@ func (t *transfer) finish() error {
 
 	return t.mgr.send(t.deviceID, protocol.ActionFileComplete, protocol.FileComplete{
 		TransferID: t.id, OK: true, SHA256: sum,
-	})
+	}, nil)
 }
 
 // ---- Sending (daemon -> peer) ----
@@ -347,7 +371,7 @@ func (m *Manager) Send(deviceID, path string) (string, error) {
 	if err := m.send(deviceID, protocol.ActionFileOffer, protocol.FileOffer{
 		TransferID: t.id, Name: t.name, Size: t.size, SHA256: sum,
 		Direction: protocol.DirectionDownload,
-	}); err != nil {
+	}, nil); err != nil {
 		t.fail(err)
 		return "", err
 	}
@@ -435,8 +459,8 @@ func (t *transfer) pump(offset int64) {
 	// explicitly rather than leaving the receiver waiting forever.
 	if t.size == 0 {
 		t.mgr.send(t.deviceID, protocol.ActionFileChunk, protocol.FileChunk{
-			TransferID: t.id, Offset: 0, Data: "", Last: true,
-		})
+			TransferID: t.id, Offset: 0, Last: true,
+		}, nil)
 		return
 	}
 
@@ -460,11 +484,12 @@ func (t *transfer) pump(offset int64) {
 		t.mu.Unlock()
 
 		if err := t.mgr.send(t.deviceID, protocol.ActionFileChunk, protocol.FileChunk{
-			TransferID: t.id, Offset: offset,
-			Data: base64.StdEncoding.EncodeToString(buf[:n]),
-			Last: last,
-		}); err != nil {
-			t.fail(err)
+			TransferID: t.id, Offset: offset, Last: last,
+		}, buf[:n]); err != nil {
+			// The peer went away mid-stream. That is a dropped socket, not a
+			// broken file: park it so a reconnect resumes from here rather
+			// than re-sending everything already delivered.
+			t.park(err)
 			return
 		}
 		offset += int64(n)
@@ -482,6 +507,11 @@ func (t *transfer) waitForWindow() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for {
+		if t.parked {
+			// The socket is gone. Reattach starts a fresh pump at whatever
+			// offset the receiver reports, so this one has nothing to wait for.
+			return false
+		}
 		switch t.status {
 		case protocol.TransferCancelled, protocol.TransferFailed, protocol.TransferCompleted:
 			return false
@@ -520,7 +550,7 @@ func (m *Manager) ControlLocal(transferID, action string) error {
 	}
 	return m.send(t.deviceID, protocol.ActionFileControl, protocol.FileControl{
 		TransferID: transferID, Action: action,
-	})
+	}, nil)
 }
 
 func (t *transfer) apply(action string) error {
@@ -559,7 +589,119 @@ func (t *transfer) apply(action string) error {
 	return nil
 }
 
+// ---- Connection lifecycle ----
+//
+// A dropped socket is not a failure. The receiver keeps its .part file and the
+// sender keeps its place, so reconnecting re-offers the transfer and the
+// existing resume path carries it on from the byte it reached — which is the
+// same machinery a manual pause uses, rather than a second one.
+
+// Detach parks every live transfer for a device that has just disconnected.
+func (m *Manager) Detach(deviceID string) {
+	for _, t := range m.forDevice(deviceID) {
+		t.mu.Lock()
+		if t.status == protocol.TransferActive || t.status == protocol.TransferPending {
+			t.parked, t.parkedAt = true, time.Now()
+			t.status = protocol.TransferPaused
+			t.errMsg = "waiting for the device to reconnect"
+			t.emitLocked(true)
+		}
+		// Wakes the pump, which sees parked and returns rather than blocking
+		// on a window that will never advance.
+		t.cond.Broadcast()
+		t.mu.Unlock()
+	}
+}
+
+// Reattach re-offers parked sends once a device is back. Parked receives need
+// nothing: the peer re-offers those, and Offer resumes onto the .part.
+func (m *Manager) Reattach(deviceID string) {
+	for _, t := range m.forDevice(deviceID) {
+		t.mu.Lock()
+		resume := t.parked && t.direction == protocol.DirectionDownload
+		if resume {
+			t.parked = false
+			t.status = protocol.TransferPending
+			t.errMsg = ""
+			t.emitLocked(true)
+		}
+		name, size, sum := t.name, t.size, t.wantSHA
+		t.mu.Unlock()
+		if !resume {
+			continue
+		}
+		if err := m.send(deviceID, protocol.ActionFileOffer, protocol.FileOffer{
+			TransferID: t.id, Name: name, Size: size, SHA256: sum,
+			Direction: protocol.DirectionDownload,
+		}, nil); err != nil {
+			t.fail(err)
+		}
+	}
+}
+
+// park suspends a transfer whose peer is unreachable, keeping every byte
+// already moved. Detach does the same for transfers that were not mid-send.
+func (t *transfer) park(cause error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.parked || t.status == protocol.TransferCompleted ||
+		t.status == protocol.TransferCancelled || t.status == protocol.TransferFailed {
+		return
+	}
+	t.parked, t.parkedAt = true, time.Now()
+	t.status = protocol.TransferPaused
+	t.errMsg = cause.Error()
+	t.emitLocked(true)
+	t.cond.Broadcast()
+}
+
+// reapParked fails transfers whose device never came back. Without it a phone
+// that walks out of range leaves an open file handle and a row that claims to
+// be waiting forever.
+func (m *Manager) reapParked() {
+	cutoff := time.Now().Add(-parkTTL)
+	for _, t := range m.all() {
+		t.mu.Lock()
+		expired := t.parked && t.parkedAt.Before(cutoff)
+		t.mu.Unlock()
+		if expired {
+			t.fail(errors.New("the device did not reconnect"))
+		}
+	}
+}
+
 // ---- Bookkeeping ----
+
+func (m *Manager) all() []*transfer {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	list := make([]*transfer, 0, len(m.active))
+	for _, t := range m.active {
+		list = append(list, t)
+	}
+	return list
+}
+
+func (m *Manager) forDevice(deviceID string) []*transfer {
+	list := []*transfer{}
+	for _, t := range m.all() {
+		if t.deviceID == deviceID {
+			list = append(list, t)
+		}
+	}
+	return list
+}
+
+// release drops the OS handle without touching the .part file, so the bytes
+// already received survive for a later resume.
+func (t *transfer) release() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.file != nil {
+		t.file.Close()
+		t.file = nil
+	}
+}
 
 func (m *Manager) add(t *transfer) {
 	m.mu.Lock()

@@ -2,12 +2,13 @@ package transfer
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,12 +22,29 @@ const testDevice = "device-1"
 // engine's internals. Frames are delivered synchronously, which makes a
 // finished transfer observable without sleeping.
 type link struct {
-	t         *testing.T
-	sender    *Manager
-	receiver  *Manager
+	t        *testing.T
+	sender   *Manager
+	receiver *Manager
+	done     chan protocol.FileProgress
+
+	// Frames cross goroutines: the pump runs on its own, and the test reads
+	// these while it is running.
+	mu        sync.Mutex
 	minOffset int64 // lowest chunk offset seen, to prove a resume skipped bytes
 	chunks    int
-	done      chan protocol.FileProgress
+	delivered int64
+	status    string
+	// beforeChunk runs on the delivery path, so a test can cut the link at a
+	// chosen point in the stream rather than at a guessed moment in time.
+	beforeChunk func()
+
+	// down simulates a dropped socket: frames are refused exactly as the
+	// daemon refuses them when a device holds no connection.
+	down bool
+	// firstAfterCut is the offset of the first chunk delivered once the link
+	// is restored, which is what tells a resume apart from a restart.
+	firstAfterCut int64
+	cut           bool
 }
 
 func newLink(t *testing.T, downloadDir string) *link {
@@ -35,8 +53,11 @@ func newLink(t *testing.T, downloadDir string) *link {
 
 	l.sender = NewManager(
 		func() string { return downloadDir },
-		func(_, action string, payload any) error { return l.toReceiver(action, payload) },
+		func(_, action string, payload any, blob []byte) error { return l.toReceiver(action, payload, blob) },
 		func(e Event) {
+			l.mu.Lock()
+			l.status = e.Status
+			l.mu.Unlock()
 			switch e.Status {
 			case protocol.TransferCompleted, protocol.TransferFailed, protocol.TransferCancelled:
 				l.done <- e.FileProgress
@@ -45,22 +66,41 @@ func newLink(t *testing.T, downloadDir string) *link {
 	)
 	l.receiver = NewManager(
 		func() string { return downloadDir },
-		func(_, action string, payload any) error { return l.toSender(action, payload) },
+		func(_, action string, payload any, _ []byte) error { return l.toSender(action, payload) },
 		func(Event) {},
 	)
 	return l
 }
 
-func (l *link) toReceiver(action string, payload any) error {
+func (l *link) toReceiver(action string, payload any, blob []byte) error {
+	l.mu.Lock()
+	hook := l.beforeChunk
+	l.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	l.mu.Lock()
+	down := l.down
+	l.mu.Unlock()
+	if down {
+		return errors.New("transfer: device is not connected")
+	}
+
 	switch p := payload.(type) {
 	case protocol.FileOffer:
 		return l.receiver.Offer(testDevice, p)
 	case protocol.FileChunk:
+		l.mu.Lock()
 		l.chunks++
+		l.delivered += int64(len(blob))
 		if l.minOffset < 0 || p.Offset < l.minOffset {
 			l.minOffset = p.Offset
 		}
-		return l.receiver.Chunk(p)
+		if l.cut && l.firstAfterCut < 0 {
+			l.firstAfterCut = p.Offset
+		}
+		l.mu.Unlock()
+		return l.receiver.Chunk(p, blob)
 	case protocol.FileControl:
 		return l.receiver.Control(p)
 	}
@@ -69,6 +109,12 @@ func (l *link) toReceiver(action string, payload any) error {
 }
 
 func (l *link) toSender(action string, payload any) error {
+	l.mu.Lock()
+	down := l.down
+	l.mu.Unlock()
+	if down {
+		return errors.New("transfer: device is not connected")
+	}
 	switch p := payload.(type) {
 	case protocol.FileAccept:
 		return l.sender.Accept(p)
@@ -81,6 +127,38 @@ func (l *link) toSender(action string, payload any) error {
 	}
 	l.t.Fatalf("unexpected frame to sender: %s", action)
 	return nil
+}
+
+// parked reports whether the sender has suspended itself after losing the
+// link, which is what the daemon observes as a paused transfer.
+func (l *link) parked() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.status == protocol.TransferPaused
+}
+
+func (l *link) bytesDelivered() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.delivered
+}
+
+func (l *link) drop() {
+	l.mu.Lock()
+	l.down = true
+	l.mu.Unlock()
+}
+
+func (l *link) restore() {
+	l.mu.Lock()
+	l.down, l.cut, l.beforeChunk = false, true, nil
+	l.mu.Unlock()
+}
+
+func (l *link) resumedAt() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.firstAfterCut
 }
 
 func (l *link) wait() protocol.FileProgress {
@@ -186,7 +264,7 @@ func TestCorruptDigestLeavesNoFile(t *testing.T) {
 	var complete protocol.FileComplete
 	m := NewManager(
 		func() string { return dst },
-		func(_, action string, payload any) error {
+		func(_, action string, payload any, _ []byte) error {
 			if c, ok := payload.(protocol.FileComplete); ok {
 				complete = c
 			}
@@ -204,9 +282,8 @@ func TestCorruptDigestLeavesNoFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := m.Chunk(protocol.FileChunk{
-		TransferID: "bad", Offset: 0,
-		Data: base64.StdEncoding.EncodeToString(data), Last: true,
-	}); err != nil {
+		TransferID: "bad", Offset: 0, Last: true,
+	}, data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -224,7 +301,7 @@ func TestCancelRemovesPartFile(t *testing.T) {
 	dst := t.TempDir()
 	m := NewManager(
 		func() string { return dst },
-		func(string, string, any) error { return nil },
+		func(string, string, any, []byte) error { return nil },
 		func(Event) {},
 	)
 
@@ -236,8 +313,7 @@ func TestCancelRemovesPartFile(t *testing.T) {
 	}
 	if err := m.Chunk(protocol.FileChunk{
 		TransferID: "cancel-me", Offset: 0,
-		Data: base64.StdEncoding.EncodeToString(make([]byte, 4096)),
-	}); err != nil {
+	}, make([]byte, 4096)); err != nil {
 		t.Fatal(err)
 	}
 	part := filepath.Join(dst, "movie.mkv.part")
@@ -295,5 +371,71 @@ func TestDestPath(t *testing.T) {
 	}
 	if second != filepath.Join(dir, "report (1).pdf") {
 		t.Fatalf("collision resolved to %q, want %q", second, filepath.Join(dir, "report (1).pdf"))
+	}
+}
+
+// A dropped connection must not cost the bytes already moved. This cuts the
+// link mid-file, parks both ends the way the daemon does when a socket dies,
+// restores it, and checks that the transfer picks up rather than starting the
+// file again — which on a large file over flaky Wi-Fi is the whole difference
+// between a transfer that eventually finishes and one that never can.
+func TestReconnectResumesInsteadOfRestarting(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	data := writeFile(t, filepath.Join(src, "video.mp4"), 6*1024*1024)
+
+	l := newLink(t, dst)
+	l.firstAfterCut = -1
+
+	// Drop the link once enough chunks have landed that a restart would be
+	// obvious in the offsets.
+	l.beforeChunk = func() {
+		l.mu.Lock()
+		enough := l.chunks >= 6
+		l.mu.Unlock()
+		if enough {
+			l.drop()
+		}
+	}
+
+	if _, err := l.sender.Send(testDevice, filepath.Join(src, "video.mp4")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the sender to notice the dead link and park itself.
+	deadline := time.Now().Add(10 * time.Second)
+	for !l.parked() {
+		if time.Now().After(deadline) {
+			t.Fatal("the sender never parked after the link dropped")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// What the daemon does on disconnect, then on reconnect.
+	l.sender.Detach(testDevice)
+	l.receiver.Detach(testDevice)
+
+	held := l.bytesDelivered()
+	if held == 0 {
+		t.Fatal("nothing was delivered before the cut, so the test proves nothing")
+	}
+
+	l.restore()
+	l.sender.Reattach(testDevice)
+
+	if final := l.wait(); final.Status != protocol.TransferCompleted {
+		t.Fatalf("status = %q, error = %q", final.Status, final.Error)
+	}
+	if resumed := l.resumedAt(); resumed <= 0 {
+		t.Fatalf("the first chunk after reconnecting was at offset %d: "+
+			"the sender restarted the file instead of resuming", resumed)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dst, "video.mp4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum(got) != sum(data) {
+		t.Fatal("the resumed file does not match the source digest")
 	}
 }

@@ -10,7 +10,7 @@ import (
 //
 // A state-changing command also broadcasts, so a second phone and the desktop
 // UI observe the change rather than drifting out of sync.
-func (s *Server) dispatch(c *client, env *protocol.Envelope) {
+func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 	switch env.Action {
 
 	case protocol.ActionPing:
@@ -209,7 +209,7 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope) {
 			s.fail(c, env, err)
 			return
 		}
-		if err := s.transfers.Chunk(req); err != nil {
+		if err := s.transfers.Chunk(req, blob); err != nil {
 			s.fail(c, env, err)
 		}
 
