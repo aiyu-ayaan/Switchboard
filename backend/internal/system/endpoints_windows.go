@@ -155,6 +155,14 @@ var (
 // vtable: three IUnknown entries, then ten format/period/share/property
 // methods. The interface is undocumented, so the layout is pinned here rather
 // than discovered.
+//
+// Verified against Windows 7, 8.1, 10 (1507-22H2) and 11 (21H2-24H2), where
+// every shipped IPolicyConfig has held this layout. Nothing guarantees the
+// next build will: TestSetDefaultEndpointSlotPinned fails if this constant is
+// edited without also revisiting the comment, and setDefaultEndpoint checks
+// the slot is populated before calling through it, so a Windows release that
+// shortens the vtable returns an error instead of jumping into whatever
+// follows the object in memory.
 const setDefaultEndpointSlot = 13
 
 // setDefaultEndpoint must run on a thread with an initialised apartment; every
@@ -171,7 +179,17 @@ func setDefaultEndpoint(deviceID string) error {
 		return fmt.Errorf("audio: bad device id: %w", err)
 	}
 
+	// CreateInstance already did the QueryInterface for iidPolicyConfig, so a
+	// build that dropped the interface fails above rather than here. What is
+	// left to check is that the vtable actually reaches the pinned slot: a
+	// nil table or an empty entry means the layout moved, and calling through
+	// it would be an access violation rather than a failed HRESULT.
 	vtable := *(**[setDefaultEndpointSlot + 1]uintptr)(unsafe.Pointer(unknown))
+	if vtable == nil || vtable[setDefaultEndpointSlot] == 0 {
+		return fmt.Errorf("audio: IPolicyConfig vtable slot %d is empty; "+
+			"the undocumented interface layout moved on this Windows build",
+			setDefaultEndpointSlot)
+	}
 	// eConsole covers general playback, eMultimedia music and video, and
 	// eCommunications voice chat. Windows treats them independently.
 	for _, role := range []uintptr{wca.EConsole, wca.EMultimedia, wca.ECommunications} {

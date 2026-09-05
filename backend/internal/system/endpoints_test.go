@@ -88,3 +88,18 @@ func TestSetAudioOutputRejectsEmptyID(t *testing.T) {
 		t.Fatal("expected an error for an empty device id")
 	}
 }
+
+// TestSetDefaultEndpointSlotPinned guards the one number in this package that
+// cannot be derived at runtime. Moving SetDefaultEndpoint's vtable index is a
+// deliberate act — a new Windows build that reshuffles the undocumented
+// interface — so it should require editing this test and its comment, not just
+// the constant. The whole file is windows-only, so other platforms never see it.
+func TestSetDefaultEndpointSlotPinned(t *testing.T) {
+	// 3 IUnknown entries + 10 format/period/share/property methods.
+	const verified = 13
+	if setDefaultEndpointSlot != verified {
+		t.Fatalf("setDefaultEndpointSlot is %d, want %d; if a Windows build "+
+			"really moved it, update the verified-versions comment in "+
+			"endpoints_windows.go too", setDefaultEndpointSlot, verified)
+	}
+}
