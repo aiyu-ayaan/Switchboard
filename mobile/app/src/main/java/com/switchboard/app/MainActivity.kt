@@ -256,13 +256,6 @@ fun SwitchboardApp(
                             ) {
                                 Icon(Icons.Filled.Info, contentDescription = "Connection info")
                             }
-
-                            IconButton(
-                                onClick = { currentScreen = AppScreen.Settings },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                            }
                         } else {
                             IconButton(
                                 onClick = { scanner(Unit) },
