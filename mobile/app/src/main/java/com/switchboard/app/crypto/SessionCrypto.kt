@@ -138,7 +138,16 @@ object SessionCrypto {
                 SecretKeySpec(clientToHost, "AES"),
                 GCMParameterSpec(TAG_BITS, nonce)
             )
-            return nonce + cipher.doFinal(plaintext)
+            // One output buffer with the nonce written straight into it.
+            // `nonce + doFinal(...)` allocated the ciphertext and then copied
+            // every byte of it again; at a quarter-megabyte per file chunk and
+            // dozens of chunks a second that alone was tens of megabytes a
+            // second of garbage, and the GC pauses it bought landed on the UI
+            // thread as stutter.
+            val sealed = ByteArray(NONCE_SIZE + cipher.getOutputSize(plaintext.size))
+            nonce.copyInto(sealed)
+            cipher.doFinal(plaintext, 0, plaintext.size, sealed, NONCE_SIZE)
+            return sealed
         }
 
         /** Rejects replayed and reordered frames by requiring a rising counter. */
