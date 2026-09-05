@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
@@ -110,6 +112,7 @@ fun SwitchboardApp(
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
+    val homeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     LaunchedEffect(connected) {
         if (!connected) {
@@ -328,7 +331,8 @@ fun SwitchboardApp(
                             HomeScreen(
                                 state = state,
                                 actions = actions,
-                                onOpen = { currentScreen = AppScreen.Detail(it) }
+                                onOpen = { currentScreen = AppScreen.Detail(it) },
+                                listState = homeListState
                             )
                         }
                     }

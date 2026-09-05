@@ -115,9 +115,7 @@ fun CameraScreen(modifier: Modifier = Modifier) {
 
     Box(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             StatusCard(
