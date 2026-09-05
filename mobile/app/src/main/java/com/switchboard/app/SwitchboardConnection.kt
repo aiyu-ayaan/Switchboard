@@ -14,6 +14,7 @@ import com.switchboard.app.net.FileProgress
 import com.switchboard.app.net.HostState
 import com.switchboard.app.net.PairingPayload
 import com.switchboard.app.net.SwitchboardClient
+import com.switchboard.app.net.WirePayload
 import com.switchboard.app.net.SwitchboardJson
 import com.switchboard.app.net.TransferStatus
 import com.switchboard.app.transfer.TransferEngine
@@ -289,7 +290,7 @@ class SwitchboardConnection private constructor(context: Context) {
 
     fun hosts(): List<KnownHost> = store.hosts()
 
-    fun send(action: String, payload: Any? = null) = client.send(action, payload)
+    fun send(action: String, payload: WirePayload? = null) = client.send(action, payload)
 
     /** Applies a value locally so the control tracks the finger; the host's next broadcast reconciles it. */
     fun patchHost(transform: (HostState) -> HostState) =

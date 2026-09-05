@@ -303,7 +303,7 @@ class SwitchboardClient(
     }
 
     /** Sends one encrypted command. No-ops before the handshake completes. */
-    fun send(action: String, payload: Any? = null) {
+    fun send(action: String, payload: WirePayload? = null) {
         val active = session ?: return
         val envelope = Envelope(
             id = UUID.randomUUID().toString(),
@@ -316,7 +316,10 @@ class SwitchboardClient(
         socket?.send(active.seal(raw.encodeToByteArray()).toByteString())
     }
 
-    private fun encodePayload(payload: Any) = when (payload) {
+    // Exhaustive over the sealed WirePayload: a new payload type without a
+    // branch here fails to compile, rather than throwing when a user taps the
+    // control that sends it.
+    private fun encodePayload(payload: WirePayload) = when (payload) {
         is DisplaySet -> SwitchboardJson.encodeToJsonElement(DisplaySet.serializer(), payload)
         is Volume -> SwitchboardJson.encodeToJsonElement(Volume.serializer(), payload)
         is MixerSet -> SwitchboardJson.encodeToJsonElement(MixerSet.serializer(), payload)
@@ -327,7 +330,7 @@ class SwitchboardClient(
         is FileAck -> SwitchboardJson.encodeToJsonElement(FileAck.serializer(), payload)
         is FileComplete -> SwitchboardJson.encodeToJsonElement(FileComplete.serializer(), payload)
         is FileControl -> SwitchboardJson.encodeToJsonElement(FileControl.serializer(), payload)
-        else -> throw IllegalArgumentException("unsupported payload ${payload::class}")
+        is OutputSet -> SwitchboardJson.encodeToJsonElement(OutputSet.serializer(), payload)
     }
 
     fun disconnect() {

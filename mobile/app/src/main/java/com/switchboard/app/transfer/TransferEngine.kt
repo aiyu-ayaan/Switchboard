@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import android.util.Log
 import com.switchboard.app.data.TransferPreferences
+import com.switchboard.app.net.WirePayload
 import com.switchboard.app.net.Actions
 import com.switchboard.app.net.CHUNK_SIZE
 import com.switchboard.app.net.Control
@@ -74,7 +75,7 @@ class TransferEngine private constructor(
 
     /** Set while a session is up. Cleared on disconnect, which fails everything in flight. */
     @Volatile
-    private var sender: ((String, Any) -> Unit)? = null
+    private var sender: ((String, WirePayload) -> Unit)? = null
 
     private class Live(
         val offer: FileOffer,
@@ -100,7 +101,7 @@ class TransferEngine private constructor(
 
     // ---- Session wiring ----
 
-    fun bind(send: (String, Any) -> Unit) {
+    fun bind(send: (String, WirePayload) -> Unit) {
         sender = send
     }
 
@@ -287,7 +288,7 @@ class TransferEngine private constructor(
         }
     }
 
-    private fun completeReceive(entry: Live, emit: (String, Any) -> Unit) {
+    private fun completeReceive(entry: Live, emit: (String, WirePayload) -> Unit) {
         val id = entry.offer.transferId
         val part = entry.part
         entry.sink?.close()

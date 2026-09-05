@@ -64,6 +64,16 @@ object Control {
     const val CANCEL = "cancel"
 }
 
+/**
+ * A payload that may be sent to the host.
+ *
+ * Sealed on purpose: [SwitchboardClient.send] dispatches on the concrete type
+ * to pick a serializer, and sealing makes that `when` exhaustive. A new payload
+ * type that nobody taught the encoder about is then a compile error rather than
+ * an IllegalArgumentException the moment a user taps the control.
+ */
+sealed interface WirePayload
+
 val SwitchboardJson = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
@@ -103,7 +113,7 @@ data class Display(
 }
 
 @Serializable
-data class Volume(val level: Int = 0, val muted: Boolean = false)
+data class Volume(val level: Int = 0, val muted: Boolean = false) : WirePayload
 
 /**
  * One program's entry in the host mixer.
@@ -137,10 +147,10 @@ data class AudioDevice(
 )
 
 @Serializable
-data class OutputSet(val deviceId: String)
+data class OutputSet(val deviceId: String) : WirePayload
 
 @Serializable
-data class MixerSet(val sessionId: String, val level: Int, val muted: Boolean = false)
+data class MixerSet(val sessionId: String, val level: Int, val muted: Boolean = false) : WirePayload
 
 /** Playback states the host reports in [MediaState.status]. */
 object Playback {
@@ -198,10 +208,10 @@ data class HostState(
 )
 
 @Serializable
-data class DisplaySet(val displayId: String, val value: Int)
+data class DisplaySet(val displayId: String, val value: Int) : WirePayload
 
 @Serializable
-data class MediaCommand(val action: String)
+data class MediaCommand(val action: String) : WirePayload
 
 /** The JSON encoded in the desktop's QR code. */
 @Serializable
@@ -259,7 +269,7 @@ data class FileOffer(
     /** SHA-256 of the whole file, hex; verified by the receiver. */
     val sha256: String = "",
     val direction: String
-)
+) : WirePayload
 
 /**
  * The receiver's go-ahead. [offset] is how many bytes it already holds, so a
@@ -271,7 +281,7 @@ data class FileAccept(
     val offset: Long = 0,
     val accepted: Boolean = true,
     val reason: String = ""
-)
+) : WirePayload
 
 /** One slice. [offset] is authoritative: the receiver writes at it. */
 @Serializable
@@ -280,10 +290,10 @@ data class FileChunk(
     val offset: Long,
     val data: String,
     val last: Boolean = false
-)
+) : WirePayload
 
 @Serializable
-data class FileAck(val transferId: String, val received: Long)
+data class FileAck(val transferId: String, val received: Long) : WirePayload
 
 @Serializable
 data class FileComplete(
@@ -291,10 +301,10 @@ data class FileComplete(
     val ok: Boolean = false,
     val sha256: String = "",
     val error: String = ""
-)
+) : WirePayload
 
 @Serializable
-data class FileControl(val transferId: String, val action: String)
+data class FileControl(val transferId: String, val action: String) : WirePayload
 
 @Serializable
 data class FileProgress(
