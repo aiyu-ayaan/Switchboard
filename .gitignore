@@ -19,6 +19,7 @@ yarn-error.log*
 pnpm-debug.log*
 dist/
 dist-electron/
+frontend/release/
 out/
 build/
 .next/
