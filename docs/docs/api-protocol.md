@@ -14,6 +14,22 @@ Switchboard utilizes two network interfaces:
 
 ## 📡 1. WebSocket Protocol (`/ws`)
 
+### Frame Format
+
+Every sealed frame begins with a **kind byte**:
+
+| Kind | Layout | Used by |
+| :--- | :--- | :--- |
+| `0x00` | `0x00` + envelope JSON | every control message |
+| `0x01` | `0x01` + `uint32` big-endian metadata length + envelope JSON + raw bytes | file chunks, camera frames |
+
+Bulk payloads ride *beside* the envelope rather than base64 inside it. The
+frame is a binary WebSocket message carrying an AEAD ciphertext either way, so
+encoding the bytes would inflate them by a third and cost an encode on one CPU
+and a decode on the other for no benefit. A metadata length that overruns the
+frame is rejected rather than sliced — it is the one input that turns a
+length field into a crash.
+
 ### Envelope Format
 
 All WebSocket messages follow a standardized JSON envelope structure:

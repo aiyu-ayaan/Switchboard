@@ -40,12 +40,46 @@ This document covers the design, protocol, and Android integration of Switchboar
 2. The receiver validates available disk space in the designated download directory and returns `file_transfer_accept` with a unique `transferId`.
 
 ### 2. Chunked Streaming
-- Files are streamed in chunks (typically 64 KB).
-- Each chunk is framed with its chunk index and an AEAD authentication tag.
+- Files are streamed in 256 KiB chunks over the existing encrypted session — no second socket and no second key exchange.
+- **Chunk bytes travel beside the JSON envelope, not inside it.** Every frame is
+  already a binary WebSocket message carrying an AEAD ciphertext, so base64 in
+  the envelope would inflate every byte by a third and buy an encode on one
+  CPU and a decode on the other to arrive in the same place. A frame is
+  `0x01 | uint32 metadata length | envelope JSON | raw bytes`; a control frame
+  is `0x00 | envelope JSON`. The overhead on a 256 KiB chunk is under 256 bytes.
+- **Offsets are authoritative.** The receiver writes each chunk *at* its stated
+  offset rather than appending, so a duplicated or reordered frame overwrites
+  the same bytes instead of corrupting the file.
+- **Acks are flow control, not reliability.** The transport already guarantees
+  delivery. Without a window a desktop SSD saturates the link faster than a
+  phone commits to storage, and the excess piles up in socket buffers on both
+  ends — so the sender stays within 2 MiB of the last acknowledgement.
+- **Nothing is ever whole in memory.** Both ends move one chunk at a time and
+  hash as bytes pass, which is what makes a multi-GB file a bounded-memory
+  operation rather than an allocation failure.
 - Transfer throughput and speed calculations (MB/s or Mb/s) are sampled over rolling time windows and broadcast to the user interface.
 
-### 3. Verification & Atomicity
-- Incoming chunks are written to a temporary staging file (`.switchboard.tmp`).
+### 3. Surviving a dropped connection
+
+A lost socket is **not** a failed transfer. When a device disconnects, both
+ends *park* whatever was in flight:
+
+- The receiver keeps its `.part` file and closes only the handle.
+- The sender stops its pump and remembers the file it was reading.
+- Both show the transfer as paused, "waiting to reconnect".
+
+When the device comes back, the sender re-offers the **same transfer id**. The
+receiver reopens the `.part`, reports the offset it already holds, and the
+sender seeks there — so an interrupted 4 GB file resumes at the byte it
+reached instead of starting again. This reuses the same resume path a manual
+pause takes, rather than a second mechanism written for reconnects.
+
+A parked transfer is not immortal: one whose device never returns is failed
+after ten minutes, because a parked receive holds an open file handle and a
+phone that walked out of range must not pin one forever.
+
+### 4. Verification & Atomicity
+- Incoming chunks are written to a temporary staging file (`.part` beside the destination).
 - As chunks arrive, the receiver continuously updates an incremental SHA-256 digest.
 - Once the final chunk is received, the digest is compared to the initiator's declared hash.
 - Upon successful match, the temporary file is atomically renamed to the final destination filename. If validation fails, the staging file is discarded immediately.
