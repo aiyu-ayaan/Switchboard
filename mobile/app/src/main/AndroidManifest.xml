@@ -11,6 +11,8 @@
     <!-- Transfers keep running while the app is backgrounded. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Progress and result notifications; requested at the first transfer. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
@@ -50,6 +52,11 @@
             android:name=".transfer.TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".camera.CameraService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
     </application>
 
 </manifest>

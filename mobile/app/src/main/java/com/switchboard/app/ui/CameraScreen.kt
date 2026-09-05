@@ -1,22 +1,30 @@
 package com.switchboard.app.ui
 
 import android.Manifest
+import android.app.Activity
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Rotate90DegreesCw
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -35,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -82,31 +92,91 @@ fun CameraScreen(modifier: Modifier = Modifier) {
         onDispose { controller.detach(owner) }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        StatusCard(
-            streaming = state.streaming,
-            resolution = if (state.width > 0) "${state.width}x${state.height}" else "",
-            error = state.error,
-            pending = pending,
-            granted = granted,
-            onGrant = { askPermission.launch(Manifest.permission.CAMERA) },
-            onStart = { controller.request() },
-            onStop = { controller.stop() }
-        )
+    var isDisplayLocked by remember { mutableStateOf(false) }
 
-        if (granted) {
-            CaptureCard(settings, state.hasFrontCamera, state.hasTorch) { controller.update(it) }
-            FramingCard(settings) { controller.update(it) }
-            if (state.hasManualFocus || state.hasManualExposure) {
-                ImageCard(state.hasManualFocus, state.hasManualExposure,
-                    state.minExposure, state.maxExposure, settings) { controller.update(it) }
+    val activity = context as? Activity
+    DisposableEffect(isDisplayLocked) {
+        if (isDisplayLocked) {
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            activity?.window?.attributes = activity?.window?.attributes?.apply {
+                screenBrightness = 0.01f
             }
-            WhiteBalanceCard(settings) { controller.update(it) }
+        } else {
+            activity?.window?.attributes = activity?.window?.attributes?.apply {
+                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+        }
+        onDispose {
+            activity?.window?.attributes = activity?.window?.attributes?.apply {
+                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            StatusCard(
+                streaming = state.streaming,
+                resolution = if (state.width > 0) "${state.width}x${state.height}" else "",
+                error = state.error,
+                pending = pending,
+                granted = granted,
+                onGrant = { askPermission.launch(Manifest.permission.CAMERA) },
+                onStart = { controller.request() },
+                onStop = { controller.stop() },
+                onLockDisplay = { isDisplayLocked = true }
+            )
+
+            if (granted) {
+                CaptureCard(settings, state.hasFrontCamera, state.hasTorch) { controller.update(it) }
+                FramingCard(settings) { controller.update(it) }
+                if (state.hasManualFocus || state.hasManualExposure) {
+                    ImageCard(state.hasManualFocus, state.hasManualExposure,
+                        state.minExposure, state.maxExposure, settings) { controller.update(it) }
+                }
+                WhiteBalanceCard(settings) { controller.update(it) }
+            }
+        }
+
+        if (isDisplayLocked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = { isDisplayLocked = false }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.35f),
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Text(
+                        text = "Display locked · Camera streaming",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.45f)
+                    )
+                    Text(
+                        text = "Double tap anywhere to unlock",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.3f)
+                    )
+                }
+            }
         }
     }
 }
@@ -120,7 +190,8 @@ private fun StatusCard(
     granted: Boolean,
     onGrant: () -> Unit,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onLockDisplay: () -> Unit
 ) {
     SectionCard {
         Text(
@@ -138,8 +209,8 @@ private fun StatusCard(
             Column {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "The desktop is waiting for this camera. Streaming runs only " +
-                        "while this screen is open.",
+                    "The desktop is waiting for this camera. Tap 'Start streaming' to begin. " +
+                        "Streaming will continue when locked or backgrounded.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -156,7 +227,27 @@ private fun StatusCard(
         Spacer(Modifier.height(14.dp))
         when {
             !granted -> Button(onClick = onGrant) { Text("Allow camera access") }
-            streaming -> OutlinedButton(onClick = onStop) { Text("Stop streaming") }
+            streaming -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Stop")
+                    }
+                    Button(
+                        onClick = onLockDisplay,
+                        modifier = Modifier.weight(1.2f)
+                    ) {
+                        Icon(Icons.Filled.Lock, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Turn off display")
+                    }
+                }
+            }
             else -> Button(onClick = onStart) { Text("Start streaming") }
         }
     }

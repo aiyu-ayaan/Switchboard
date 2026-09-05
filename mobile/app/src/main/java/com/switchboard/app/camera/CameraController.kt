@@ -91,7 +91,8 @@ class CameraController private constructor(private val context: Context) {
             Actions.CAMERA_CONTROL -> payload?.let {
                 val updated = SwitchboardJson.decodeFromJsonElement(CameraSettings.serializer(), it)
                 _settings.value = updated
-                owner?.let { live -> streamer.apply(live, updated) }
+                val activeOwner = owner ?: androidx.lifecycle.ProcessLifecycleOwner.get()
+                streamer.apply(activeOwner, updated)
             }
         }
     }
@@ -101,16 +102,19 @@ class CameraController private constructor(private val context: Context) {
     /** Called by the camera screen once it has a lifecycle and permission. */
     fun attach(owner: LifecycleOwner) {
         this.owner = owner
-        if (_requested.value) startIfPossible()
+        if (_requested.value && !streamer.isStreaming) startIfPossible()
     }
 
     fun detach(owner: LifecycleOwner) {
         if (this.owner !== owner) return
         this.owner = null
-        // Leaving the screen releases the camera but keeps the request, so
-        // coming back resumes the stream the desktop is still waiting for.
-        streamer.stop()
-        publish(_state.value.copy(streaming = false))
+        // If capture is actively streaming, keep it alive in the background
+        // via CameraService rather than shutting down the camera.
+        if (!streamer.isStreaming) {
+            streamer.stop()
+            CameraService.stop(context)
+            publish(_state.value.copy(streaming = false))
+        }
     }
 
     /** Starts capture, or records the intent until the screen can honour it. */
@@ -123,34 +127,36 @@ class CameraController private constructor(private val context: Context) {
         _requested.value = false
         _pendingFromDesktop.value = false
         streamer.stop()
+        CameraService.stop(context)
         publish(CameraState(streaming = false, settings = _settings.value))
     }
 
     fun update(settings: CameraSettings) {
         _settings.value = settings
-        owner?.let { streamer.apply(it, settings) }
+        val activeOwner = owner ?: androidx.lifecycle.ProcessLifecycleOwner.get()
+        streamer.apply(activeOwner, settings)
         publish(_state.value.copy(settings = settings))
     }
 
     private fun startIfPossible() {
-        val owner = owner
-        if (owner == null || !hasPermission) {
-            // Nothing to start against yet. The desktop is told so it can say
-            // "waiting for the phone" rather than showing a blank pane.
+        if (!hasPermission) {
             _pendingFromDesktop.value = true
             publish(
                 CameraState(
                     streaming = false,
                     settings = _settings.value,
-                    error = if (!hasPermission) "Camera permission not granted on the phone"
-                    else "Open the Camera screen on the phone to start streaming"
+                    error = "Camera permission not granted on the phone"
                 )
             )
             return
         }
         _pendingFromDesktop.value = false
+        // Bind to ProcessLifecycleOwner so camera capture persists across
+        // screen locks, display-off lock mode, and backgrounding.
+        val lifecycleOwner = androidx.lifecycle.ProcessLifecycleOwner.get()
+        CameraService.start(context)
         streamer.start(
-            owner = owner,
+            owner = lifecycleOwner,
             settings = _settings.value,
             sink = { meta, jpeg -> send?.invoke(Actions.CAMERA_FRAME, meta, jpeg) },
             onState = { publish(it) }
