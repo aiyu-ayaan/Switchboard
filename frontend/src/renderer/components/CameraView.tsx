@@ -1,3 +1,4 @@
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraSettings, CameraState, LocalState } from '../../shared/types';
 
@@ -73,6 +74,7 @@ export const CameraView = ({ state }: { state: LocalState }) => {
   const [busy, setBusy] = useState(false);
   const [vcamBusy, setVcamBusy] = useState(false);
   const [vcamMessage, setVcamMessage] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const online = state.devices.filter((d) => d.online);
@@ -321,9 +323,31 @@ export const CameraView = ({ state }: { state: LocalState }) => {
         </p>
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="space-y-3">
-          <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-line bg-black">
+      <div
+        className={`grid gap-6 items-start transition-all ${
+          expanded ? 'lg:grid-cols-[1fr_320px]' : 'lg:grid-cols-[minmax(0,640px)_320px]'
+        }`}
+      >
+        <section className={`space-y-3.5 ${expanded ? 'w-full' : 'w-full max-w-[640px]'}`}>
+          <div
+            className={`group relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-edge bg-black shadow-sm transition-all ${
+              expanded ? 'max-h-[560px]' : 'max-h-[360px]'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              title={expanded ? 'Compact preview' : 'Expand preview'}
+              aria-label={expanded ? 'Compact preview' : 'Expand preview'}
+              className="absolute top-2.5 right-2.5 z-10 flex h-7 w-7 items-center justify-center rounded bg-black/60 text-ink-dim opacity-75 backdrop-blur-sm transition-all hover:bg-black/90 hover:text-ink hover:opacity-100 group-hover:opacity-100"
+            >
+              {expanded ? (
+                <Minimize2 aria-hidden="true" className="h-3.5 w-3.5" />
+              ) : (
+                <Maximize2 aria-hidden="true" className="h-3.5 w-3.5" />
+              )}
+            </button>
+
             {/* Kept mounted so the frame handler always has a canvas to draw
                 into; remounting it on every start would drop the first frames. */}
             <canvas
@@ -345,7 +369,7 @@ export const CameraView = ({ state }: { state: LocalState }) => {
               value={selected}
               onChange={(event) => setDeviceId(event.target.value)}
               disabled={live}
-              className="rounded border border-line bg-surface px-2 py-1 text-tiny text-ink"
+              className="rounded border border-edge bg-card px-2.5 py-1 text-tiny text-ink transition-colors hover:border-accent-dim focus:border-accent"
             >
               {online.length === 0 && <option value="">No devices connected</option>}
               {online.map((device) => (
@@ -359,7 +383,7 @@ export const CameraView = ({ state }: { state: LocalState }) => {
               type="button"
               onClick={toggle}
               disabled={busy || (!selected && !live && !waiting)}
-              className="rounded bg-accent px-3 py-1 text-tiny font-medium text-white disabled:opacity-40"
+              className="rounded bg-accent px-3 py-1 text-tiny font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {live || waiting ? 'Stop' : 'Start'}
             </button>
@@ -373,17 +397,17 @@ export const CameraView = ({ state }: { state: LocalState }) => {
             )}
           </div>
 
-          <div className="rounded-lg border border-line bg-surface p-3 text-tiny space-y-2">
+          <div className="rounded-lg border border-edge bg-card p-3.5 text-tiny space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-ink">System Virtual Camera</span>
               <span
-                className={`inline-flex items-center gap-1 font-medium ${
-                  camera?.vcamInstalled ? 'text-emerald-400' : 'text-amber-400'
+                className={`inline-flex items-center gap-1.5 font-medium ${
+                  camera?.vcamInstalled ? 'text-level' : 'text-warn'
                 }`}
               >
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
-                    camera?.vcamInstalled ? 'bg-emerald-400' : 'bg-amber-400'
+                    camera?.vcamInstalled ? 'bg-level' : 'bg-warn'
                   }`}
                 />
                 {camera?.vcamInstalled ? 'Device Active ("Switchboard Camera")' : 'Not installed'}
@@ -409,7 +433,7 @@ export const CameraView = ({ state }: { state: LocalState }) => {
                   type="button"
                   onClick={handleUninstallVcam}
                   disabled={vcamBusy}
-                  className="rounded border border-line px-2.5 py-1 text-tiny text-ink-faint hover:text-ink hover:bg-surface-elevated disabled:opacity-40"
+                  className="rounded border border-edge px-2.5 py-1 text-tiny text-ink-faint hover:text-ink hover:bg-raised disabled:opacity-40"
                 >
                   {vcamBusy ? 'Uninstalling...' : 'Uninstall Virtual Camera'}
                 </button>
@@ -558,7 +582,7 @@ export const CameraView = ({ state }: { state: LocalState }) => {
 };
 
 const Group = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="space-y-2 rounded-lg border border-line bg-surface p-3">
+  <section className="space-y-2 rounded-lg border border-edge bg-card p-3">
     <h3 className="text-tiny font-semibold uppercase tracking-wide text-ink-faint">{title}</h3>
     {children}
   </section>
@@ -580,10 +604,10 @@ function Chips<T extends string | number>({
           key={String(option)}
           type="button"
           onClick={() => onSelect(option)}
-          className={`rounded px-2 py-0.5 text-tiny capitalize ${
+          className={`rounded px-2 py-0.5 text-tiny capitalize transition-colors ${
             option === value
               ? 'bg-accent text-white'
-              : 'border border-line text-ink-faint hover:text-ink'
+              : 'border border-edge text-ink-faint hover:text-ink hover:bg-raised'
           }`}
         >
           {label}
