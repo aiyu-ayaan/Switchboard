@@ -99,3 +99,31 @@ func TestDirectShowSharedMemoryProtocol(t *testing.T) {
 	}
 	_ = windows.ReleaseMutex(hMutx)
 }
+
+func TestDirectShowVerticalRowInversion(t *testing.T) {
+	feeder := NewVCamFeeder()
+	if feeder == nil {
+		t.Fatal("NewVCamFeeder returned nil")
+	}
+	defer feeder.Close()
+
+	w, h := 10, 10
+	pix := make([]byte, w*h*4)
+	// Fill top row with 0xAA and bottom row with 0xBB
+	for i := 0; i < w*4; i++ {
+		pix[i] = 0xAA
+		pix[(h-1)*w*4+i] = 0xBB
+	}
+
+	feeder.writeFrameLocked(pix, w, h)
+
+	// In DirectShow shared memory, row 0 must be 0xBB (bottom-up) and last row must be 0xAA
+	sharedBytes := unsafe.Slice((*byte)(unsafe.Pointer(feeder.sharedView+vcamHeaderSize)), w*h*4)
+	if sharedBytes[0] != 0xBB {
+		t.Fatalf("row 0 first byte = 0x%X, want 0xBB (bottom-up inversion)", sharedBytes[0])
+	}
+	if sharedBytes[(h-1)*w*4] != 0xAA {
+		t.Fatalf("row %d first byte = 0x%X, want 0xAA (bottom-up inversion)", h-1, sharedBytes[(h-1)*w*4])
+	}
+}
+

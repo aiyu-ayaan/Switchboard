@@ -161,7 +161,16 @@ func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
 	binary.LittleEndian.PutUint32(headerBytes[28:32], uint32(vcamDefaultTimeoutMs))
 
 	dstPix := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView+vcamHeaderSize)), dataSize)
-	copy(dstPix, pix)
+	if len(pix) >= dataSize {
+		// Windows DirectShow RGB32 buffers expect bottom-up DIB ordering (line 0 is bottom).
+		// Invert row order so images appear upright in external capture applications.
+		rowBytes := width * 4
+		for y := 0; y < height; y++ {
+			srcOffset := (height - 1 - y) * rowBytes
+			dstOffset := y * rowBytes
+			copy(dstPix[dstOffset:dstOffset+rowBytes], pix[srcOffset:srcOffset+rowBytes])
+		}
+	}
 
 	_ = windows.SetEvent(v.hSentEvent)
 }
