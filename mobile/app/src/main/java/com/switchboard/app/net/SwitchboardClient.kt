@@ -128,15 +128,19 @@ class SwitchboardClient(
                 return "$prefix$newHost$portAndPath"
             }
 
+            // Both fallbacks are emulator-only. On a real handset there is no
+            // daemon on the phone itself, so dialling loopback would hand the
+            // auth frame — this device's long-lived identity key and its name —
+            // to whatever other app happened to bind the port.
             if (isEmulator()) {
                 val emulatorUrl = fallbackUrl("10.0.2.2")
                 if (!contains(emulatorUrl)) {
                     add(emulatorUrl)
                 }
-            }
-            val loopbackUrl = fallbackUrl("127.0.0.1")
-            if (!contains(loopbackUrl)) {
-                add(loopbackUrl)
+                val loopbackUrl = fallbackUrl("127.0.0.1")
+                if (!contains(loopbackUrl)) {
+                    add(loopbackUrl)
+                }
             }
         }
 
