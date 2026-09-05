@@ -1,0 +1,64 @@
+appId: com.switchboard.desktop
+productName: Switchboard
+copyright: Copyright © aiyu-ayaan
+
+directories:
+  output: release
+  buildResources: resources
+
+# The renderer bundle, the compiled main/preload, and nothing else. `dist` is
+# the Vite/tsc output; the sources and configs that produced it are not shipped.
+files:
+  - dist/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/*.ts'
+  - '!**/tsconfig*.json'
+
+# The Go daemon, which main/index.ts looks for at
+# `join(process.resourcesPath, 'bin', 'switchboard.exe')`. Built by
+# `pnpm build:backend` into the repo-root `bin/` before packaging.
+extraResources:
+  - from: ../bin
+    to: bin
+    filter:
+      - switchboard*
+
+asar: true
+
+# Electron ships ~50 locale .pak files. The app has no translations, so the
+# rest are dead weight in the installer.
+electronLanguages:
+  - en-US
+
+# Slowest to compress, smallest to download. A release is packaged once and
+# downloaded many times.
+compression: maximum
+
+win:
+  icon: resources/icon.ico
+  # NSIS only, deliberately: no portable target. The daemon needs a stable
+  # install location for its SQLite identity store, and a portable build that
+  # regenerates the host key on every launch would un-pair every phone.
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Switchboard
+  # The daemon holds port 9427 and a SQLite handle; an installer that writes
+  # over a running copy leaves a half-updated app and an orphaned process.
+  allowElevation: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+  uninstallDisplayName: ${productName}
+
+# The daemon is the only thing that opens a port, and it binds loopback for the
+# local API. Nothing here should be publishing an auto-update feed it does not
+# have.
+publish: null
