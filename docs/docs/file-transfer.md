@@ -150,3 +150,13 @@ When sending files from phone to PC:
 On Android, transferring large multi-gigabyte video or archive files requires keeping network sockets alive when the user switches to other apps:
 - The transfer engine runs inside `TransferService`, an Android **Foreground Service** with `foregroundServiceType="dataSync"`.
 - A persistent notification displays real-time progress percentage, transfer speed, and a **Cancel** action button.
+- **The notification is rebuilt off the main thread and at most once a second.** Posting one is four synchronous binder round trips to the system server — one per `PendingIntent` plus the `notify` — and the transfer flow ticks four times a second per file. Several files in flight put well over sixty IPCs a second on the UI thread, which froze the app while bytes were moving. The intents are resolved once and reused; a status change still posts immediately, because that is when the action buttons change.
+
+### Keeping the UI thread out of the transfer path
+
+Everything below was found by asking what a Compose callback or a `Dispatchers.Main` collector actually does per file and per frame:
+
+- **Queueing a picked file is not free.** Each one costs three or four binder calls into whichever `DocumentsProvider` owns it — taking the persistable permission, reading the display name, falling back to `openFileDescriptor` for a size the cursor omitted, resolving the MIME type — and picking a *folder* is a cursor query per directory for the whole tree. Reached straight from a tap, a multi-select of a few dozen froze the app before a byte moved. Queueing runs on the engine's IO scope.
+- **Inbound frames are never logged per event.** The connection collector runs on `Dispatchers.Main.immediate`; interpolating each frame's JSON payload into a log line put that work on the UI thread for the length of every transfer.
+- **The inbound flow cannot drop a frame.** `callbackFlow` defaults to 64 slots and its emitters are `trySend`, so a consumer that fell behind lost frames rather than slowing the socket. A dropped chunk is a hole in the received file and a digest mismatch after gigabytes. The queue is unbounded, which is bounded in practice: the sender stops once it is a window ahead of the acks that queue feeds.
+- **Allocation is a UI-thread cost too.** A sealed 256 KiB chunk used to be copied five times between the read buffer and the socket. Two of those were removable — the read buffer is already free once `Frame.encode` has copied it, and `nonce + cipher.doFinal(...)` allocated the ciphertext only to copy all of it again — and the GC pauses they bought landed on the main thread as stutter.
