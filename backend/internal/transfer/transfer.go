@@ -162,6 +162,7 @@ func (m *Manager) Offer(deviceID string, o protocol.FileOffer) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return m.refuse(deviceID, o, err)
 	}
+	o.Name = sanitizeOfferName(o.Name)
 	final, err := destPath(dir, o.Name)
 	if err != nil {
 		return m.refuse(deviceID, o, err)
@@ -786,9 +787,28 @@ func (t *transfer) emitLocked(force bool) {
 // reference, or a volume in it would let that peer write anywhere the daemon
 // can reach. Nothing is stripped or normalised: a name that is not a plain
 // file name is refused outright, because quietly rewriting it would store the
-// file somewhere neither side expects. A colon is refused everywhere, not just
-// on Windows, so the same name is accepted or rejected on every host: on NTFS
-// it opens an alternate data stream rather than the file it appears to name.
+// sanitizeOfferName cleans a peer-provided file name so that colons (common in
+// mobile camera and screen recording timestamps) and path separators do not
+// cause destPath to refuse the transfer. Path traversal is stripped via filepath.Base.
+func sanitizeOfferName(name string) string {
+	name = filepath.Base(filepath.ToSlash(name))
+	name = strings.Map(func(r rune) rune {
+		if r == ':' || r == '/' || r == '\\' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' || r == 0 {
+			return '-'
+		}
+		return r
+	}, name)
+	name = strings.TrimSpace(name)
+	name = strings.Trim(name, ".")
+	if name == "" {
+		return "file"
+	}
+	return name
+}
+
+// destPath resolves name inside dir, numbering the file if a collision already
+// exists. Path traversal attempts are rejected: a peer must not write outside
+// the chosen download directory whatever name it declares.
 func destPath(dir, name string) (string, error) {
 	switch {
 	case name == "" || name == "." || name == "..",
