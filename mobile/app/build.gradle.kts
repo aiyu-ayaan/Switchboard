@@ -42,6 +42,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    // ponytail: deprecated; kept only so HostStore can read the pre-Keystore
+    // prefs file during migration. Drop one release after that ships.
     implementation(libs.androidx.security.crypto)
 
     implementation(platform(libs.compose.bom))

@@ -1,7 +1,6 @@
 package com.switchboard.app.data
 
 import android.content.Context
-import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.switchboard.app.crypto.SessionCrypto
@@ -27,39 +26,37 @@ data class KnownHost(
 /**
  * Persists this device's identity key and the desktops it trusts.
  *
- * Backed by EncryptedSharedPreferences: the private key is the sole credential
- * for reconnecting to a paired host, so it is held under a Keystore-wrapped
- * master key rather than in plain preferences.
+ * Backed by [KeystorePrefs]: the private key is the sole credential for
+ * reconnecting to a paired host, so every value is sealed under an
+ * AndroidKeyStore AES-256-GCM key rather than stored in plain preferences.
  */
 class HostStore(context: Context) {
 
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        "switchboard-secure",
-        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val prefs = KeystorePrefs(context, "switchboard-keystore")
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    init {
+        migrateLegacyPrefs(context, prefs)
+    }
 
     /**
      * This device's long-lived keypair, created once on first launch. Its public
      * half is what the desktop stores as the paired device.
      */
     val identity: SessionCrypto.KeyPair by lazy {
-        val stored = prefs.getString(KEY_IDENTITY, null)
+        val stored = prefs.getString(KEY_IDENTITY)
         if (stored != null) {
             SessionCrypto.KeyPair.fromSeed(SessionCrypto.decode(stored))
         } else {
             SessionCrypto.KeyPair.generate().also {
-                prefs.edit().putString(KEY_IDENTITY, SessionCrypto.encode(it.seed)).apply()
+                prefs.putString(KEY_IDENTITY, SessionCrypto.encode(it.seed))
             }
         }
     }
 
     fun hosts(): List<KnownHost> {
-        val raw = prefs.getString(KEY_HOSTS, null) ?: return emptyList()
+        val raw = prefs.getString(KEY_HOSTS) ?: return emptyList()
         return runCatching {
             json.decodeFromString(ListSerializer(KnownHost.serializer()), raw)
         }.getOrDefault(emptyList())
@@ -77,20 +74,48 @@ class HostStore(context: Context) {
     }
 
     private fun write(hosts: List<KnownHost>) {
-        prefs.edit()
-            .putString(KEY_HOSTS, json.encodeToString(ListSerializer(KnownHost.serializer()), hosts))
-            .apply()
+        prefs.putString(KEY_HOSTS, json.encodeToString(ListSerializer(KnownHost.serializer()), hosts))
     }
 
     var lastHostId: String?
-        get() = prefs.getString(KEY_LAST_HOST, null)
+        get() = prefs.getString(KEY_LAST_HOST)
         set(value) {
-            prefs.edit().putString(KEY_LAST_HOST, value).apply()
+            prefs.putString(KEY_LAST_HOST, value)
         }
 
     private companion object {
         const val KEY_IDENTITY = "identity-seed"
         const val KEY_HOSTS = "known-hosts"
         const val KEY_LAST_HOST = "last-host"
+        const val LEGACY_PREFS = "switchboard-secure"
+
+        /**
+         * Moves records out of the deprecated EncryptedSharedPreferences file
+         * once, then deletes it. Losing them would silently unpair every
+         * desktop the user has, so this runs before the store is read.
+         *
+         * No-op on a fresh install and on every launch after the first. If the
+         * old file cannot be opened -- the failure mode that got the library
+         * deprecated -- it is dropped and we continue with an empty store
+         * rather than crashing on launch.
+         */
+        fun migrateLegacyPrefs(context: Context, target: KeystorePrefs) {
+            val file = java.io.File(context.applicationInfo.dataDir, "shared_prefs/$LEGACY_PREFS.xml")
+            if (!file.exists()) return
+            runCatching {
+                val legacy = EncryptedSharedPreferences.create(
+                    context,
+                    LEGACY_PREFS,
+                    MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+                for (key in listOf(KEY_IDENTITY, KEY_HOSTS, KEY_LAST_HOST)) {
+                    legacy.getString(key, null)?.let { target.putString(key, it) }
+                }
+                legacy.edit().clear().commit()
+            }
+            file.delete()
+        }
     }
 }
