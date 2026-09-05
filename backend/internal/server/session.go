@@ -96,6 +96,14 @@ func (c *client) send(env *protocol.Envelope, blob ...[]byte) {
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Before the upgrade, so an over-limit peer costs a rejected HTTP request
+	// rather than a socket and a key agreement.
+	ip := peerIP(r.RemoteAddr)
+	if !s.handshakes.allow(ip) {
+		http.Error(w, "too many handshake attempts", http.StatusTooManyRequests)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -107,6 +115,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
+	s.handshakes.succeed(ip)
 
 	s.addClient(c)
 	log.Printf("device %q connected (%s)", c.deviceID, r.RemoteAddr)
@@ -186,9 +195,9 @@ func (s *Server) handshake(conn *websocket.Conn) (*client, error) {
 	case modeResume:
 		device, err = s.store.DeviceByPublicKey(clientID)
 		if errors.Is(err, db.ErrNotFound) {
-			return nil, reject(conn, "device not paired")
+			return nil, reject(conn, "authentication failed")
 		} else if err != nil {
-			return nil, reject(conn, "device lookup failed")
+			return nil, reject(conn, "authentication failed")
 		}
 
 	default:
@@ -209,6 +218,14 @@ func (s *Server) handshake(conn *websocket.Conn) (*client, error) {
 	}
 
 	if pairing {
+		// Spend the code now, not at lookup: the proof has verified, so this
+		// peer really holds the code, and only now can it be burned without
+		// letting a wrong guess lock the user out of their own pairing.
+		// Under the lock, exactly one of two concurrent sockets wins.
+		if !s.consumePairingCode(pairingCode) {
+			return nil, reject(conn, "authentication failed")
+		}
+
 		name := auth.DeviceName
 		if name == "" {
 			name = "Unnamed device"

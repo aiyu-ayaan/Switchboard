@@ -4,6 +4,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,8 @@ type Server struct {
 	http      *http.Server
 	transfers *transfer.Manager
 	camera    *camera.Hub
+
+	handshakes handshakeLimiter
 
 	mu       sync.RWMutex
 	pairing  pairingToken
@@ -208,6 +211,22 @@ func (s *Server) PairingInfo() PairingInfo {
 	})
 	info.QRPayload = string(payload)
 	return info
+}
+
+// consumePairingCode spends the code, and reports whether this caller is the
+// one that spent it. The code is single-use by design: the answer to "someone
+// photographed the QR" is that the legitimate phone has already burned it.
+//
+// Called only after the handshake proof verifies, so a wrong code cannot spend
+// the real one and lock the user out of pairing their own device.
+func (s *Server) consumePairingCode(code []byte) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if time.Now().After(s.pairing.expires) || !bytes.Equal(s.pairing.code, code) {
+		return false
+	}
+	s.pairing = pairingToken{}
+	return true
 }
 
 // currentPairingCode returns the code if it is still valid.

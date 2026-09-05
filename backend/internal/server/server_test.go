@@ -428,3 +428,51 @@ func TestMediaStateAndArtworkOverTheWire(t *testing.T) {
 		t.Fatal("snapshot advertised artwork but none came back")
 	}
 }
+
+// The pairing code is single-use. Anyone who photographs the QR off the screen
+// or catches it on a screen-share must find it already spent, rather than
+// pairing a second device alongside the real one for the rest of the window.
+func TestPairingCodeIsSpentOnFirstUse(t *testing.T) {
+	srv, ts := newHarness(t)
+	code := []byte(srv.PairingInfo().Code)
+
+	first, err := crypto.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dial(t, ts, first, modePair, code); err != nil {
+		t.Fatalf("the legitimate device could not pair: %v", err)
+	}
+
+	// Same code, different device: this is the shoulder-surfer.
+	second, err := crypto.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dial(t, ts, second, modePair, code); err == nil {
+		t.Fatal("a spent pairing code paired a second device")
+	}
+}
+
+// A wrong code must not spend the real one, or an attacker could lock the user
+// out of pairing their own phone by guessing once.
+func TestWrongCodeDoesNotSpendTheRealOne(t *testing.T) {
+	srv, ts := newHarness(t)
+	code := []byte(srv.PairingInfo().Code)
+
+	wrong, err := crypto.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dial(t, ts, wrong, modePair, []byte("WRONGCODE0")); err == nil {
+		t.Fatal("a wrong pairing code was accepted")
+	}
+
+	good, err := crypto.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dial(t, ts, good, modePair, code); err != nil {
+		t.Fatalf("a wrong guess burned the real code: %v", err)
+	}
+}
