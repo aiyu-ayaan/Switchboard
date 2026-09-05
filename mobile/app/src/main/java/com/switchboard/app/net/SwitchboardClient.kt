@@ -8,6 +8,8 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
@@ -323,6 +325,17 @@ class SwitchboardClient(
             session = null
         }
     }
+        // callbackFlow defaults to 64 slots, and every emitter above is a
+        // `trySend` whose result nothing checks — so a consumer that fell
+        // behind did not slow the socket down, it lost frames. A dropped file
+        // chunk is a hole in the received file and a digest mismatch after
+        // gigabytes have already moved.
+        //
+        // Unbounded here is bounded in practice: the only high-rate frame is a
+        // file chunk, and the sender stops once it is a window ahead of the
+        // acks this queue feeds. A stalled consumer closes that window instead
+        // of growing this queue without limit.
+        .buffer(Channel.UNLIMITED)
 
     /**
      * Sends one encrypted command, optionally carrying raw bytes beside the
