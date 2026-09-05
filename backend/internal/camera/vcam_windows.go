@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/draw"
 	"image/jpeg"
+	"runtime"
 	"sync"
 	"time"
 	"unsafe"
@@ -48,7 +49,9 @@ type VCamFeeder struct {
 	standbyImage  *image.RGBA
 	lastLiveAt    time.Time
 	lastStandbyAt time.Time
+	frameChan     chan []byte
 	closeChan     chan struct{}
+	workerDone    chan struct{}
 }
 
 // NewVCamFeeder initializes the shared memory structures for the virtual camera.
@@ -120,12 +123,13 @@ func (v *VCamFeeder) init() error {
 	v.hSharedFile = hSharedFile
 	v.sharedView = sharedView
 	v.standbyImage = GenerateStandbyImage(1280, 720)
+	v.frameChan = make(chan []byte, 1)
 	v.closeChan = make(chan struct{})
+	v.workerDone = make(chan struct{})
 	v.active = true
 
 	// Write initial standby frame immediately so memory is never blank or uninitialized
 	v.writeFrameLocked(v.standbyImage.Pix, 1280, 720)
-	v.lastStandbyAt = time.Now()
 
 	go v.worker()
 	return nil
@@ -141,7 +145,7 @@ func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
 	}
 
 	res, _ := windows.WaitForSingleObject(v.hMutex, 50)
-	if res != windows.WAIT_OBJECT_0 {
+	if res != windows.WAIT_OBJECT_0 && res != windows.WAIT_ABANDONED {
 		return
 	}
 	defer windows.ReleaseMutex(v.hMutex)
@@ -164,70 +168,27 @@ func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
 
 func (v *VCamFeeder) feedStandby() {
 	v.mu.Lock()
-	defer v.mu.Unlock()
+	img := v.standbyImage
+	v.mu.Unlock()
 
-	if !v.active || v.standbyImage == nil {
+	if img == nil {
 		return
 	}
-	v.writeFrameLocked(v.standbyImage.Pix, v.standbyImage.Rect.Dx(), v.standbyImage.Rect.Dy())
+	v.writeFrameLocked(img.Pix, img.Rect.Dx(), img.Rect.Dy())
 	v.lastStandbyAt = time.Now()
 }
 
-func (v *VCamFeeder) worker() {
-	for {
-		res, _ := windows.WaitForSingleObject(v.hWantEvent, 100)
-
-		v.mu.Lock()
-		if !v.active {
-			v.mu.Unlock()
-			return
-		}
-		isLive := time.Since(v.lastLiveAt) <= 1500*time.Millisecond
-		v.mu.Unlock()
-
-		select {
-		case <-v.closeChan:
-			return
-		default:
-		}
-
-		if !isLive {
-			if res == windows.WAIT_OBJECT_0 || time.Since(v.lastStandbyAt) >= 500*time.Millisecond {
-				v.feedStandby()
-			}
-		}
-	}
-}
-
-// Feed decodes the JPEG and pushes pixel bytes to the virtual camera filter.
-func (v *VCamFeeder) Feed(jpegBytes []byte) error {
-	if len(jpegBytes) == 0 {
-		return nil
-	}
-
-	if !v.active {
-		if err := v.init(); err != nil {
-			return err
-		}
-	}
-
+func (v *VCamFeeder) processLiveFrame(jpegBytes []byte) {
 	img, err := jpeg.Decode(bytes.NewReader(jpegBytes))
 	if err != nil {
-		return err
+		return
 	}
 
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
 	if width <= 0 || height <= 0 {
-		return nil
-	}
-
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	if !v.active || v.sharedView == 0 {
-		return nil
+		return
 	}
 
 	// Reallocate reusable RGBA buffer if resolution changes
@@ -237,10 +198,75 @@ func (v *VCamFeeder) Feed(jpegBytes []byte) error {
 		v.lastHeight = height
 	}
 
-	// Draw incoming image onto RGBA buffer
 	draw.Draw(v.rgbaBuf, v.rgbaBuf.Bounds(), img, bounds.Min, draw.Src)
 	v.writeFrameLocked(v.rgbaBuf.Pix, width, height)
+
+	v.mu.Lock()
 	v.lastLiveAt = time.Now()
+	v.mu.Unlock()
+}
+
+func (v *VCamFeeder) worker() {
+	// Pin worker goroutine to OS thread for reliable Win32 Mutex ownership
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	defer close(v.workerDone)
+
+	// Write initial standby frame immediately
+	v.feedStandby()
+
+	closeChan := v.closeChan
+	ticker := time.NewTicker(40 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-closeChan:
+			return
+
+		case jpegBytes := <-v.frameChan:
+			v.processLiveFrame(jpegBytes)
+
+		case <-ticker.C:
+			res, _ := windows.WaitForSingleObject(v.hWantEvent, 0)
+
+			v.mu.Lock()
+			isLive := time.Since(v.lastLiveAt) <= 1200*time.Millisecond
+			v.mu.Unlock()
+
+			if !isLive {
+				if res == windows.WAIT_OBJECT_0 || time.Since(v.lastStandbyAt) >= 300*time.Millisecond {
+					v.feedStandby()
+				}
+			}
+		}
+	}
+}
+
+// Feed queues the latest JPEG frame to the dedicated feeder thread.
+// It is strictly non-blocking and drops stale frames if the feeder is busy.
+func (v *VCamFeeder) Feed(jpegBytes []byte) error {
+	if len(jpegBytes) == 0 {
+		return nil
+	}
+
+	v.mu.Lock()
+	if !v.active {
+		if err := v.init(); err != nil {
+			v.mu.Unlock()
+			return err
+		}
+	}
+	ch := v.frameChan
+	v.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- jpegBytes:
+		default:
+			// Feeder is processing a frame; drop this one to avoid latency/backlog
+		}
+	}
 	return nil
 }
 
@@ -248,24 +274,40 @@ func (v *VCamFeeder) Feed(jpegBytes []byte) error {
 func (v *VCamFeeder) NotifyStopped() {
 	v.mu.Lock()
 	v.lastLiveAt = time.Time{}
+	ch := v.frameChan
 	v.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case <-ch:
+		default:
+		}
+	}
 	v.feedStandby()
 }
 
 // Close releases the Windows handles and views.
 func (v *VCamFeeder) Close() {
 	v.mu.Lock()
-	defer v.mu.Unlock()
-
 	if !v.active {
+		v.mu.Unlock()
 		return
 	}
 	v.active = false
 
 	if v.closeChan != nil {
 		close(v.closeChan)
-		v.closeChan = nil
 	}
+	workerDone := v.workerDone
+	v.mu.Unlock()
+
+	// Wait for worker to exit BEFORE unmapping and closing handles
+	if workerDone != nil {
+		<-workerDone
+	}
+
+	v.mu.Lock()
+	defer v.mu.Unlock()
 
 	if v.sharedView != 0 {
 		_ = windows.UnmapViewOfFile(v.sharedView)

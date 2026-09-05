@@ -84,4 +84,18 @@ func TestDirectShowSharedMemoryProtocol(t *testing.T) {
 	if waitRes != windows.WAIT_OBJECT_0 {
 		t.Fatalf("filter timed out waiting for SentEvent: res=%d err=%v", waitRes, err)
 	}
+
+	// 4. DirectShow filter locks Mutex, reads buffer, and releases Mutex
+	mutxName, _ := windows.UTF16PtrFromString(vcamMutexName)
+	hMutx, err := windows.OpenMutex(windows.SYNCHRONIZE, false, mutxName)
+	if err != nil {
+		t.Fatalf("filter failed to OpenMutex: %v", err)
+	}
+	defer windows.CloseHandle(hMutx)
+
+	mRes, err := windows.WaitForSingleObject(hMutx, 50)
+	if mRes != windows.WAIT_OBJECT_0 {
+		t.Fatalf("filter failed to acquire Mutex (deadlock check): res=%d err=%v", mRes, err)
+	}
+	_ = windows.ReleaseMutex(hMutx)
 }

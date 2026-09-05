@@ -105,9 +105,6 @@ func (h *Hub) Stop() error {
 		}
 		return nil
 	}
-	if h.vcam != nil {
-		h.vcam.NotifyStopped()
-	}
 	return h.send(deviceID, protocol.ActionCameraStop, nil, nil)
 }
 
@@ -149,9 +146,7 @@ func (h *Hub) Frame(deviceID string, meta protocol.CameraFrame, jpeg []byte) {
 	h.cond.Broadcast()
 
 	if h.vcam != nil {
-		go func(data []byte) {
-			_ = h.vcam.Feed(data)
-		}(jpeg)
+		_ = h.vcam.Feed(jpeg)
 	}
 }
 

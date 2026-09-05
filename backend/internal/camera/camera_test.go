@@ -39,6 +39,9 @@ func newHub(t *testing.T) (*Hub, *sink) {
 	t.Helper()
 	s := &sink{}
 	h := NewHub(s.send)
+	t.Cleanup(func() {
+		h.Close()
+	})
 	if err := h.Start(testDevice, protocol.DefaultCameraSettings()); err != nil {
 		t.Fatal(err)
 	}
