@@ -60,6 +60,7 @@ import com.switchboard.app.ui.Section
 import com.switchboard.app.ui.SectionActions
 import com.switchboard.app.ui.SectionScreen
 import com.switchboard.app.ui.SettingsScreen
+import com.switchboard.app.ui.TouchpadActions
 import com.switchboard.app.ui.SwitchboardTheme
 
 class MainActivity : ComponentActivity() {
@@ -132,6 +133,12 @@ fun SwitchboardApp(
             onAudioOutput = viewModel::setAudioOutput,
             onMedia = viewModel::media,
             onSendFile = viewModel::sendFile,
+            touchpad = TouchpadActions(
+                onMove = viewModel::movePointer,
+                onButton = viewModel::mouseButton,
+                onScroll = viewModel::scroll,
+                onGesture = viewModel::shellGesture
+            ),
             onTransferControl = viewModel::controlTransfer,
             rateUnit = transferConfig.rateUnit
         )

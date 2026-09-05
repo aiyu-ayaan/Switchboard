@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,6 +63,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Displays("Displays", Icons.Filled.Monitor),
     Audio("Audio & Media", Icons.AutoMirrored.Filled.VolumeUp),
     Media("Media", Icons.Filled.MusicNote),
+    Touchpad("Touchpad", Icons.Filled.Mouse),
     Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
@@ -69,6 +71,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         Audio -> state.canControlVolume || state.canControlMedia
         // When media is active/playing or integrated into Audio, hide separate Media row if Audio is available
         Media -> state.canControlMedia && !state.canControlVolume
+        Touchpad -> state.canDriveInput
         Files -> true
     }
 
@@ -87,6 +90,7 @@ enum class Section(val title: String, val icon: ImageVector) {
             }
         }
         Media -> state.host.media.summary
+        Touchpad -> "Drive the pointer and shell gestures"
         Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
             0 -> "Send and receive files"
             1 -> "1 transfer in progress"
@@ -103,6 +107,7 @@ class SectionActions(
     val onAudioOutput: (deviceId: String) -> Unit,
     val onMedia: (String) -> Unit,
     val onSendFile: (Uri) -> Unit,
+    val touchpad: TouchpadActions,
     val onTransferControl: (String, String) -> Unit,
     val rateUnit: RateUnit
 )
@@ -268,6 +273,12 @@ fun SectionScreen(
     actions: SectionActions,
     modifier: Modifier = Modifier
 ) {
+    // The touchpad fills the screen and must not scroll under the finger, so
+    // it bypasses the list every other section renders in.
+    if (section == Section.Touchpad) {
+        TouchpadScreen(actions.touchpad, modifier)
+        return
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -370,6 +381,14 @@ private fun SectionBody(
                     onMedia = actions.onMedia
                 )
             }
+
+            // Reachable only from the quick-controls sheet: the full screen
+            // short-circuits above. A pad inside a draggable sheet would fight
+            // the sheet for every stroke, so this points at the real one.
+            Section.Touchpad -> EmptyCard(
+                title = "Touchpad",
+                body = "Open the Touchpad section for the pointer, gestures and buttons."
+            )
 
             Section.Files -> FilesBody(
                 transfers = state.transfers,

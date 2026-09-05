@@ -13,6 +13,10 @@ import com.switchboard.app.net.Display
 import com.switchboard.app.net.DisplaySet
 import com.switchboard.app.net.HostDiscovery
 import com.switchboard.app.net.HostState
+import com.switchboard.app.net.InputButton
+import com.switchboard.app.net.InputGesture
+import com.switchboard.app.net.InputMove
+import com.switchboard.app.net.InputScroll
 import com.switchboard.app.net.MediaCommand
 import com.switchboard.app.net.MixerSet
 import com.switchboard.app.net.OutputSet
@@ -64,6 +68,7 @@ data class UiState(
     val canControlMedia: Boolean get() = host.capabilities.contains("media")
     val canControlMixer: Boolean get() = host.capabilities.contains("mixer")
     val canRouteOutput: Boolean get() = host.capabilities.contains("outputs")
+    val canDriveInput: Boolean get() = host.capabilities.contains("input")
 }
 
 /**
@@ -79,6 +84,12 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     companion object {
         const val DEFAULT_PORT = SwitchboardConnection.DEFAULT_PORT
+
+        /** One pointer frame per ~60 Hz tick, regardless of the panel's rate. */
+        private const val POINTER_FLUSH_MS = 16L
+
+        /** Empty ticks tolerated before the flusher stands down. */
+        private const val POINTER_IDLE_TICKS = 30
     }
 
     private val connection = SwitchboardConnection.get(application)
@@ -339,6 +350,81 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
             connection.patchHost { it.copy(media = it.media.copy(status = optimistic)) }
         }
         connection.send(Actions.MEDIA_COMMAND, MediaCommand(action))
+    }
+
+    // ---- Air mouse ----
+    //
+    // Pointer motion arrives from the touch surface at the display's refresh
+    // rate, which is well over what a cursor needs and more socket frames than
+    // it is worth encrypting. Deltas are summed here and flushed on a frame
+    // tick instead: the cursor moves just as smoothly on a fraction of the
+    // frames, and the desktop's own sub-pixel accumulator absorbs the rest.
+
+    private var pendingMoveX = 0.0
+    private var pendingMoveY = 0.0
+    private var moveFlusher: Job? = null
+
+    /** Queues relative motion, in desktop pixels. */
+    fun movePointer(dx: Double, dy: Double) {
+        synchronized(this) {
+            pendingMoveX += dx
+            pendingMoveY += dy
+        }
+        if (moveFlusher?.isActive != true) startMoveFlusher()
+    }
+
+    private fun startMoveFlusher() {
+        moveFlusher = viewModelScope.launch {
+            var idleTicks = 0
+            while (isActive) {
+                delay(POINTER_FLUSH_MS)
+                val (dx, dy) = synchronized(this@SwitchboardViewModel) {
+                    val pair = pendingMoveX to pendingMoveY
+                    pendingMoveX = 0.0
+                    pendingMoveY = 0.0
+                    pair
+                }
+                if (dx == 0.0 && dy == 0.0) {
+                    // A finger lifted a moment ago may still be mid-fling in the
+                    // recogniser, so the loop idles briefly before standing down
+                    // rather than restarting on every stroke.
+                    if (++idleTicks > POINTER_IDLE_TICKS) return@launch
+                    continue
+                }
+                idleTicks = 0
+                connection.send(Actions.INPUT_MOVE, InputMove(dx, dy))
+            }
+        }
+    }
+
+    /**
+     * Presses, releases, clicks, or double-clicks a mouse button. Any queued
+     * motion is flushed first: a click that overtakes the move that positioned
+     * the cursor lands in the wrong place.
+     */
+    fun mouseButton(button: String, action: String) {
+        flushPointer()
+        connection.send(Actions.INPUT_BUTTON, InputButton(button, action))
+    }
+
+    /** Turns the wheel by a number of notches. */
+    fun scroll(dx: Double, dy: Double, ctrl: Boolean = false) {
+        connection.send(Actions.INPUT_SCROLL, InputScroll(dx, dy, ctrl))
+    }
+
+    /** Triggers one named shell gesture on the desktop. */
+    fun shellGesture(name: String) {
+        connection.send(Actions.INPUT_GESTURE, InputGesture(name))
+    }
+
+    private fun flushPointer() {
+        val (dx, dy) = synchronized(this) {
+            val pair = pendingMoveX to pendingMoveY
+            pendingMoveX = 0.0
+            pendingMoveY = 0.0
+            pair
+        }
+        if (dx != 0.0 || dy != 0.0) connection.send(Actions.INPUT_MOVE, InputMove(dx, dy))
     }
 
     // ---- Files ----

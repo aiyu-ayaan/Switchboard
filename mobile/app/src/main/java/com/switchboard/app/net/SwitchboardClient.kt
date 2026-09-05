@@ -331,6 +331,10 @@ class SwitchboardClient(
         is FileComplete -> SwitchboardJson.encodeToJsonElement(FileComplete.serializer(), payload)
         is FileControl -> SwitchboardJson.encodeToJsonElement(FileControl.serializer(), payload)
         is OutputSet -> SwitchboardJson.encodeToJsonElement(OutputSet.serializer(), payload)
+        is InputMove -> SwitchboardJson.encodeToJsonElement(InputMove.serializer(), payload)
+        is InputButton -> SwitchboardJson.encodeToJsonElement(InputButton.serializer(), payload)
+        is InputScroll -> SwitchboardJson.encodeToJsonElement(InputScroll.serializer(), payload)
+        is InputGesture -> SwitchboardJson.encodeToJsonElement(InputGesture.serializer(), payload)
     }
 
     fun disconnect() {

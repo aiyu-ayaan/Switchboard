@@ -19,6 +19,13 @@ object Actions {
     const val MEDIA_ARTWORK = "media.artwork"
     const val HOST_STATE = "host.state"
 
+    // Air mouse. This app owns the gesture vocabulary; the desktop only
+    // injects the intents resolved here.
+    const val INPUT_MOVE = "input.move"
+    const val INPUT_BUTTON = "input.button"
+    const val INPUT_SCROLL = "input.scroll"
+    const val INPUT_GESTURE = "input.gesture"
+
     // File transfer. Both directions use the same frames; the side holding
     // the file sends the offer and the receiver paces it with acks.
     const val FILE_OFFER = "file.offer"
@@ -212,6 +219,63 @@ data class DisplaySet(val displayId: String, val value: Int) : WirePayload
 
 @Serializable
 data class MediaCommand(val action: String) : WirePayload
+
+// ---- Air mouse ----
+
+/** Mouse buttons the touchpad can press. */
+object MouseButton {
+    const val LEFT = "left"
+    const val RIGHT = "right"
+    const val MIDDLE = "middle"
+}
+
+/**
+ * Button actions. [DOWN] and [UP] are separate so a tap-and-a-half or a
+ * long-press drag can hold the button across a whole run of [InputMove].
+ */
+object ButtonAction {
+    const val DOWN = "down"
+    const val UP = "up"
+    const val CLICK = "click"
+    const val DOUBLE = "double"
+}
+
+/**
+ * Named shell gestures. The desktop maps each to whatever its window manager
+ * uses, and refuses anything outside this list — the air mouse deliberately
+ * exposes no general keyboard.
+ */
+object ShellGesture {
+    const val TASK_VIEW = "taskView"
+    const val SHOW_DESKTOP = "showDesktop"
+    const val DESKTOP_LEFT = "desktopLeft"
+    const val DESKTOP_RIGHT = "desktopRight"
+    const val BACK = "back"
+    const val FORWARD = "forward"
+}
+
+/**
+ * Relative pointer motion in desktop pixels. Fractional on purpose: a slow
+ * drag moves well under a pixel per frame, and the host carries the remainder
+ * rather than truncating it, so a careful finger still creeps the cursor.
+ */
+@Serializable
+data class InputMove(val dx: Double, val dy: Double) : WirePayload
+
+@Serializable
+data class InputButton(val button: String, val action: String) : WirePayload
+
+/**
+ * Wheel motion in notches. Positive [dy] scrolls up and positive [dx] scrolls
+ * right; this app applies the natural-scroll preference before sending, so the
+ * desktop never has to know about it. [ctrl] asks for the wheel with control
+ * held, which is how every desktop spells "zoom".
+ */
+@Serializable
+data class InputScroll(val dx: Double, val dy: Double, val ctrl: Boolean = false) : WirePayload
+
+@Serializable
+data class InputGesture(val name: String) : WirePayload
 
 /** The JSON encoded in the desktop's QR code. */
 @Serializable
