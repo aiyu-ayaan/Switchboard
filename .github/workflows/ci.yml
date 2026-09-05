@@ -1,0 +1,88 @@
+# Every push and pull request. Three independent jobs, because a Go vet failure
+# and a Kotlin compile failure are different problems and neither should hide
+# the other behind a `fail-fast`.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    # The daemon's system, camera and audio backends are Windows-only; on Linux
+    # they compile to the ErrUnsupported stubs, so a Linux run would build a
+    # different program from the one that ships and prove less about it.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Format
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would rewrite these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go build ./...
+      - run: go vet ./...
+
+      # Hardware-dependent tests (DDC/CI monitors, audio endpoints, the
+      # DirectShow virtual camera) skip when the runner has none, which is
+      # every runner. What is left is the crypto, protocol, transfer, server
+      # and discovery coverage, which is the part CI can actually assert.
+      - run: go test ./...
+
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew test assembleDebug --stacktrace
+
+  desktop:
+    name: Desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter frontend typecheck
+      - run: pnpm --filter frontend build

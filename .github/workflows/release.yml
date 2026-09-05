@@ -1,0 +1,358 @@
+# Cuts a release: the signed Android APK and AAB, and the Windows installer.
+#
+# TRIGGERING
+#
+# A marker in the commit message on `master`, per development/Release-Commit.md:
+#
+#   !alpha   !beta     pre-release, bumps the pre-release counter
+#   !stable            promotes the current pre-release to a final version
+#   !patch             0.1.0 -> 0.1.1
+#   !minor  !feat      0.1.0 -> 0.2.0
+#   !major             0.1.0 -> 1.0.0
+#
+# A commit with no marker builds nothing. `workflow_dispatch` does the same
+# thing with the marker picked from a menu, which is the way to re-cut a
+# release without an empty commit.
+#
+# WHAT IT DOES NOT DO
+#
+# No portable desktop build, deliberately: the daemon keeps its host identity
+# key in SQLite beside the install, and a portable copy that regenerates that
+# key on every launch would silently un-pair every phone. See
+# frontend/electron-builder.yml.
+#
+# No macOS or Linux desktop build: the system, audio and camera backends are
+# Windows-only and return ErrUnsupported elsewhere, so those installers would
+# ship an app whose controls all fail. They arrive with the backends.
+#
+# The APKs are unsigned when ANDROID_KEYSTORE_BASE64 is absent, so a fork can
+# run this without being handed a signing key.
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      marker:
+        description: 'Release kind'
+        type: choice
+        options: [alpha, beta, stable, patch, minor, major]
+        default: alpha
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: plan
+        env:
+          DISPATCH_MARKER: ${{ inputs.marker }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -eu
+
+          # A dispatch says which kind directly; a push has to be read for a
+          # marker. `!feat` is spelled both ways in Release-Commit.md.
+          if [ -n "${DISPATCH_MARKER:-}" ]; then
+            marker="$DISPATCH_MARKER"
+          else
+            marker=""
+            for candidate in major minor feat patch stable beta alpha; do
+              case "$COMMIT_MESSAGE" in
+                *"!$candidate"*) marker="$candidate"; break ;;
+              esac
+            done
+          fi
+          [ "$marker" = feat ] && marker=minor
+
+          if [ -z "$marker" ]; then
+            echo "No release marker in the commit message; nothing to build."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          current="$(node -p "require('./package.json').version")"
+          echo "Current version: $current, marker: $marker"
+
+          # 0.1.0 or 0.1.0-alpha.3 -> core and counter, handled separately.
+          core="${current%%-*}"
+          suffix=""
+          case "$current" in *-*) suffix="${current#*-}" ;; esac
+          major="${core%%.*}"
+          rest="${core#*.}"
+          minor="${rest%%.*}"
+          patch="${rest#*.}"
+
+          case "$marker" in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="${major}.$((minor + 1)).0" ;;
+            patch) next="${major}.${minor}.$((patch + 1))" ;;
+            stable)
+              # Drops the pre-release suffix. Already stable means a patch bump,
+              # because a release that reuses a version is not a release.
+              if [ -n "$suffix" ]; then next="$core"
+              else next="${major}.${minor}.$((patch + 1))"; fi
+              ;;
+            alpha|beta)
+              # Continue the counter when the channel matches, otherwise start
+              # the new channel at 1 on the next patch.
+              case "$suffix" in
+                "$marker".*) next="${core}-${marker}.$(( ${suffix#*.} + 1 ))" ;;
+                "") next="${major}.${minor}.$((patch + 1))-${marker}.1" ;;
+                *)  next="${core}-${marker}.1" ;;
+              esac
+              ;;
+          esac
+
+          case "$next" in *-*) pre=true ;; *) pre=false ;; esac
+
+          echo "Next version: $next (prerelease: $pre)"
+          {
+            echo "release=true"
+            echo "version=$next"
+            echo "prerelease=$pre"
+          } >> "$GITHUB_OUTPUT"
+
+  android:
+    name: Android ${{ matrix.label }}
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      # One failing should not hide what the other did.
+      fail-fast: false
+      matrix:
+        include:
+          - label: APK
+            artifact: apk
+            task: ':app:assembleRelease'
+          - label: AAB
+            artifact: aab
+            task: ':app:bundleRelease'
+    defaults:
+      run:
+        working-directory: mobile
+    # Hoisted, because a step-level `if` can read `env` but not `secrets`.
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Keystore
+        id: keystore
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          sh "$GITHUB_WORKSPACE/.github/scripts/decode-keystore.sh" "$RUNNER_TEMP/release.jks"
+
+          # A keystore that will not open with the password and alias it was
+          # given is worth finding out about now, rather than ten minutes later
+          # as an APK that built fine and is not signed.
+          if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" \
+                 -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::The keystore decoded, but ANDROID_KEYSTORE_PASSWORD or ANDROID_KEY_ALIAS does not open it."
+            exit 1
+          fi
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      - name: Warn when this build will be unsigned
+        if: env.KEYSTORE_BASE64 == ''
+        run: echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is not set, so the APK and AAB cannot be installed as an upgrade or uploaded to Play."
+
+      - name: Build ${{ matrix.label }}
+        env:
+          SWITCHBOARD_VERSION_NAME: ${{ needs.plan.outputs.version }}
+          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew ${{ matrix.task }} --stacktrace
+
+      # `app-release.apk` says nothing about which release it is once it has
+      # been downloaded.
+      - name: Name the artifacts after the version
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          KIND: ${{ matrix.artifact }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          if [ "$KIND" = apk ]; then
+            src=$(ls app/build/outputs/apk/release/*.apk | head -1)
+            cp "$src" "$RUNNER_TEMP/out/Switchboard-${VERSION}.apk"
+          else
+            cp app/build/outputs/bundle/release/app-release.aab \
+               "$RUNNER_TEMP/out/Switchboard-${VERSION}.aab"
+          fi
+          ls -la "$RUNNER_TEMP/out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop installer
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    # Windows because the daemon is: the system, audio and camera backends are
+    # built from _windows.go files and cross-compiling them is not on offer.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Backend and frontend only. `pnpm build` also builds the Android app,
+      # which this job has no Java for and no use for -- the APKs come from the
+      # `android` job. The daemon lands in bin/ and the renderer in
+      # frontend/dist/, which is what electron-builder's `files` and
+      # `extraResources` expect.
+      - run: pnpm build:backend
+      - run: pnpm build:frontend
+
+      # The Electron zip is over 100 MB from GitHub's release CDN and is the
+      # one step here that fails for reasons unrelated to this repository.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      - name: Set the installer version
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          # electron-builder takes the version from frontend/package.json. The
+          # NSIS version field is numeric-only, so a pre-release suffix is
+          # dropped here and lives on in the release title and the file name.
+          core="${VERSION%%-*}"
+          node -e "
+            const fs = require('fs');
+            for (const p of ['package.json', 'frontend/package.json']) {
+              const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+              j.version = '$core';
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+            }
+          "
+
+      - name: Package
+        env:
+          # No code-signing certificate. Without this electron-builder goes
+          # looking for one in the machine store and fails on what it finds.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        shell: pwsh
+        # A cold cache drops often enough to sink a release on its own.
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            pnpm --filter frontend package
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Package attempt $i failed; retrying."
+            Start-Sleep -Seconds 15
+          }
+          exit 1
+
+      - name: Name the installer after the version
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          src=$(ls frontend/release/*.exe | head -1)
+          cp "$src" "$RUNNER_TEMP/out/Switchboard-Setup-${VERSION}.exe"
+          ls -la "$RUNNER_TEMP/out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: ${{ runner.temp }}/out/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [plan, android, desktop]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '{android-*,desktop}'
+          merge-multiple: true
+
+      - run: ls -la artifacts
+
+      # The version in the manifests is what the next release bumps from, so it
+      # has to land on master. Pre-release suffixes included: `plan` reads them
+      # back to continue the counter.
+      - name: Record the version on master
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            for (const p of ['package.json', 'frontend/package.json']) {
+              const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+              j.version = process.env.VERSION;
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+            }
+          "
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add package.json frontend/package.json
+          git commit -m "chore(release): v${VERSION} [skip ci]"
+          git push
+
+      # Last, once every artifact exists. A tag that names a release whose
+      # installer failed to build is worse than no tag.
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.plan.outputs.version }}
+          name: Switchboard v${{ needs.plan.outputs.version }}
+          prerelease: ${{ needs.plan.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: artifacts/*
+          fail_on_unmatched_files: true
