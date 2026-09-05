@@ -15,6 +15,8 @@ func (v *VCamFeeder) Feed(jpegBytes []byte) error {
 
 func (v *VCamFeeder) Close() {}
 
+func (v *VCamFeeder) NotifyStopped() {}
+
 func IsVCamInstalled() bool {
 	return false
 }

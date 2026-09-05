@@ -100,7 +100,13 @@ func (h *Hub) Stop() error {
 	h.cond.Broadcast()
 
 	if deviceID == "" {
+		if h.vcam != nil {
+			h.vcam.NotifyStopped()
+		}
 		return nil
+	}
+	if h.vcam != nil {
+		h.vcam.NotifyStopped()
 	}
 	return h.send(deviceID, protocol.ActionCameraStop, nil, nil)
 }
@@ -185,13 +191,18 @@ func (h *Hub) ReportState(deviceID string, reported protocol.CameraState) {
 // Detach clears a stream whose device has disconnected.
 func (h *Hub) Detach(deviceID string) {
 	h.mu.Lock()
-	if h.deviceID == deviceID {
+	wasStreaming := (h.deviceID == deviceID)
+	if wasStreaming {
 		h.deviceID = ""
 		h.frame = nil
 		h.state = protocol.CameraState{Settings: h.settings, Error: "the device disconnected"}
 	}
 	h.mu.Unlock()
 	h.cond.Broadcast()
+
+	if wasStreaming && h.vcam != nil {
+		h.vcam.NotifyStopped()
+	}
 }
 
 // State is the snapshot the desktop UI renders.

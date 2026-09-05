@@ -1,0 +1,271 @@
+package camera
+
+import (
+	"image"
+	"image/color"
+	"image/draw"
+)
+
+// Minimal 8x8 font table for uppercase letters, numbers, and basic symbols.
+// Each character is 8 bytes, representing rows 0-7, MSB on the left.
+var font8x8 = map[byte][8]byte{
+	' ': {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	'!': {0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x00},
+	'"': {0x66, 0x66, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00},
+	'#': {0x24, 0x7E, 0x24, 0x24, 0x7E, 0x24, 0x00, 0x00},
+	'$': {0x18, 0x3E, 0x60, 0x3C, 0x06, 0x7C, 0x18, 0x00},
+	'%': {0x62, 0x64, 0x08, 0x10, 0x20, 0x26, 0x46, 0x00},
+	'&': {0x38, 0x44, 0x38, 0x54, 0x4A, 0x44, 0x3A, 0x00},
+	'\'': {0x18, 0x18, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00},
+	'(': {0x0C, 0x18, 0x30, 0x30, 0x30, 0x18, 0x0C, 0x00},
+	')': {0x30, 0x18, 0x0C, 0x0C, 0x0C, 0x18, 0x30, 0x00},
+	'*': {0x00, 0x24, 0x18, 0x7E, 0x18, 0x24, 0x00, 0x00},
+	'+': {0x00, 0x18, 0x18, 0x7E, 0x18, 0x18, 0x00, 0x00},
+	',': {0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x10, 0x20},
+	'-': {0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00},
+	'.': {0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00},
+	'/': {0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x00},
+	'0': {0x3C, 0x66, 0x6E, 0x76, 0x66, 0x66, 0x3C, 0x00},
+	'1': {0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00},
+	'2': {0x3C, 0x66, 0x06, 0x0C, 0x18, 0x30, 0x7E, 0x00},
+	'3': {0x3C, 0x66, 0x06, 0x1C, 0x06, 0x66, 0x3C, 0x00},
+	'4': {0x0C, 0x1C, 0x34, 0x64, 0x7E, 0x04, 0x04, 0x00},
+	'5': {0x7E, 0x60, 0x7C, 0x06, 0x06, 0x66, 0x3C, 0x00},
+	'6': {0x1C, 0x30, 0x60, 0x7C, 0x66, 0x66, 0x3C, 0x00},
+	'7': {0x7E, 0x06, 0x0C, 0x18, 0x30, 0x30, 0x30, 0x00},
+	'8': {0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00},
+	'9': {0x3C, 0x66, 0x66, 0x3E, 0x06, 0x0C, 0x38, 0x00},
+	':': {0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x00, 0x00},
+	';': {0x00, 0x18, 0x18, 0x00, 0x18, 0x18, 0x10, 0x20},
+	'<': {0x0C, 0x18, 0x30, 0x60, 0x30, 0x18, 0x0C, 0x00},
+	'=': {0x00, 0x7E, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00},
+	'>': {0x30, 0x18, 0x0C, 0x06, 0x0C, 0x18, 0x30, 0x00},
+	'?': {0x3C, 0x66, 0x06, 0x0C, 0x18, 0x00, 0x18, 0x00},
+	'@': {0x3C, 0x42, 0x99, 0xA5, 0x9D, 0x40, 0x3E, 0x00},
+	'A': {0x18, 0x3C, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00},
+	'B': {0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00},
+	'C': {0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00},
+	'D': {0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00},
+	'E': {0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00},
+	'F': {0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x60, 0x00},
+	'G': {0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3A, 0x00},
+	'H': {0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00},
+	'I': {0x3C, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00},
+	'J': {0x0E, 0x06, 0x06, 0x06, 0x66, 0x66, 0x3C, 0x00},
+	'K': {0x66, 0x6C, 0x78, 0x70, 0x78, 0x6C, 0x66, 0x00},
+	'L': {0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x7E, 0x00},
+	'M': {0x63, 0x77, 0x7F, 0x6B, 0x63, 0x63, 0x63, 0x00},
+	'N': {0x66, 0x76, 0x7E, 0x7E, 0x6E, 0x66, 0x66, 0x00},
+	'O': {0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00},
+	'P': {0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00},
+	'Q': {0x3C, 0x66, 0x66, 0x66, 0x6E, 0x3C, 0x0E, 0x00},
+	'R': {0x7C, 0x66, 0x66, 0x7C, 0x78, 0x6C, 0x66, 0x00},
+	'S': {0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00},
+	'T': {0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00},
+	'U': {0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00},
+	'V': {0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00},
+	'W': {0x63, 0x63, 0x63, 0x6B, 0x7F, 0x77, 0x63, 0x00},
+	'X': {0x66, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x66, 0x00},
+	'Y': {0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00},
+	'Z': {0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00},
+	'[': {0x3C, 0x30, 0x30, 0x30, 0x30, 0x30, 0x3C, 0x00},
+	'\\': {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x00},
+	']': {0x3C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x3C, 0x00},
+	'_': {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00},
+}
+
+func drawChar(img *image.RGBA, ch byte, startX, startY, scale int, c color.RGBA) {
+	if ch >= 'a' && ch <= 'z' {
+		ch = ch - 32
+	}
+	glyph, ok := font8x8[ch]
+	if !ok {
+		glyph = font8x8['?']
+	}
+
+	for row := 0; row < 8; row++ {
+		b := glyph[row]
+		for col := 0; col < 8; col++ {
+			if (b & (0x80 >> col)) != 0 {
+				for dy := 0; dy < scale; dy++ {
+					for dx := 0; dx < scale; dx++ {
+						px := startX + col*scale + dx
+						py := startY + row*scale + dy
+						if px >= 0 && px < img.Rect.Dx() && py >= 0 && py < img.Rect.Dy() {
+							img.SetRGBA(px, py, c)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func drawText(img *image.RGBA, text string, startX, startY, scale, letterSpacing int, c color.RGBA) {
+	curX := startX
+	for i := 0; i < len(text); i++ {
+		drawChar(img, text[i], curX, startY, scale, c)
+		curX += 8*scale + letterSpacing
+	}
+}
+
+func measureText(text string, scale, letterSpacing int) int {
+	return len(text)*(8*scale+letterSpacing) - letterSpacing
+}
+
+func drawFilledCircle(img *image.RGBA, cx, cy, radius int, c color.RGBA) {
+	r2 := radius * radius
+	for y := -radius; y <= radius; y++ {
+		for x := -radius; x <= radius; x++ {
+			if x*x+y*y <= r2 {
+				px, py := cx+x, cy+y
+				if px >= 0 && px < img.Rect.Dx() && py >= 0 && py < img.Rect.Dy() {
+					img.SetRGBA(px, py, c)
+				}
+			}
+		}
+	}
+}
+
+func drawCircleRing(img *image.RGBA, cx, cy, radius, thickness int, c color.RGBA) {
+	outer2 := radius * radius
+	inner2 := (radius - thickness) * (radius - thickness)
+	for y := -radius; y <= radius; y++ {
+		for x := -radius; x <= radius; x++ {
+			d2 := x*x + y*y
+			if d2 <= outer2 && d2 >= inner2 {
+				px, py := cx+x, cy+y
+				if px >= 0 && px < img.Rect.Dx() && py >= 0 && py < img.Rect.Dy() {
+					img.SetRGBA(px, py, c)
+				}
+			}
+		}
+	}
+}
+
+func drawRoundedRect(img *image.RGBA, rx, ry, w, h, radius int, fill, border color.RGBA, borderWidth int) {
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			px := rx + x
+			py := ry + y
+			if px < 0 || px >= img.Rect.Dx() || py < 0 || py >= img.Rect.Dy() {
+				continue
+			}
+
+			inCorner := false
+			var cx, cy int
+			if x < radius && y < radius {
+				cx, cy = radius, radius
+				inCorner = true
+			} else if x >= w-radius && y < radius {
+				cx, cy = w-radius, radius
+				inCorner = true
+			} else if x < radius && y >= h-radius {
+				cx, cy = radius, h-radius
+				inCorner = true
+			} else if x >= w-radius && y >= h-radius {
+				cx, cy = w-radius, h-radius
+				inCorner = true
+			}
+
+			if inCorner {
+				dx := x - cx
+				dy := y - cy
+				dist2 := dx*dx + dy*dy
+				if dist2 > radius*radius {
+					continue
+				}
+				if borderWidth > 0 && dist2 >= (radius-borderWidth)*(radius-borderWidth) {
+					img.SetRGBA(px, py, border)
+					continue
+				}
+			} else if borderWidth > 0 && (x < borderWidth || x >= w-borderWidth || y < borderWidth || y >= h-borderWidth) {
+				img.SetRGBA(px, py, border)
+				continue
+			}
+
+			img.SetRGBA(px, py, fill)
+		}
+	}
+}
+
+// GenerateStandbyImage renders a clean, dark-themed 16:9 standby image
+// displayed by the virtual camera when no active phone video stream is present.
+func GenerateStandbyImage(width, height int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	// 1. Background fill: Dark deep slate #0B1120
+	bg := color.RGBA{R: 11, G: 17, B: 32, A: 255}
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: bg}, image.Point{}, draw.Src)
+
+	// 2. Subtle center card: 660x420
+	cardW, cardH := 660, 420
+	cardX := (width - cardW) / 2
+	cardY := (height - cardH) / 2
+	cardFill := color.RGBA{R: 20, G: 29, B: 47, A: 255}   // #141D2F
+	cardBorder := color.RGBA{R: 37, G: 51, B: 77, A: 255} // #25334D
+	drawRoundedRect(img, cardX, cardY, cardW, cardH, 20, cardFill, cardBorder, 2)
+
+	// 3. Top badge pill: "STANDBY"
+	pillW, pillH := 180, 36
+	pillX := (width - pillW) / 2
+	pillY := cardY + 30
+	pillFill := color.RGBA{R: 15, G: 23, B: 42, A: 255}
+	pillBorder := color.RGBA{R: 56, G: 189, B: 248, A: 120}
+	drawRoundedRect(img, pillX, pillY, pillW, pillH, 18, pillFill, pillBorder, 1)
+
+	// Status dot inside pill
+	dotColor := color.RGBA{R: 56, G: 189, B: 248, A: 255} // sky-400
+	drawFilledCircle(img, pillX+24, pillY+18, 6, dotColor)
+
+	badgeText := "STANDBY"
+	badgeScale := 2
+	drawText(img, badgeText, pillX+44, pillY+10, badgeScale, 1, color.RGBA{R: 224, G: 242, B: 254, A: 255})
+
+	// 4. Stylized Camera Icon in card center
+	camCenterX := width / 2
+	camCenterY := cardY + 165
+	camW, camH := 120, 84
+	camX := camCenterX - camW/2
+	camY := camCenterY - camH/2
+
+	// Camera body
+	camFill := color.RGBA{R: 30, G: 41, B: 59, A: 255}
+	camBorder := color.RGBA{R: 56, G: 189, B: 248, A: 255}
+	drawRoundedRect(img, camX, camY, camW, camH, 14, camFill, camBorder, 3)
+
+	// Top bump (viewfinder)
+	bumpW, bumpH := 36, 14
+	drawRoundedRect(img, camCenterX-bumpW/2, camY-10, bumpW, bumpH, 4, camBorder, camBorder, 0)
+
+	// Camera lens rings
+	drawCircleRing(img, camCenterX, camCenterY+2, 28, 4, camBorder)
+	drawCircleRing(img, camCenterX, camCenterY+2, 18, 3, color.RGBA{R: 14, G: 165, B: 233, A: 255})
+	drawFilledCircle(img, camCenterX, camCenterY+2, 8, color.RGBA{R: 56, G: 189, B: 248, A: 255})
+
+	// Small flash / sensor dot
+	drawFilledCircle(img, camX+camW-20, camY+20, 4, color.RGBA{R: 251, G: 191, B: 36, A: 255}) // Amber
+
+	// 5. Main Title: "SWITCHBOARD CAMERA"
+	title := "SWITCHBOARD CAMERA"
+	titleScale := 3
+	titleSpacing := 2
+	titleW := measureText(title, titleScale, titleSpacing)
+	drawText(img, title, (width-titleW)/2, cardY+245, titleScale, titleSpacing, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+
+	// 6. Subtitle: "WAITING FOR CONNECTION"
+	sub := "WAITING FOR CONNECTION"
+	subScale := 2
+	subSpacing := 2
+	subW := measureText(sub, subScale, subSpacing)
+	drawText(img, sub, (width-subW)/2, cardY+295, subScale, subSpacing, color.RGBA{R: 56, G: 189, B: 248, A: 255})
+
+	// 7. Instructions: "START CAMERA STREAM ON YOUR PHONE"
+	info := "START CAMERA STREAM ON YOUR PHONE"
+	infoScale := 2
+	infoSpacing := 1
+	infoW := measureText(info, infoScale, infoSpacing)
+	drawText(img, info, (width-infoW)/2, cardY+340, infoScale, infoSpacing, color.RGBA{R: 148, G: 163, B: 184, A: 255})
+
+	return img
+}

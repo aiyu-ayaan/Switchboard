@@ -9,6 +9,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -20,10 +21,10 @@ const (
 	vcamHeaderSize   = 32
 	vcamTotalSize    = vcamHeaderSize + vcamMaxImageSize
 
-	vcamMutexName    = "UnityCapture_Mutx0"
-	vcamWantName     = "UnityCapture_Want0"
-	vcamSentName     = "UnityCapture_Sent0"
-	vcamSharedData   = "UnityCapture_Data0"
+	vcamMutexName    = "UnityCapture_Mutx"
+	vcamWantName     = "UnityCapture_Want"
+	vcamSentName     = "UnityCapture_Sent"
+	vcamSharedData   = "UnityCapture_Data"
 
 	vcamFormatUint8       = 0
 	vcamResizeLinear      = 1
@@ -34,16 +35,20 @@ const (
 // VCamFeeder feeds decoded video frames into the Windows DirectShow virtual
 // camera filter via shared memory-mapped buffer.
 type VCamFeeder struct {
-	mu           sync.Mutex
-	hMutex       windows.Handle
-	hWantEvent   windows.Handle
-	hSentEvent   windows.Handle
-	hSharedFile  windows.Handle
-	sharedView   uintptr
-	active       bool
-	lastWidth    int
-	lastHeight   int
-	rgbaBuf      *image.RGBA
+	mu            sync.Mutex
+	hMutex        windows.Handle
+	hWantEvent    windows.Handle
+	hSentEvent    windows.Handle
+	hSharedFile   windows.Handle
+	sharedView    uintptr
+	active        bool
+	lastWidth     int
+	lastHeight    int
+	rgbaBuf       *image.RGBA
+	standbyImage  *image.RGBA
+	lastLiveAt    time.Time
+	lastStandbyAt time.Time
+	closeChan     chan struct{}
 }
 
 // NewVCamFeeder initializes the shared memory structures for the virtual camera.
@@ -109,17 +114,89 @@ func (v *VCamFeeder) init() error {
 		return err
 	}
 
-	// Initialize header maxSize
-	headerBytes := unsafe.Slice((*byte)(unsafe.Pointer(sharedView)), vcamHeaderSize)
-	binary.LittleEndian.PutUint32(headerBytes[0:4], uint32(vcamMaxImageSize))
-
 	v.hMutex = hMutex
 	v.hWantEvent = hWant
 	v.hSentEvent = hSent
 	v.hSharedFile = hSharedFile
 	v.sharedView = sharedView
+	v.standbyImage = GenerateStandbyImage(1280, 720)
+	v.closeChan = make(chan struct{})
 	v.active = true
+
+	// Write initial standby frame immediately so memory is never blank or uninitialized
+	v.writeFrameLocked(v.standbyImage.Pix, 1280, 720)
+	v.lastStandbyAt = time.Now()
+
+	go v.worker()
 	return nil
+}
+
+func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
+	if v.sharedView == 0 || width <= 0 || height <= 0 {
+		return
+	}
+	dataSize := width * height * 4
+	if dataSize > vcamMaxImageSize {
+		return
+	}
+
+	res, _ := windows.WaitForSingleObject(v.hMutex, 50)
+	if res != windows.WAIT_OBJECT_0 {
+		return
+	}
+	defer windows.ReleaseMutex(v.hMutex)
+
+	headerBytes := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView)), vcamHeaderSize)
+	binary.LittleEndian.PutUint32(headerBytes[0:4], uint32(vcamMaxImageSize))
+	binary.LittleEndian.PutUint32(headerBytes[4:8], uint32(width))
+	binary.LittleEndian.PutUint32(headerBytes[8:12], uint32(height))
+	binary.LittleEndian.PutUint32(headerBytes[12:16], uint32(width)) // stride in pixels
+	binary.LittleEndian.PutUint32(headerBytes[16:20], uint32(vcamFormatUint8))
+	binary.LittleEndian.PutUint32(headerBytes[20:24], uint32(vcamResizeLinear))
+	binary.LittleEndian.PutUint32(headerBytes[24:28], uint32(vcamMirrorDisabled))
+	binary.LittleEndian.PutUint32(headerBytes[28:32], uint32(vcamDefaultTimeoutMs))
+
+	dstPix := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView+vcamHeaderSize)), dataSize)
+	copy(dstPix, pix)
+
+	_ = windows.SetEvent(v.hSentEvent)
+}
+
+func (v *VCamFeeder) feedStandby() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	if !v.active || v.standbyImage == nil {
+		return
+	}
+	v.writeFrameLocked(v.standbyImage.Pix, v.standbyImage.Rect.Dx(), v.standbyImage.Rect.Dy())
+	v.lastStandbyAt = time.Now()
+}
+
+func (v *VCamFeeder) worker() {
+	for {
+		res, _ := windows.WaitForSingleObject(v.hWantEvent, 100)
+
+		v.mu.Lock()
+		if !v.active {
+			v.mu.Unlock()
+			return
+		}
+		isLive := time.Since(v.lastLiveAt) <= 1500*time.Millisecond
+		v.mu.Unlock()
+
+		select {
+		case <-v.closeChan:
+			return
+		default:
+		}
+
+		if !isLive {
+			if res == windows.WAIT_OBJECT_0 || time.Since(v.lastStandbyAt) >= 500*time.Millisecond {
+				v.feedStandby()
+			}
+		}
+	}
 }
 
 // Feed decodes the JPEG and pushes pixel bytes to the virtual camera filter.
@@ -162,35 +239,17 @@ func (v *VCamFeeder) Feed(jpegBytes []byte) error {
 
 	// Draw incoming image onto RGBA buffer
 	draw.Draw(v.rgbaBuf, v.rgbaBuf.Bounds(), img, bounds.Min, draw.Src)
-	dataSize := width * height * 4
-	if dataSize > vcamMaxImageSize {
-		return nil
-	}
-
-	// Lock mutex
-	res, _ := windows.WaitForSingleObject(v.hMutex, 50)
-	if res != windows.WAIT_OBJECT_0 {
-		return nil // skip frame if filter is currently reading
-	}
-	defer windows.ReleaseMutex(v.hMutex)
-
-	headerBytes := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView)), vcamHeaderSize)
-	binary.LittleEndian.PutUint32(headerBytes[0:4], uint32(vcamMaxImageSize))
-	binary.LittleEndian.PutUint32(headerBytes[4:8], uint32(width))
-	binary.LittleEndian.PutUint32(headerBytes[8:12], uint32(height))
-	binary.LittleEndian.PutUint32(headerBytes[12:16], uint32(width)) // stride in pixels
-	binary.LittleEndian.PutUint32(headerBytes[16:20], uint32(vcamFormatUint8))
-	binary.LittleEndian.PutUint32(headerBytes[20:24], uint32(vcamResizeLinear))
-	binary.LittleEndian.PutUint32(headerBytes[24:28], uint32(vcamMirrorDisabled))
-	binary.LittleEndian.PutUint32(headerBytes[28:32], uint32(vcamDefaultTimeoutMs))
-
-	// Copy RGBA pixels into shared buffer data segment
-	dstPix := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView+vcamHeaderSize)), dataSize)
-	copy(dstPix, v.rgbaBuf.Pix)
-
-	// Notify receiver that a new frame has been sent
-	_ = windows.SetEvent(v.hSentEvent)
+	v.writeFrameLocked(v.rgbaBuf.Pix, width, height)
+	v.lastLiveAt = time.Now()
 	return nil
+}
+
+// NotifyStopped switches the virtual camera back to the standby card immediately.
+func (v *VCamFeeder) NotifyStopped() {
+	v.mu.Lock()
+	v.lastLiveAt = time.Time{}
+	v.mu.Unlock()
+	v.feedStandby()
 }
 
 // Close releases the Windows handles and views.
@@ -202,6 +261,11 @@ func (v *VCamFeeder) Close() {
 		return
 	}
 	v.active = false
+
+	if v.closeChan != nil {
+		close(v.closeChan)
+		v.closeChan = nil
+	}
 
 	if v.sharedView != 0 {
 		_ = windows.UnmapViewOfFile(v.sharedView)
