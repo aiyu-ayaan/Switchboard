@@ -65,3 +65,7 @@ func lockSystem() error { return ErrUnsupported }
 func lockSupported() bool { return false }
 
 func isLocked() bool { return false }
+
+func unlockSystem() error { return ErrUnsupported }
+
+func unlockSupported() bool { return false }
