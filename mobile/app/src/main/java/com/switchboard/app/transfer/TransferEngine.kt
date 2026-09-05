@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
-import android.util.Base64
 import android.util.Log
 import com.switchboard.app.data.TransferPreferences
 import com.switchboard.app.net.WirePayload
@@ -69,59 +68,101 @@ class TransferEngine private constructor(
      * must be applied in the order the peer sent them, and the collector is on
      * the main thread where a disk write does not belong.
      */
-    private val inbound = Channel<Pair<String, JsonElement>>(Channel.UNLIMITED)
+    /** One inbound frame: its action, its metadata, and a chunk's raw bytes. */
+    private data class Inbound(val action: String, val payload: JsonElement, val blob: ByteArray?)
 
-    private val live = mutableMapOf<String, Live>()
+    private val inbound = Channel<Inbound>(Channel.UNLIMITED)
+
+    // Concurrent because bind/unbind arrive on the connection collector while
+    // an upload coroutine is still touching its own entry.
+    private val live = java.util.concurrent.ConcurrentHashMap<String, Live>()
 
     /** Set while a session is up. Cleared on disconnect, which fails everything in flight. */
     @Volatile
-    private var sender: ((String, WirePayload) -> Unit)? = null
+    private var sender: ((String, WirePayload, ByteArray?) -> Unit)? = null
 
     private class Live(
         val offer: FileOffer,
+        /** The source document, for uploads. Null on the receiving side. */
+        val uri: Uri? = null,
         /** Highest byte the peer has confirmed; the send window is measured against it. */
         val acked: MutableStateFlow<Long> = MutableStateFlow(0L),
         val paused: MutableStateFlow<Boolean> = MutableStateFlow(false),
-        val accept: CompletableDeferred<FileAccept> = CompletableDeferred(),
-        val done: CompletableDeferred<FileComplete> = CompletableDeferred(),
+        // Re-created on a resume: a CompletableDeferred fires once, and a
+        // reconnected transfer needs a fresh handshake of its own.
+        var accept: CompletableDeferred<FileAccept> = CompletableDeferred(),
+        var done: CompletableDeferred<FileComplete> = CompletableDeferred(),
         var job: Job? = null,
         var part: File? = null,
         var sink: RandomAccessFile? = null,
+        /** Set while the socket is down and this transfer is waiting it out. */
+        var parked: Boolean = false,
         var startedAt: Long = System.currentTimeMillis()
     )
 
     init {
         scope.launch {
-            for ((action, payload) in inbound) {
-                runCatching { handle(action, payload) }
-                    .onFailure { Log.w(TAG, "dropping $action: ${it.message}") }
+            for (frame in inbound) {
+                runCatching { handle(frame.action, frame.payload, frame.blob) }
+                    .onFailure { Log.w(TAG, "dropping ${frame.action}: ${it.message}") }
             }
         }
     }
 
     // ---- Session wiring ----
 
-    fun bind(send: (String, WirePayload) -> Unit) {
+    fun bind(send: (String, WirePayload, ByteArray?) -> Unit) {
         sender = send
+        resumeParked()
     }
 
     /**
-     * A dropped socket cannot be resumed transparently: the peer forgets the
-     * transfer, so anything in flight is failed here rather than left spinning
-     * against a socket that will never ack again.
+     * A dropped socket is not a failed transfer. Everything in flight is
+     * parked with its bytes intact — the `.part` file on the receiving side,
+     * the source document on the sending side — so reconnecting picks the file
+     * up where it stopped instead of starting it again.
+     *
+     * The pumps are cancelled either way: they would otherwise spin against a
+     * socket that will never acknowledge them.
      */
     fun unbind() {
         sender = null
-        live.keys.toList().forEach { id ->
-            live[id]?.job?.cancel()
+        live.values.toList().forEach { entry ->
+            val id = entry.offer.transferId
+            entry.parked = true
+            entry.job?.cancel()
+            entry.job = null
             closeReceive(id, keepPart = true)
-            finish(id, TransferStatus.FAILED, "Connection lost")
+            update(id) {
+                it.copy(status = TransferStatus.PAUSED, error = "Waiting to reconnect", bytesPerSec = 0)
+            }
         }
-        live.clear()
     }
 
-    fun onFrame(action: String, payload: JsonElement) {
-        inbound.trySend(action to payload)
+    /**
+     * Restarts what the last disconnect parked.
+     *
+     * Only uploads are restarted here. A parked download needs nothing: the
+     * desktop re-offers it, and [onOffer] resumes onto the `.part` file that
+     * was deliberately kept — the same path a manually resumed transfer takes,
+     * rather than a second one written for reconnects.
+     */
+    private fun resumeParked() {
+        live.values.toList().filter { it.parked }.forEach { entry ->
+            entry.parked = false
+            val uri = entry.uri ?: return@forEach
+            val id = entry.offer.transferId
+
+            entry.accept = CompletableDeferred()
+            entry.done = CompletableDeferred()
+            update(id) { it.copy(status = TransferStatus.PENDING, error = "") }
+            TransferService.start(context)
+            entry.job = launchUpload(uri, entry)
+        }
+    }
+
+    fun onFrame(action: String, payload: JsonElement, blob: ByteArray? = null) {
+        inbound.trySend(Inbound(action, payload, blob))
     }
 
     // ---- Sending ----
@@ -137,12 +178,22 @@ class TransferEngine private constructor(
         }
 
         val offer = FileOffer(transferId, name, size, mimeOf(uri), "", Direction.UPLOAD)
-        val entry = Live(offer)
+        val entry = Live(offer, uri = uri)
         live[transferId] = entry
         TransferService.start(context)
         publish(FileProgress(transferId, name, Direction.UPLOAD, TransferStatus.PENDING, 0, size, startedAt = entry.startedAt))
 
-        entry.job = scope.launch {
+        entry.job = launchUpload(uri, entry)
+    }
+
+    /**
+     * Runs one upload attempt. A cancellation is rethrown rather than reported,
+     * which is what leaves the entry in [live] for [resumeParked] to pick up —
+     * a cancelled pump means the socket died, not that the user gave up.
+     */
+    private fun launchUpload(uri: Uri, entry: Live): Job {
+        val transferId = entry.offer.transferId
+        return scope.launch {
             runCatching { upload(uri, entry) }
                 .onFailure { failure ->
                     if (failure is kotlinx.coroutines.CancellationException) throw failure
@@ -159,7 +210,7 @@ class TransferEngine private constructor(
         // The digest is computed before the offer so the receiver can verify
         // without a second pass over a file it may not be able to buffer.
         val sha = openStream(uri).use { TransferMath.sha256Hex(it) }
-        emit(Actions.FILE_OFFER, entry.offer.copy(sha256 = sha))
+        emit(Actions.FILE_OFFER, entry.offer.copy(sha256 = sha), null)
 
         val accept = withTimeout(HANDSHAKE_TIMEOUT_MS) { entry.accept.await() }
         if (!accept.accepted) {
@@ -187,12 +238,11 @@ class TransferEngine private constructor(
 
                 emit(
                     Actions.FILE_CHUNK,
-                    FileChunk(
-                        transferId = id,
-                        offset = offset,
-                        data = Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP),
-                        last = offset + read >= size
-                    )
+                    FileChunk(transferId = id, offset = offset, last = offset + read >= size),
+                    // Copied because the read buffer is reused on the next
+                    // pass, and the frame is not serialised until the socket
+                    // gets to it.
+                    buffer.copyOf(read)
                 )
                 offset += read
 
@@ -233,6 +283,10 @@ class TransferEngine private constructor(
 
     private fun onOffer(offer: FileOffer) {
         val emit = sender ?: return
+        // A re-offer of a transfer already known is the desktop resuming after
+        // a dropped socket. The old handle goes; its .part file stays, and is
+        // exactly what the offset below is read from.
+        closeReceive(offer.transferId, keepPart = true)
         val entry = Live(offer)
         live[offer.transferId] = entry
         TransferService.start(context)
@@ -244,7 +298,11 @@ class TransferEngine private constructor(
         )
 
         if (prefs.config.value.saveDirectory.isEmpty()) {
-            emit(Actions.FILE_ACCEPT, FileAccept(offer.transferId, 0, false, "No save folder chosen on the phone"))
+            emit(
+                Actions.FILE_ACCEPT,
+                FileAccept(offer.transferId, 0, false, "No save folder chosen on the phone"),
+                null
+            )
             live.remove(offer.transferId)
             finish(offer.transferId, TransferStatus.FAILED, "Choose a save folder in Settings, then ask again.")
             return
@@ -260,15 +318,14 @@ class TransferEngine private constructor(
         entry.sink = RandomAccessFile(part, "rw")
         entry.acked.value = held
         update(offer.transferId) { it.copy(transferred = held) }
-        emit(Actions.FILE_ACCEPT, FileAccept(offer.transferId, held))
+        emit(Actions.FILE_ACCEPT, FileAccept(offer.transferId, held), null)
     }
 
-    private fun onChunk(chunk: FileChunk) {
+    private fun onChunk(chunk: FileChunk, bytes: ByteArray) {
         val entry = live[chunk.transferId] ?: return
         val sink = entry.sink ?: return
         val emit = sender ?: return
 
-        val bytes = Base64.decode(chunk.data, Base64.NO_WRAP)
         // The peer's offset is authoritative rather than a running local count,
         // so a resumed or re-ordered stream still lands in the right place.
         sink.seek(chunk.offset)
@@ -276,7 +333,7 @@ class TransferEngine private constructor(
 
         val received = chunk.offset + bytes.size
         entry.acked.value = received
-        emit(Actions.FILE_ACK, FileAck(chunk.transferId, received))
+        emit(Actions.FILE_ACK, FileAck(chunk.transferId, received), null)
 
         val elapsed = System.currentTimeMillis() - entry.startedAt
         update(chunk.transferId) {
@@ -288,7 +345,7 @@ class TransferEngine private constructor(
         }
     }
 
-    private fun completeReceive(entry: Live, emit: (String, WirePayload) -> Unit) {
+    private fun completeReceive(entry: Live, emit: (String, WirePayload, ByteArray?) -> Unit) {
         val id = entry.offer.transferId
         val part = entry.part
         entry.sink?.close()
@@ -297,7 +354,7 @@ class TransferEngine private constructor(
         val actual = part?.inputStream()?.use { TransferMath.sha256Hex(it) }.orEmpty()
         if (!TransferMath.digestMatches(entry.offer.sha256, actual)) {
             part?.delete()
-            emit(Actions.FILE_COMPLETE, FileComplete(id, false, actual, "checksum mismatch"))
+            emit(Actions.FILE_COMPLETE, FileComplete(id, false, actual, "checksum mismatch"), null)
             live.remove(id)
             finish(id, TransferStatus.FAILED, "The file arrived corrupted and was discarded.")
             return
@@ -309,11 +366,11 @@ class TransferEngine private constructor(
 
         published.fold(
             onSuccess = {
-                emit(Actions.FILE_COMPLETE, FileComplete(id, true, actual))
+                emit(Actions.FILE_COMPLETE, FileComplete(id, true, actual), null)
                 finish(id, TransferStatus.COMPLETED, "")
             },
             onFailure = {
-                emit(Actions.FILE_COMPLETE, FileComplete(id, false, actual, reasonOf(it)))
+                emit(Actions.FILE_COMPLETE, FileComplete(id, false, actual, reasonOf(it)), null)
                 finish(id, TransferStatus.FAILED, reasonOf(it))
             }
         )
@@ -343,7 +400,7 @@ class TransferEngine private constructor(
 
     fun control(transferId: String, action: String) {
         val entry = live[transferId]
-        sender?.invoke(Actions.FILE_CONTROL, FileControl(transferId, action))
+        sender?.invoke(Actions.FILE_CONTROL, FileControl(transferId, action), null)
         when (action) {
             Control.PAUSE -> {
                 entry?.paused?.value = true
@@ -368,13 +425,15 @@ class TransferEngine private constructor(
 
     // ---- Frame dispatch ----
 
-    private fun handle(action: String, payload: JsonElement) {
+    private fun handle(action: String, payload: JsonElement, blob: ByteArray?) {
         when (action) {
             Actions.FILE_OFFER ->
                 onOffer(SwitchboardJson.decodeFromJsonElement(FileOffer.serializer(), payload))
 
-            Actions.FILE_CHUNK ->
-                onChunk(SwitchboardJson.decodeFromJsonElement(FileChunk.serializer(), payload))
+            Actions.FILE_CHUNK -> onChunk(
+                SwitchboardJson.decodeFromJsonElement(FileChunk.serializer(), payload),
+                blob ?: ByteArray(0)
+            )
 
             Actions.FILE_ACCEPT -> {
                 val accept = SwitchboardJson.decodeFromJsonElement(FileAccept.serializer(), payload)

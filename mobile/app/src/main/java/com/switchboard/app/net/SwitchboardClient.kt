@@ -38,7 +38,20 @@ sealed interface ConnectionEvent {
      * more typed events through the UI layer would only widen the path they
      * take to get there.
      */
-    data class FileFrame(val action: String, val payload: JsonElement) : ConnectionEvent
+    /**
+     * A `file.*` frame. [blob] carries a chunk's raw bytes when there are any;
+     * every other file frame is metadata alone.
+     */
+    data class FileFrame(
+        val action: String,
+        val payload: JsonElement,
+        val blob: ByteArray? = null
+    ) : ConnectionEvent {
+        // Generated equals/hashCode would compare the ByteArray by identity.
+        // Nothing compares these, so identity is the honest answer.
+        override fun equals(other: Any?) = this === other
+        override fun hashCode() = System.identityHashCode(this)
+    }
     data class Failed(val reason: String) : ConnectionEvent
     data object Disconnected : ConnectionEvent
 }
@@ -242,10 +255,8 @@ class SwitchboardClient(
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 val active = session ?: return
                 runCatching {
-                    val envelope = SwitchboardJson.decodeFromString(
-                        Envelope.serializer(),
-                        active.open(bytes.toByteArray()).decodeToString()
-                    )
+                    val frame = Frame.decode(active.open(bytes.toByteArray()))
+                    val envelope = frame.envelope
                     val payload = envelope.payload
                     when {
                         envelope.action == Actions.HOST_STATE && payload != null -> trySend(
@@ -267,7 +278,7 @@ class SwitchboardClient(
                         )
 
                         envelope.action.startsWith("file.") && payload != null ->
-                            trySend(ConnectionEvent.FileFrame(envelope.action, payload))
+                            trySend(ConnectionEvent.FileFrame(envelope.action, payload, frame.blob))
                     }
                 }.onFailure { Log.w(TAG, "dropping frame: ${it.message}") }
             }
@@ -302,8 +313,11 @@ class SwitchboardClient(
         }
     }
 
-    /** Sends one encrypted command. No-ops before the handshake completes. */
-    fun send(action: String, payload: WirePayload? = null) {
+    /**
+     * Sends one encrypted command, optionally carrying raw bytes beside the
+     * envelope for a bulk payload. No-ops before the handshake completes.
+     */
+    fun send(action: String, payload: WirePayload? = null, blob: ByteArray? = null) {
         val active = session ?: return
         val envelope = Envelope(
             id = UUID.randomUUID().toString(),
@@ -312,8 +326,7 @@ class SwitchboardClient(
             payload = payload?.let(::encodePayload),
             timestamp = System.currentTimeMillis()
         )
-        val raw = SwitchboardJson.encodeToString(Envelope.serializer(), envelope)
-        socket?.send(active.seal(raw.encodeToByteArray()).toByteString())
+        socket?.send(active.seal(Frame.encode(envelope, blob)).toByteString())
     }
 
     // Exhaustive over the sealed WirePayload: a new payload type without a

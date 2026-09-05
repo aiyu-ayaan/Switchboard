@@ -198,7 +198,7 @@ class SwitchboardConnection private constructor(context: Context) {
                         )
                         // The engine only learns how to reach the desktop here;
                         // before the handshake there is no session to write to.
-                        transfers.bind { action, payload -> client.send(action, payload) }
+                        transfers.bind { action, payload, blob -> client.send(action, payload, blob) }
                         store.save(saved)
                         store.lastHostId = saved.daemonId
                         _state.update {
@@ -225,7 +225,8 @@ class SwitchboardConnection private constructor(context: Context) {
                         }
                     }
 
-                    is ConnectionEvent.FileFrame -> transfers.onFrame(event.action, event.payload)
+                    is ConnectionEvent.FileFrame ->
+                        transfers.onFrame(event.action, event.payload, event.blob)
 
                     is ConnectionEvent.Failed -> {
                         transfers.unbind()

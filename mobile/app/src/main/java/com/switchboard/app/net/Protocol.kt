@@ -347,12 +347,19 @@ data class FileAccept(
     val reason: String = ""
 ) : WirePayload
 
-/** One slice. [offset] is authoritative: the receiver writes at it. */
+/**
+ * Describes one slice. The bytes themselves ride beside this envelope as a
+ * [Frame.KIND_BLOB] payload rather than base64 inside it: the frame is binary
+ * on the wire either way, so encoding them would inflate every byte by a third
+ * for nothing.
+ *
+ * [offset] is authoritative: the receiver writes at it, so a duplicated or
+ * reordered frame cannot corrupt the file.
+ */
 @Serializable
 data class FileChunk(
     val transferId: String,
     val offset: Long,
-    val data: String,
     val last: Boolean = false
 ) : WirePayload
 
