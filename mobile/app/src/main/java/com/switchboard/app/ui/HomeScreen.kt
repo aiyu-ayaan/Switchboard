@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
@@ -139,7 +140,8 @@ class SectionActions(
     val onSendFolder: (Uri) -> Unit = {},
     val touchpad: TouchpadActions,
     val onTransferControl: (String, String) -> Unit,
-    val rateUnit: RateUnit
+    val rateUnit: RateUnit,
+    val onLockSystem: () -> Unit = {}
 )
 
 /**
@@ -195,7 +197,7 @@ fun HomeScreen(
         } else {
             // 1. Hero Connection Status Banner
             item {
-                HostHeroCard(state = state)
+                HostHeroCard(state = state, onLock = actions.onLockSystem)
             }
 
             // 2. Active Now Playing & Audio Controls Pod (0-Click Media + Master Volume)
@@ -243,6 +245,7 @@ fun HomeScreen(
 @Composable
 private fun HostHeroCard(
     state: UiState,
+    onLock: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -325,6 +328,25 @@ private fun HostHeroCard(
                             text = if (state.host.volume.muted) "Muted" else "${state.host.volume.level}% vol",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (state.host.volume.muted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            if (state.canLockSystem && onLock != null) {
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .bouncyClickable(onClick = onLock)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = "Lock workstation",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -744,6 +766,29 @@ private fun BentoUtilityGrid(
                                 color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1
                             )
+                        }
+                    }
+                    if (state.canLockSystem) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(30.dp)
+                                .bouncyClickable {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    actions.onLockSystem()
+                                }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "Lock",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }

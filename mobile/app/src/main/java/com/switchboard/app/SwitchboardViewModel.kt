@@ -69,6 +69,7 @@ data class UiState(
     val canControlMixer: Boolean get() = host.capabilities.contains("mixer")
     val canRouteOutput: Boolean get() = host.capabilities.contains("outputs")
     val canDriveInput: Boolean get() = host.capabilities.contains("input")
+    val canLockSystem: Boolean get() = host.capabilities.contains("lock")
 }
 
 /**
@@ -350,6 +351,11 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
             connection.patchHost { it.copy(media = it.media.copy(status = optimistic)) }
         }
         connection.send(Actions.MEDIA_COMMAND, MediaCommand(action))
+    }
+
+    /** Requests the host workstation to lock its session. */
+    fun lockSystem() {
+        connection.send(Actions.SYSTEM_LOCK)
     }
 
     // ---- Air mouse ----

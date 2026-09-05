@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -197,7 +198,8 @@ fun SwitchboardApp(
                 onGesture = viewModel::shellGesture
             ),
             onTransferControl = viewModel::controlTransfer,
-            rateUnit = transferConfig.rateUnit
+            rateUnit = transferConfig.rateUnit,
+            onLockSystem = viewModel::lockSystem
         )
     }
 
@@ -287,6 +289,15 @@ fun SwitchboardApp(
                     }
                 },
                 actions = {
+                    if (connected && state.canLockSystem) {
+                        IconButton(
+                            onClick = { viewModel.lockSystem() },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Filled.Lock, contentDescription = "Lock workstation")
+                        }
+                    }
+
                     if (currentScreen is AppScreen.Main) {
                         if (state.status == ConnectionStatus.Connecting) {
                             CircularProgressIndicator(

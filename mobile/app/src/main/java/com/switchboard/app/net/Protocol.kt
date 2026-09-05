@@ -18,6 +18,7 @@ object Actions {
     const val MEDIA_COMMAND = "media.playback.command"
     const val MEDIA_ARTWORK = "media.artwork"
     const val HOST_STATE = "host.state"
+    const val SYSTEM_LOCK = "system.lock"
 
     // Air mouse. This app owns the gesture vocabulary; the desktop only
     // injects the intents resolved here.
