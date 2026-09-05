@@ -22,26 +22,32 @@ const (
 	vcamHeaderSize   = 32
 	vcamTotalSize    = vcamHeaderSize + vcamMaxImageSize
 
-	vcamMutexName    = "UnityCapture_Mutx"
-	vcamWantName     = "UnityCapture_Want"
-	vcamSentName     = "UnityCapture_Sent"
-	vcamSharedData   = "UnityCapture_Data"
+	vcamMutexName  = "UnityCapture_Mutx"
+	vcamWantName   = "UnityCapture_Want"
+	vcamSentName   = "UnityCapture_Sent"
+	vcamSharedData = "UnityCapture_Data"
 
-	vcamFormatUint8       = 0
-	vcamResizeLinear      = 1
-	vcamMirrorDisabled    = 0
-	vcamDefaultTimeoutMs  = 1000
+	vcamFormatUint8      = 0
+	vcamResizeLinear     = 1
+	vcamMirrorDisabled   = 0
+	vcamDefaultTimeoutMs = 1000
 )
 
 // VCamFeeder feeds decoded video frames into the Windows DirectShow virtual
 // camera filter via shared memory-mapped buffer.
 type VCamFeeder struct {
-	mu            sync.Mutex
-	hMutex        windows.Handle
-	hWantEvent    windows.Handle
-	hSentEvent    windows.Handle
-	hSharedFile   windows.Handle
-	sharedView    uintptr
+	mu          sync.Mutex
+	hMutex      windows.Handle
+	hWantEvent  windows.Handle
+	hSentEvent  windows.Handle
+	hSharedFile windows.Handle
+	// Held as an unsafe.Pointer rather than the uintptr MapViewOfFile
+	// returns. A uintptr is just a number the collector does not treat as a
+	// reference, so converting one back to a pointer at each use is the
+	// pattern go vet flags — correctly, even though this particular mapping is
+	// OS-owned and never moves. Converting once, here, is both sound and
+	// quiet.
+	sharedView    unsafe.Pointer
 	active        bool
 	lastWidth     int
 	lastHeight    int
@@ -121,7 +127,7 @@ func (v *VCamFeeder) init() error {
 	v.hWantEvent = hWant
 	v.hSentEvent = hSent
 	v.hSharedFile = hSharedFile
-	v.sharedView = sharedView
+	v.sharedView = unsafe.Pointer(sharedView)
 	v.standbyImage = GenerateStandbyImage(1280, 720)
 	v.frameChan = make(chan []byte, 1)
 	v.closeChan = make(chan struct{})
@@ -136,7 +142,7 @@ func (v *VCamFeeder) init() error {
 }
 
 func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
-	if v.sharedView == 0 || width <= 0 || height <= 0 {
+	if v.sharedView == nil || width <= 0 || height <= 0 {
 		return
 	}
 	dataSize := width * height * 4
@@ -150,7 +156,7 @@ func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
 	}
 	defer windows.ReleaseMutex(v.hMutex)
 
-	headerBytes := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView)), vcamHeaderSize)
+	headerBytes := unsafe.Slice((*byte)(v.sharedView), vcamHeaderSize)
 	binary.LittleEndian.PutUint32(headerBytes[0:4], uint32(vcamMaxImageSize))
 	binary.LittleEndian.PutUint32(headerBytes[4:8], uint32(width))
 	binary.LittleEndian.PutUint32(headerBytes[8:12], uint32(height))
@@ -160,7 +166,7 @@ func (v *VCamFeeder) writeFrameLocked(pix []byte, width, height int) {
 	binary.LittleEndian.PutUint32(headerBytes[24:28], uint32(vcamMirrorDisabled))
 	binary.LittleEndian.PutUint32(headerBytes[28:32], uint32(vcamDefaultTimeoutMs))
 
-	dstPix := unsafe.Slice((*byte)(unsafe.Pointer(v.sharedView+vcamHeaderSize)), dataSize)
+	dstPix := unsafe.Slice((*byte)(unsafe.Add(v.sharedView, vcamHeaderSize)), dataSize)
 	if len(pix) >= dataSize {
 		// Windows DirectShow RGB32 buffers expect bottom-up DIB ordering (line 0 is bottom).
 		// Invert row order so images appear upright in external capture applications.
@@ -318,9 +324,9 @@ func (v *VCamFeeder) Close() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	if v.sharedView != 0 {
-		_ = windows.UnmapViewOfFile(v.sharedView)
-		v.sharedView = 0
+	if v.sharedView != nil {
+		_ = windows.UnmapViewOfFile(uintptr(v.sharedView))
+		v.sharedView = nil
 	}
 	if v.hSharedFile != 0 {
 		_ = windows.CloseHandle(v.hSharedFile)

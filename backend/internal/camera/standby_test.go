@@ -36,4 +36,3 @@ func TestVCamFeederInitAndFeed(t *testing.T) {
 	_ = feeder.Feed(nil)
 	feeder.NotifyStopped()
 }
-

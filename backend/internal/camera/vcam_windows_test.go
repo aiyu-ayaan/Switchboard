@@ -118,7 +118,7 @@ func TestDirectShowVerticalRowInversion(t *testing.T) {
 	feeder.writeFrameLocked(pix, w, h)
 
 	// In DirectShow shared memory, row 0 must be 0xBB (bottom-up) and last row must be 0xAA
-	sharedBytes := unsafe.Slice((*byte)(unsafe.Pointer(feeder.sharedView+vcamHeaderSize)), w*h*4)
+	sharedBytes := unsafe.Slice((*byte)(unsafe.Add(feeder.sharedView, vcamHeaderSize)), w*h*4)
 	if sharedBytes[0] != 0xBB {
 		t.Fatalf("row 0 first byte = 0x%X, want 0xBB (bottom-up inversion)", sharedBytes[0])
 	}
@@ -126,4 +126,3 @@ func TestDirectShowVerticalRowInversion(t *testing.T) {
 		t.Fatalf("row %d first byte = 0x%X, want 0xAA (bottom-up inversion)", h-1, sharedBytes[(h-1)*w*4])
 	}
 }
-
