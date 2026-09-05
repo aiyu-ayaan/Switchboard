@@ -47,6 +47,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/camera/control", s.localCameraControl)
 	handle("GET /local/camera/frame", s.localCameraFrame)
 	handle("GET /local/camera/stream", s.localCameraStream)
+	handle("GET /local/camera/video", s.localCameraVideo)
 }
 
 // loopbackOnly rejects any request that did not originate on this machine.
@@ -430,4 +431,12 @@ func (s *Server) localCameraFrame(w http.ResponseWriter, r *http.Request) {
 // knows nothing about.
 func (s *Server) localCameraStream(w http.ResponseWriter, r *http.Request) {
 	s.camera.ServeMJPEG(w, r)
+}
+
+// localCameraVideo is the H.264 track, and the one the desktop's own live view
+// reads. Its frames come off the phone's hardware encoder rather than a
+// software JPEG per picture, which is what lets the preview run at the rate
+// the user asked for instead of whatever a CPU could compress.
+func (s *Server) localCameraVideo(w http.ResponseWriter, r *http.Request) {
+	s.camera.ServeVideo(w, r)
 }

@@ -197,3 +197,107 @@ func TestDisconnectClearsTheStream(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNotStreaming", err)
 	}
 }
+
+// A phone can start its camera from its own screen. The host was never asked,
+// so it learns from the first state report — and until it adopts the device,
+// everything that phone sends is discarded and the desktop shows nothing.
+func TestAPhoneThatStartsOnItsOwnIsAdopted(t *testing.T) {
+	h := NewHub(func(string, string, any, []byte) error { return nil })
+	t.Cleanup(h.Close)
+
+	h.ReportState(testDevice, protocol.CameraState{Streaming: true})
+	h.Frame(testDevice, protocol.CameraFrame{Width: 1280, Height: 720}, []byte{1})
+
+	if state := h.State(); !state.Streaming || state.DeviceID != testDevice {
+		t.Fatalf("state = %+v, want a live stream owned by %s", state, testDevice)
+	}
+}
+
+// An idle phone reporting that it is not streaming must not take the free slot;
+// otherwise every connected device would claim the stream in turn.
+func TestAnIdleReportDoesNotClaimTheStream(t *testing.T) {
+	h := NewHub(func(string, string, any, []byte) error { return nil })
+	t.Cleanup(h.Close)
+
+	h.ReportState(testDevice, protocol.CameraState{Streaming: false})
+	h.Frame(testDevice, protocol.CameraFrame{Width: 1280, Height: 720}, []byte{1})
+
+	if state := h.State(); state.Streaming || state.DeviceID != "" {
+		t.Fatalf("state = %+v, want no stream", state)
+	}
+}
+
+// Stop ends the stream. Frames already in flight when it was pressed must not
+// bring it back, which is why only a state report may claim a free slot.
+func TestFramesInFlightDoNotResurrectAStoppedStream(t *testing.T) {
+	h, _ := newHub(t)
+	h.Frame(testDevice, protocol.CameraFrame{Width: 1280, Height: 720}, []byte{1})
+
+	if err := h.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	h.Frame(testDevice, protocol.CameraFrame{Width: 1280, Height: 720}, []byte{2})
+
+	if state := h.State(); state.Streaming {
+		t.Fatalf("state = %+v, want the stream to stay stopped", state)
+	}
+}
+
+// The two tracks are routed apart, and share nothing but the connection: the
+// virtual camera can only take whole pictures, and the live view can only
+// reach 60fps if it is not waiting on one.
+func TestFrameRoutesTracksSeparately(t *testing.T) {
+	h := NewHub(func(string, string, any, []byte) error { return nil })
+	if err := h.Start(testDevice, protocol.DefaultCameraSettings()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	h.Frame(testDevice, protocol.CameraFrame{Width: 1280, Height: 720}, []byte("jpeg"))
+	h.Frame(testDevice, protocol.CameraFrame{
+		Codec: protocol.CodecH264, Key: true, Width: 1080, Height: 1920, Rotation: 90,
+	}, []byte("h264"))
+
+	// The JPEG holder is untouched by a video frame; a virtual camera reading
+	// it must not be handed an access unit it cannot decode.
+	frame, _, err := h.Await(0, time.Second)
+	if err != nil {
+		t.Fatalf("await jpeg: %v", err)
+	}
+	if string(frame) != "jpeg" {
+		t.Fatalf("jpeg track carried %q", frame)
+	}
+
+	unit, meta, _, err := h.AwaitVideo(0, time.Second)
+	if err != nil {
+		t.Fatalf("await video: %v", err)
+	}
+	if string(unit) != "h264" || !meta.Key {
+		t.Fatalf("video track carried %q key=%v", unit, meta.Key)
+	}
+
+	// A rotated stream is reported as it will be seen, not as it was encoded.
+	if state := h.State(); state.Width != 1920 || state.Height != 1080 {
+		t.Fatalf("reported %dx%d, want the rotated 1920x1080", state.Width, state.Height)
+	}
+	if state := h.State(); state.Codec != protocol.CodecH264 {
+		t.Fatalf("codec %q, want the track actually feeding the view", state.Codec)
+	}
+}
+
+// A phone with no hardware encoder sends only JPEG, and that has to keep
+// driving the measured rate rather than reporting a dead video track.
+func TestJPEGOnlyStreamStillMeasured(t *testing.T) {
+	h := NewHub(func(string, string, any, []byte) error { return nil })
+	if err := h.Start(testDevice, protocol.DefaultCameraSettings()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	h.Frame(testDevice, protocol.CameraFrame{Width: 640, Height: 480}, []byte("jpeg"))
+	if state := h.State(); state.Codec != protocol.CodecJPEG {
+		t.Fatalf("codec %q, want jpeg", state.Codec)
+	}
+
+	if _, _, _, err := h.AwaitVideo(0, 10*time.Millisecond); !errors.Is(err, ErrNoNewFrame) {
+		t.Fatalf("AwaitVideo returned %v, want ErrNoNewFrame", err)
+	}
+}

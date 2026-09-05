@@ -356,17 +356,39 @@ type CameraState struct {
 	HasWhiteBalance   bool `json:"hasWhiteBalance"`
 	HasFrontCamera    bool `json:"hasFrontCamera"`
 
+	// WhiteBalanceModes are the presets this particular lens will honour. A
+	// mode the hardware does not list is silently ignored by the camera, so
+	// offering it would give the user a control that does nothing.
+	WhiteBalanceModes []string `json:"whiteBalanceModes,omitempty"`
+
+	// HasAutoFraming reports hardware face detection, which is what auto
+	// framing follows.
+	HasAutoFraming bool `json:"hasAutoFraming"`
+
 	// FPS and BytesPerSec are measured, not requested: what the link is
 	// actually carrying, which is the number that tells a user to drop the
 	// quality preset.
 	FPS         float64 `json:"fps"`
 	BytesPerSec int64   `json:"bytesPerSec"`
 
+	// Codec is what the live view is actually being fed, so the UI can say
+	// whether the hardware encoder engaged or the JPEG fallback is carrying
+	// the picture.
+	Codec string `json:"codec,omitempty"`
+
 	VCamInstalled bool   `json:"vcamInstalled"`
 	Error         string `json:"error,omitempty"`
 }
 
-// CameraFrame is the metadata for one encoded frame. The JPEG itself rides
+// Frame codecs a phone may send. A phone streams both: H.264 for the live
+// view, and JPEG for the consumers that can only take whole pictures — the
+// virtual camera and the MJPEG endpoint.
+const (
+	CodecJPEG = "jpeg"
+	CodecH264 = "h264"
+)
+
+// CameraFrame is the metadata for one encoded frame. The payload itself rides
 // beside it as a FrameBlob — at 30fps, base64 would add a third to the
 // bandwidth of the single heaviest thing on the wire.
 type CameraFrame struct {
@@ -374,6 +396,24 @@ type CameraFrame struct {
 	Width     int   `json:"width"`
 	Height    int   `json:"height"`
 	Timestamp int64 `json:"ts"`
+
+	// Codec is empty or CodecJPEG for a standalone picture, CodecH264 for one
+	// Annex-B access unit. Empty means JPEG so a phone built before the video
+	// track existed still routes correctly.
+	Codec string `json:"codec,omitempty"`
+
+	// Key marks an access unit that decodes on its own. A decoder joining
+	// mid-stream must discard everything until one arrives.
+	Key bool `json:"key,omitempty"`
+
+	// Rotation and Mirror describe the orientation the *video* track still
+	// needs applied, in degrees clockwise. The camera writes straight into the
+	// hardware encoder's surface, so there is no pass in which to bake them
+	// in — and a display transform is free where a pixel loop is not. The
+	// JPEG track carries them already applied, because a virtual camera and an
+	// MJPEG client have nowhere to put a transform.
+	Rotation int  `json:"rotation,omitempty"`
+	Mirror   bool `json:"mirror,omitempty"`
 }
 
 // ---- Air mouse ----
