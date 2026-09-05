@@ -110,10 +110,13 @@ once the grant is actually held; otherwise the settings row says so, rather
 than leaving a tap that silently did nothing and a folder that would fail on
 the next incoming file.
 
-### Outgoing File Picker
+### Outgoing File & Folder Transfer
 When sending files from phone to PC:
-1. The user taps **Choose** to launch `ACTION_OPEN_DOCUMENT`.
-2. The file is streamed directly from the `content://` resolver URI without needing to copy the file into app cache first.
+1. **Multi-File Selection**: The user taps **Files** to launch `ACTION_OPEN_DOCUMENT` / `ACTION_OPEN_MULTIPLE_DOCUMENTS` to select one or multiple files at once.
+2. **Folder Selection**: The user taps **Folder** to launch `ACTION_OPEN_DOCUMENT_TREE`. Switchboard recursively traverses all files inside the selected directory and queues them for transfer.
+3. **Android Share Sheet**: Switchboard declares `ACTION_SEND` and `ACTION_SEND_MULTIPLE` intent filters, allowing users to share media and files directly from Gallery or File Managers into Switchboard.
+4. **Sequential Transfer Queue**: Multiple selected files stream sequentially off disk through an upload queue, avoiding socket contention and ack-window starvation.
+5. **Safe File Naming**: File names with colons (common in camera and screen recording timestamps) and path prefixes are sanitized automatically so they are accepted safely by the desktop daemon.
 
 ---
 
