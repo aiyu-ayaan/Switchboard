@@ -21,12 +21,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Keyboard
@@ -57,6 +61,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,6 +88,7 @@ fun PairingScreen(
     onConnect: (KnownHost) -> Unit,
     onForget: (KnownHost) -> Unit,
     onOpenSettings: () -> Unit = {},
+    onRescan: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var confirmForget by remember { mutableStateOf<KnownHost?>(null) }
@@ -216,16 +226,35 @@ fun PairingScreen(
             }
         }
 
-        if (unpaired.isNotEmpty()) {
-            item {
+        // The header stays even with nothing found, because it carries the
+        // rescan button — a user on a network that dropped the first round of
+        // multicast needs a way to ask again.
+        item {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 6.dp, start = 4.dp)
+            ) {
                 Text(
                     text = "Found on this network",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp, start = 4.dp)
+                    modifier = Modifier.weight(1f)
+                )
+                RescanButton(onRescan = onRescan)
+            }
+        }
+        if (unpaired.isEmpty()) {
+            item {
+                Text(
+                    text = "No desktops are announcing themselves right now. " +
+                        "Tap refresh, or enter the address manually.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                 )
             }
+        } else {
             items(unpaired, key = { it.daemonId }) { found ->
                 DiscoveredRow(host = found) {
                     prefilledAddress = found.address
@@ -475,6 +504,51 @@ private fun HostRow(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+/**
+ * Restarts the mDNS browse.
+ *
+ * Discovery stops once a desktop is connected, so returning to this screen
+ * starts a fresh browse on its own; this is for the case where the first round
+ * found nothing and the user wants to ask again without leaving the screen.
+ */
+@Composable
+private fun RescanButton(onRescan: () -> Unit) {
+    var spinning by remember { mutableStateOf(false) }
+    val rotation = remember { Animatable(0f) }
+
+    LaunchedEffect(spinning) {
+        if (!spinning) return@LaunchedEffect
+        rotation.snapTo(0f)
+        rotation.animateTo(360f, tween(700, easing = LinearEasing))
+        spinning = false
+    }
+
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .size(36.dp)
+            .semantics { role = Role.Button }
+            .bouncyClickable {
+                spinning = true
+                onRescan()
+            }
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                // The spin is feedback, not progress: NSD reports no such
+                // thing, so a spinner that kept going would be a lie.
+                contentDescription = "Scan for desktops on this network",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(18.dp)
+                    .graphicsLayer { rotationZ = rotation.value }
+            )
         }
     }
 }

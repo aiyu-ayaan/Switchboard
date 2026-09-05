@@ -314,7 +314,8 @@ fun SwitchboardApp(
                                 onManual = viewModel::pairManually,
                                 onConnect = viewModel::connect,
                                 onForget = viewModel::forget,
-                                onOpenSettings = { currentScreen = AppScreen.Settings }
+                                onOpenSettings = { currentScreen = AppScreen.Settings },
+                                onRescan = viewModel::rescanHosts
                             )
                         } else {
                             HomeScreen(

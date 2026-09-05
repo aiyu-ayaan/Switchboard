@@ -33,6 +33,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -69,6 +74,7 @@ data class UiState(
  * [SwitchboardConnection] and adds only what is meaningless without a screen --
  * the scanner flag and the reachability badge.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SwitchboardViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
@@ -79,6 +85,13 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     private val discovery = HostDiscovery(application)
     private val transfers = TransferEngine.get(application)
     val transferPreferences = TransferPreferences(application)
+
+    /**
+     * Bumped by [rescanHosts]. Emitting here restarts the browse through
+     * flatMapLatest, which is what a manual rescan is: NSD has no "ask again",
+     * only a fresh discovery.
+     */
+    private val rescans = MutableStateFlow(0)
 
     private val _uiState = MutableStateFlow(UiState(hosts = connection.hosts()))
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -109,19 +122,37 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
         // Browsing lives on the ViewModel rather than the connection: it is
         // only meaningful while a screen is up, and it stops with the screen.
+        //
+        // It also stops the moment a desktop is connected. A connected phone
+        // has no use for the list, and an always-on browse keeps the system's
+        // local-network prompt coming back at a user who has already chosen
+        // their host. The window matches exactly when the pairing screen is on
+        // screen -- anything but Connected -- so the list does not blank out
+        // mid-attempt. rescanHosts() restarts it on demand.
         viewModelScope.launch {
-            discovery.hosts().collect { hosts ->
-                // A paired desktop that moved to a new DHCP lease is followed
-                // here, so reconnect stops dialling the address it has left.
-                hosts.forEach { connection.adoptDiscoveredAddress(it.daemonId, it.host, it.port) }
-                _uiState.update { it.copy(discovered = hosts) }
-            }
+            connection.state
+                .map { it.status != ConnectionStatus.Connected }
+                .distinctUntilChanged()
+                .combine(rescans) { idle, _ -> idle }
+                .flatMapLatest { idle -> if (idle) discovery.hosts() else flowOf(emptyList()) }
+                .collect { hosts ->
+                    // A paired desktop that moved to a new DHCP lease is
+                    // followed here, so reconnect stops dialling the address
+                    // it has left.
+                    hosts.forEach { connection.adoptDiscoveredAddress(it.daemonId, it.host, it.port) }
+                    _uiState.update { it.copy(discovered = hosts) }
+                }
         }
     }
 
     override fun onCleared() {
         connection.releaseUi()
         super.onCleared()
+    }
+
+    /** Restarts the mDNS browse. Does nothing while a desktop is connected. */
+    fun rescanHosts() {
+        rescans.update { it + 1 }
     }
 
     fun setScanning(scanning: Boolean) {
