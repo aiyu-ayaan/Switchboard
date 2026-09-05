@@ -59,3 +59,7 @@ func mouseButton(string, string) error { return ErrUnsupported }
 func scrollMouse(float64, float64, bool) error { return ErrUnsupported }
 
 func shellGesture(string) error { return ErrUnsupported }
+
+func lockSystem() error { return ErrUnsupported }
+
+func lockSupported() bool { return false }

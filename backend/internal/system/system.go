@@ -120,6 +120,9 @@ func (c *Controller) Scroll(dx, dy float64, ctrl bool) error { return scrollMous
 // ShellGesture triggers one named window-manager gesture.
 func (c *Controller) ShellGesture(name string) error { return shellGesture(name) }
 
+// Lock locks the workstation display.
+func (c *Controller) Lock() error { return lockSystem() }
+
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
@@ -160,6 +163,9 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 		if media, err := c.MediaState(); err == nil {
 			state.Media = media
 		}
+	}
+	if lockSupported() {
+		state.Capabilities = append(state.Capabilities, "lock")
 	}
 	return state
 }

@@ -266,6 +266,13 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		}
 		s.reply(c, env, protocol.FileHistory{Transfers: history})
 
+	case protocol.ActionSystemLock:
+		if err := s.control.Lock(); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "locked"})
+
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
 	}

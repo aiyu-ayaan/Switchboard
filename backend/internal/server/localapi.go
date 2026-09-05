@@ -39,6 +39,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("GET /local/settings", s.localGetSettings)
 	handle("POST /local/settings", s.localUpdateSettings)
 	handle("POST /local/settings/download-dir", s.localCheckDownloadDir)
+	handle("POST /local/system/lock", s.localLock)
 
 	handle("GET /local/camera/state", s.localCameraState)
 	handle("GET /local/camera/vcam/status", s.localCameraVCamStatus)
@@ -176,6 +177,14 @@ func (s *Server) localSetOutput(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Broadcast()
 	writeJSON(w, outputs)
+}
+
+func (s *Server) localLock(w http.ResponseWriter, r *http.Request) {
+	if err := s.control.Lock(); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "locked"})
 }
 
 func (s *Server) localMedia(w http.ResponseWriter, r *http.Request) {

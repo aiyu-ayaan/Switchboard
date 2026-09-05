@@ -71,6 +71,7 @@ const (
 
 	ActionHostState = "host.state" // event: full snapshot pushed to clients
 	ActionPing      = "system.ping"
+	ActionSystemLock = "system.lock"
 )
 
 // ChunkSize is the payload slice carried by one file.chunk frame.
