@@ -241,6 +241,14 @@ export interface SwitchboardBridge {
   /** Queues files for a paired device; paths come from the drag-and-drop tray. */
   sendFiles(deviceId: string, paths: string[]): Promise<FileTransfer[]>;
   controlTransfer(transferId: string, action: 'pause' | 'resume' | 'cancel'): Promise<void>;
+  /**
+   * The transfer list on its own.
+   *
+   * Progress needs polling several times a second to read as movement rather
+   * than as a bar that jumps; `getState` carries a DDC/CI display probe and an
+   * audio-session enumeration that have no business running that often.
+   */
+  getTransfers(): Promise<FileTransfer[]>;
   updateSettings(patch: Partial<HostSettings>): Promise<HostSettings>;
   /** Opens the OS folder picker and returns the chosen directory, or null. */
   chooseDownloadDir(): Promise<string | null>;

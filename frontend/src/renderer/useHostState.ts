@@ -4,6 +4,19 @@ import type { LocalState } from '../shared/types';
 const POLL_MS = 2000;
 
 /**
+ * How often the transfer list alone is re-read while a file is moving.
+ *
+ * The daemon recomputes progress every 250ms, so matching it is the fastest
+ * rate that can show anything new. This is a separate, much smaller request
+ * than the full state poll on purpose: at 2s the bar advances in visible jumps
+ * with long dead stretches between them, and speeding the whole poll up would
+ * mean probing every monitor over DDC/CI four times a second.
+ */
+const LIVE_POLL_MS = 250;
+
+const LIVE: LocalState['transfers'][number]['status'][] = ['pending', 'active', 'paused'];
+
+/**
  * Polls the daemon for host state.
  *
  * Polling rather than a socket: the local API is on loopback, the payload is
@@ -34,6 +47,28 @@ export function useHostState() {
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  // Only the transfer list is patched here, so a poll landing mid-drag cannot
+  // move a slider the user is holding — which is what `paused` guards above.
+  const hasLive = state?.transfers.some((t) => LIVE.includes(t.status)) ?? false;
+  useEffect(() => {
+    if (!hasLive) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const transfers = await window.switchboard.getTransfers();
+        if (!stopped) setState((current) => (current ? { ...current, transfers } : current));
+      } catch {
+        // A dead daemon is the full poll's error to report, not this one's.
+      }
+    };
+    const timer = setInterval(tick, LIVE_POLL_MS);
+    tick();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [hasLive]);
 
   const setPaused = useCallback((value: boolean) => {
     paused.current = value;

@@ -64,6 +64,8 @@ const bridge: SwitchboardBridge = {
   // can open.
   pathForFile: (file) => webUtils.getPathForFile(file),
   sendFiles: (deviceId, paths) => call<FileTransfer[]>('/files/send', { deviceId, paths }),
+  getTransfers: async () =>
+    (await call<{ transfers: FileTransfer[] }>('/files/history')).transfers,
   controlTransfer: async (transferId, action) => {
     await call('/files/control', { transferId, action });
   },
