@@ -2,9 +2,7 @@ package com.switchboard.app.camera
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.ImageFormat
-import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.hardware.camera2.CameraCharacteristics
@@ -73,10 +71,16 @@ class CameraStreamer(private val context: Context) {
     private var streaming = false
 
     /**
-     * Wall-clock time the next frame is allowed at. The analyser is handed
+     * [System.nanoTime] the next frame is allowed at. The analyser is handed
      * frames at the sensor's rate; anything above the requested rate is closed
      * without encoding, which is where most of the CPU saving of a low fps
      * setting actually comes from.
+     *
+     * Nanoseconds, and advanced from the previous deadline rather than from
+     * "now": millisecond intervals truncate (16 ms caps 60 fps at 62.5, but
+     * 33 ms caps 30 at 30.3) and re-basing on arrival time adds the encode
+     * latency to every interval, which is how a 60 fps request quietly
+     * becomes 45.
      */
     @Volatile
     private var nextFrameAt = 0L
@@ -116,6 +120,7 @@ class CameraStreamer(private val context: Context) {
         camera = null
         analysis = null
         sequence.set(0)
+        nextFrameAt = 0L
         onState?.invoke(CameraState(streaming = false, settings = settings))
     }
 
@@ -180,10 +185,23 @@ class CameraStreamer(private val context: Context) {
 
         // Frame rate is a Camera2 concern; CameraX has no first-class control
         // for it on ImageAnalysis.
-        Camera2Interop.Extender(builder).setCaptureRequestOption(
-            CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-            android.util.Range(settings.fps.coerceIn(5, 60), settings.fps.coerceIn(5, 60))
-        )
+        //
+        // It has to be one of the ranges the sensor advertises. Asking for a
+        // (60,60) a device does not list gets the whole request ignored, and
+        // auto-exposure then settles on whatever suits the light — indoors
+        // that is (15,30), which is the real reason "60 fps" delivered 15.
+        val advertised = runCatching {
+            Camera2CameraInfo.from(provider.getCameraInfo(selector))
+                .getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+                ?.map { it.lower to it.upper }
+        }.getOrNull().orEmpty()
+
+        pickFpsRange(advertised, settings.fps.coerceIn(5, 60))?.let { (lower, upper) ->
+            Camera2Interop.Extender(builder).setCaptureRequestOption(
+                CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                android.util.Range(lower, upper)
+            )
+        }
 
         val analysis = builder.build()
         analysis.setAnalyzer(analysisExecutor, ::onFrame)
@@ -273,17 +291,26 @@ class CameraStreamer(private val context: Context) {
         try {
             if (!streaming) return
 
-            val now = System.currentTimeMillis()
-            val interval = 1000L / settings.fps.coerceIn(1, 60)
+            val now = System.nanoTime()
+            val interval = 1_000_000_000L / settings.fps.coerceIn(1, 60)
             if (now < nextFrameAt) return
-            nextFrameAt = now + interval
+            // From the previous deadline, so the rate does not drift by one
+            // encode per frame — but clamped forward after a hitch, or the
+            // catch-up would arrive as a burst.
+            nextFrameAt =
+                if (nextFrameAt == 0L || now - nextFrameAt > interval) now + interval
+                else nextFrameAt + interval
 
-            val jpeg = encode(image) ?: return
+            // The sensor's own orientation plus whatever the user asked for.
+            val rotation = (image.imageInfo.rotationDegrees + settings.rotation).mod(360)
+            val swap = rotation == 90 || rotation == 270
+
+            val jpeg = encode(image, rotation, settings.mirror) ?: return
             val meta = CameraFrame(
                 seq = sequence.incrementAndGet(),
-                width = image.width,
-                height = image.height,
-                ts = now
+                width = if (swap) image.height else image.width,
+                height = if (swap) image.width else image.height,
+                ts = System.currentTimeMillis()
             )
             sink?.send(meta, jpeg)
         } catch (t: Throwable) {
@@ -302,33 +329,31 @@ class CameraStreamer(private val context: Context) {
      * bytes are the same size either way, and doing it at the source means the
      * MJPEG stream is already upright for any consumer — including OBS, which
      * has no idea a phone was involved.
+     *
+     * Both happen in the NV21 byte domain, *before* compression. Doing them on
+     * the JPEG meant decode-to-Bitmap plus a second compress on every frame —
+     * and since a phone held in portrait reports a 90° sensor rotation, "every
+     * frame" was the normal case, not the exception.
      */
-    private fun encode(image: ImageProxy): ByteArray? {
-        val nv21 = toNv21(image) ?: return null
-        val yuv = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
+    private fun encode(image: ImageProxy, rotation: Int, mirror: Boolean): ByteArray? {
+        var nv21 = toNv21(image) ?: return null
+        var width = image.width
+        var height = image.height
 
-        val stream = ByteArrayOutputStream(image.width * image.height / 4)
-        if (!yuv.compressToJpeg(Rect(0, 0, image.width, image.height), jpegQuality(), stream)) {
-            return null
+        if (rotation != 0) {
+            nv21 = rotateNv21(nv21, width, height, rotation)
+            if (rotation == 90 || rotation == 270) {
+                val swapped = width
+                width = height
+                height = swapped
+            }
         }
+        if (mirror) nv21 = mirrorNv21(nv21, width, height)
 
-        // The sensor's own orientation plus whatever the user asked for.
-        val rotation = (image.imageInfo.rotationDegrees + settings.rotation) % 360
-        if (rotation == 0 && !settings.mirror) return stream.toByteArray()
-
-        val bytes = stream.toByteArray()
-        val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            ?: return bytes
-        val matrix = Matrix().apply {
-            postRotate(rotation.toFloat())
-            if (settings.mirror) postScale(-1f, 1f)
-        }
-        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        val out = ByteArrayOutputStream(bytes.size)
-        rotated.compress(Bitmap.CompressFormat.JPEG, jpegQuality(), out)
-        bitmap.recycle()
-        if (rotated !== bitmap) rotated.recycle()
-        return out.toByteArray()
+        val stream = ByteArrayOutputStream(width * height / 4)
+        val yuv = YuvImage(nv21, ImageFormat.NV21, width, height, null)
+        if (!yuv.compressToJpeg(Rect(0, 0, width, height), jpegQuality(), stream)) return null
+        return stream.toByteArray()
     }
 
     private fun jpegQuality(): Int = when (settings.quality) {
@@ -360,7 +385,7 @@ class CameraStreamer(private val context: Context) {
             val row = ByteArray(yPlane.rowStride)
             for (y in 0 until height) {
                 yBuffer.position(y * yPlane.rowStride)
-                yBuffer.get(row, 0, minOf(row.size, yBuffer.remaining() + y * yPlane.rowStride))
+                yBuffer.get(row, 0, minOf(row.size, yBuffer.remaining()))
                 System.arraycopy(row, 0, out, offset, width)
                 offset += width
             }
@@ -374,12 +399,34 @@ class CameraStreamer(private val context: Context) {
         val chromaHeight = height / 2
         val chromaWidth = width / 2
 
-        for (row in 0 until chromaHeight) {
-            for (col in 0 until chromaWidth) {
-                val uvIndex = row * uPlane.rowStride + col * uPlane.pixelStride
-                if (uvIndex >= vBuffer.limit() || uvIndex >= uBuffer.limit()) continue
-                out[offset++] = vBuffer.get(uvIndex)
-                out[offset++] = uBuffer.get(uvIndex)
+        if (vPlane.pixelStride == 2) {
+            // Semi-planar, which is what nearly every device produces. The V
+            // plane's buffer is already V,U,V,U — the U plane is the same
+            // allocation one byte along — so a chroma row is one bulk copy
+            // instead of 2 × chromaWidth bounds-checked single-byte reads
+            // (half a million of them per 1080p frame).
+            val rowBytes = chromaWidth * 2
+            for (row in 0 until chromaHeight) {
+                val start = row * vPlane.rowStride
+                if (start >= vBuffer.limit()) break
+                vBuffer.position(start)
+                val copied = minOf(rowBytes, vBuffer.remaining())
+                vBuffer.get(out, offset, copied)
+                if (copied < rowBytes) {
+                    // The very last U byte sits past the V plane's limit.
+                    val last = row * uPlane.rowStride + (chromaWidth - 1) * 2
+                    if (last < uBuffer.limit()) out[offset + rowBytes - 1] = uBuffer.get(last)
+                }
+                offset += rowBytes
+            }
+        } else {
+            for (row in 0 until chromaHeight) {
+                for (col in 0 until chromaWidth) {
+                    val uvIndex = row * uPlane.rowStride + col * uPlane.pixelStride
+                    if (uvIndex >= vBuffer.limit() || uvIndex >= uBuffer.limit()) continue
+                    out[offset++] = vBuffer.get(uvIndex)
+                    out[offset++] = uBuffer.get(uvIndex)
+                }
             }
         }
         return out
@@ -413,4 +460,92 @@ class CameraStreamer(private val context: Context) {
     private companion object {
         const val TAG = "CameraStreamer"
     }
+}
+
+// ---- Pure helpers (no Android framework: unit-testable on the JVM) ----
+
+/**
+ * Chooses the auto-exposure target frame rate range to request, out of the
+ * ones this sensor advertises as `(lower, upper)` pairs.
+ *
+ * The device only honours a range it listed. Among ranges that top out at the
+ * rate asked for, the one with the *highest* lower bound wins: a (15,60) range
+ * lets auto-exposure legally drop to 15 in dim light, which is precisely the
+ * behaviour being fixed. Failing an exact match, take the fastest range that
+ * does not exceed the request, and failing that the closest one going.
+ */
+internal fun pickFpsRange(available: List<Pair<Int, Int>>, target: Int): Pair<Int, Int>? {
+    if (available.isEmpty()) return null
+    available.filter { it.second == target }.maxByOrNull { it.first }?.let { return it }
+    available.filter { it.second <= target }
+        .maxByOrNull { it.second.toLong() * 1000 + it.first }?.let { return it }
+    return available.minByOrNull { kotlin.math.abs(it.second - target) }
+}
+
+/**
+ * Rotates an NV21 buffer by 90, 180 or 270 degrees clockwise.
+ *
+ * Chroma is half resolution and interleaved as V,U pairs, so a pair moves as a
+ * unit — splitting one swaps the colours of two different pixels. Any other
+ * angle is returned untouched; nothing upstream can produce one.
+ */
+internal fun rotateNv21(src: ByteArray, width: Int, height: Int, degrees: Int): ByteArray {
+    if (degrees % 90 != 0 || degrees % 360 == 0) return src
+    val ySize = width * height
+    val cw = width / 2
+    val ch = height / 2
+    val out = ByteArray(src.size)
+    // Destination row length, in samples, for the luma and chroma planes.
+    val dstW = if (degrees == 180) width else height
+    val dstCw = if (degrees == 180) cw else ch
+
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val dx: Int
+            val dy: Int
+            when (degrees % 360) {
+                90 -> { dx = height - 1 - y; dy = x }
+                180 -> { dx = width - 1 - x; dy = height - 1 - y }
+                else -> { dx = y; dy = width - 1 - x }
+            }
+            out[dy * dstW + dx] = src[y * width + x]
+        }
+    }
+    for (y in 0 until ch) {
+        for (x in 0 until cw) {
+            val dx: Int
+            val dy: Int
+            when (degrees % 360) {
+                90 -> { dx = ch - 1 - y; dy = x }
+                180 -> { dx = cw - 1 - x; dy = ch - 1 - y }
+                else -> { dx = y; dy = cw - 1 - x }
+            }
+            val s = ySize + (y * cw + x) * 2
+            val d = ySize + (dy * dstCw + dx) * 2
+            out[d] = src[s]
+            out[d + 1] = src[s + 1]
+        }
+    }
+    return out
+}
+
+/** Flips an NV21 buffer left-to-right, V,U pairs moving together. */
+internal fun mirrorNv21(src: ByteArray, width: Int, height: Int): ByteArray {
+    val ySize = width * height
+    val cw = width / 2
+    val ch = height / 2
+    val out = ByteArray(src.size)
+    for (y in 0 until height) {
+        val row = y * width
+        for (x in 0 until width) out[row + width - 1 - x] = src[row + x]
+    }
+    for (y in 0 until ch) {
+        for (x in 0 until cw) {
+            val s = ySize + (y * cw + x) * 2
+            val d = ySize + (y * cw + (cw - 1 - x)) * 2
+            out[d] = src[s]
+            out[d + 1] = src[s + 1]
+        }
+    }
+    return out
 }
