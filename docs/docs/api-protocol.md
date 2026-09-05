@@ -129,7 +129,38 @@ Dispatches a playback transport action to the active media session.
 ```
 *Supported actions*: `"play"`, `"pause"`, `"play_pause"`, `"next"`, `"previous"`, `"stop"`.
 
-#### 8. `file_transfer_init`
+#### 8. `input.move` / `input.button` / `input.scroll` / `input.gesture`
+The air mouse. Every gesture is recognised on the phone; the desktop receives
+resolved intents and never learns a finger was involved. All four are
+fire-and-forget — the pointer moving on screen is the acknowledgement — and
+failures still return an error frame. Guarded by the `input` capability. See
+[Air Mouse](./air-mouse.md) for the full gesture vocabulary.
+
+```json
+{
+  "type": "input.move",
+  "id": "req-007",
+  "payload": { "dx": 4.25, "dy": -1.5 }
+}
+```
+
+Motion is fractional and the host accumulates the remainder: at 120 Hz a
+careful drag moves under a pixel per frame, and truncating each frame would
+stop the cursor creeping at all.
+
+```json
+{ "type": "input.button", "payload": { "button": "left", "action": "double" } }
+{ "type": "input.scroll", "payload": { "dx": 0, "dy": -2, "ctrl": true } }
+{ "type": "input.gesture", "payload": { "name": "taskView" } }
+```
+
+*Buttons*: `left`, `right`, `middle`. *Button actions*: `down`, `up`, `click`, `double`.
+*Scroll* is in wheel notches; positive `dy` scrolls up, and `ctrl` makes it zoom.
+*Gesture names*: `taskView`, `showDesktop`, `desktopLeft`, `desktopRight`, `back`, `forward` —
+and that table is the entire keyboard surface the air mouse exposes, so a
+malformed frame cannot turn the pointer channel into a general keyboard.
+
+#### 9. `file_transfer_init`
 Initiates a peer-to-peer file transfer.
 
 ```json
