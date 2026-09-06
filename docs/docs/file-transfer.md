@@ -160,3 +160,91 @@ Everything below was found by asking what a Compose callback or a `Dispatchers.M
 - **Inbound frames are never logged per event.** The connection collector runs on `Dispatchers.Main.immediate`; interpolating each frame's JSON payload into a log line put that work on the UI thread for the length of every transfer.
 - **The inbound flow cannot drop a frame.** `callbackFlow` defaults to 64 slots and its emitters are `trySend`, so a consumer that fell behind lost frames rather than slowing the socket. A dropped chunk is a hole in the received file and a digest mismatch after gigabytes. The queue is unbounded, which is bounded in practice: the sender stops once it is a window ahead of the acks that queue feeds.
 - **Allocation is a UI-thread cost too.** A sealed 256 KiB chunk used to be copied five times between the read buffer and the socket. Two of those were removable — the read buffer is already free once `Frame.encode` has copied it, and `nonce + cipher.doFinal(...)` allocated the ciphertext only to copy all of it again — and the GC pauses they bought landed on the main thread as stutter.
+
+---
+
+## 🖱️ Sending From Outside the App
+
+A transfer usually starts where the file already is — in Explorer, or in the
+app that produced it — not inside Switchboard. Both platforms therefore expose
+the same shape: **pick files in the OS, then pick a machine.**
+
+### Windows: "Send to Switchboard" in the Explorer context menu
+
+Right-clicking any file offers **Send to Switchboard**, which opens a compact
+picker listing the paired devices; clicking one starts the transfer and closes
+the picker. On Windows 10 the item sits in the context menu directly; on
+Windows 11 it is under **Show more options** (`Shift`+`F10`).
+
+**It is a registry verb, not a shell extension.** The Windows 11 top-level menu
+is only open to an `IExplorerCommand` handler shipped inside a sparse MSIX
+package, and Windows loads such a package only when it is signed by a
+certificate trusted on the *target* machine. Switchboard ships unsigned, so
+that route would register a menu item that never appears for anybody. The
+registry verb is what actually works, on both versions. Nothing about the verb
+blocks adding the modern handler later — the two can coexist — once the
+installer is code-signed.
+
+```
+HKCU\Software\Classes\*\shell\SwitchboardSend
+  (Default)        = "Send to Switchboard"
+  Icon             = "<install path>\Switchboard.exe,0"
+  MultiSelectModel = "Player"
+  \command
+    (Default)      = "<install path>\Switchboard.exe" --send "%1"
+```
+
+The key lives under `HKCU`, so registering never asks for elevation. It is
+rewritten on every launch rather than once at install time: the command line
+embeds the install path, and a user who moves or reinstalls the app would
+otherwise be left with a menu entry pointing at nothing. The NSIS uninstaller
+deletes it.
+
+**One instance, always.** The verb launches the executable on every
+right-click, and the daemon binds port 9427 and holds the SQLite identity
+store — a second copy would fail to bind. `requestSingleInstanceLock` forwards
+each launch's paths to the instance already running.
+
+**Paths are batched for 400 ms before the picker opens.** Explorer's default
+multi-select model invokes a verb *once per selected file*, so a five-file
+selection arrives as five launches a few milliseconds apart and would
+otherwise stack five pickers. `MultiSelectModel=Player` asks Explorer for a
+single invocation carrying the whole selection, but it is a hint the shell may
+ignore; the batch window is what makes the result the same either way.
+
+**A cold start does not raise the main window.** Launched by the verb, the
+shell stays hidden and only the picker appears — right-clicking a file is a
+two-second action, and raising a 1120×720 window over whatever the user was
+doing to complete it is not. The hidden window is still *created*: closing the
+last window quits the app, which would take the daemon and the in-flight
+transfer with it. The tray icon is what keeps that running app visible and
+quittable.
+
+**The picker never learns the paths.** It is told the file *names* so it can
+show them, and hands back only the id of the device that was clicked; the paths
+sent to the daemon are the ones the main process collected from Explorer. This
+is the same asymmetry `transfer:reveal` uses, and it means the window cannot be
+turned into "read any file on disk and post it to a phone".
+
+### Android: the system share sheet
+
+Switchboard is a share target for any MIME type (`ACTION_SEND` and
+`ACTION_SEND_MULTIPLE`), so files reach it from Gallery, a file manager, or
+anywhere else Android's share sheet appears — including a share started from
+system search.
+
+Sharing in opens a **bottom sheet listing every paired desktop**, with its live
+status; tapping one sends. Previously the files went straight to whichever host
+happened to be connected, which is wrong the moment more than one desktop is
+paired, and did nothing at all when none was.
+
+**Every paired host is offered, not only the reachable ones.** The phone probes
+reachability every three seconds, so a host that has just gone quiet is usually
+still there. Tapping an offline one connects first and sends after.
+
+**The send waits for the socket rather than racing it.** Picking a host that is
+not the active connection triggers a connect, and files queued against the old
+session would go to the wrong machine. The pending files are held until the
+connection to *that* host reports `Connected`, then dispatched, and the Files
+screen opens on them. A connection attempt that ends without arriving returns
+the sheet with the files still in hand rather than dropping them silently.
