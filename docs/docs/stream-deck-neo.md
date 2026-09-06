@@ -39,10 +39,10 @@ Switchboard's Stream Deck Neo interface mirrors the exact physical form factor o
 - **Capacitive Touch Sensors**: Touch points on the left and right flank the Infobar for fast multi-page switching (`<` and `>`).
 - **LED Bars**: Glowing indicator lines illuminate upon contact and indicate available pages.
 
-### 4. Authentic Neo Industrial Chassis (Dark Theme Only)
-- Sculpted matte dark casing (`#13141F`), chamfered border (`#26283A`), and circular emblem.
-- OLED deep black Infobar (`#08090E`) with vibrant cyan glowing clock indicators (`#67E8F9`).
-- Dual capacitive touch points with glowing cyan LED status lines.
+### 4. Theme-Aware Neo Industrial Chassis
+- The Android console uses Material 3 semantic surface, outline, and text colors, so it follows the selected system/light/dark or dynamic theme rather than imposing a light hardware frame.
+- The Electron console uses the application's dark surface tokens, preserving a consistent desktop shell without a white panel.
+- The circular emblem, OLED-style Infobar, and capacitive touch points keep the Neo hardware character while retaining readable contrast.
 
 ---
 
@@ -60,9 +60,9 @@ Stream Deck Neo keys can be configured with any of the following action types:
 
 ### 🚀 Installed Applications Discovery
 Both desktop and mobile key customizers feature an integrated **Installed Applications** picker:
-- Automatically enumerates Start Menu shortcuts (`%ProgramData%` & `%AppData%`) and core system utilities (Notepad, Calculator, Windows Terminal, PowerShell, Command Prompt, Explorer, Task Manager, Snipping Tool, Paint, Settings).
+- Automatically enumerates launchable Start Menu shortcuts from the machine-wide and per-user Programs folders, plus core system utilities (Notepad, Calculator, Windows Terminal, PowerShell, Command Prompt, Explorer, Task Manager, Snipping Tool, Paint, Settings).
 - Includes real-time search filtering.
-- Selecting an application automatically populates the command path, key title, and suggests a matching icon.
+- Shows an appropriate semantic app icon, then automatically populates the command path, key title, and matching deck icon when selected.
 
 ---
 
