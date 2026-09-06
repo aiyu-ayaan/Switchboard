@@ -266,7 +266,7 @@ fun DeckScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0F111A))
+            .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
         contentAlignment = Alignment.Center
     ) {
@@ -301,7 +301,7 @@ fun DeckScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Exit Deck",
-                            tint = Color.White.copy(alpha = 0.85f),
+                            tint = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -310,16 +310,16 @@ fun DeckScreen(
                         text = "Switchboard Deck",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF38BDF8).copy(alpha = 0.15f)
+                        color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
                         Text(
                             text = "Hardware Mirror",
-                            color = Color(0xFF38BDF8),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
@@ -337,8 +337,8 @@ fun DeckScreen(
                         val isActive = idx == safePageIndex
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = if (isActive) Color(0xFF262A38) else Color.Transparent,
-                            border = if (isActive) BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f)) else null,
+                            color = if (isActive) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                            border = if (isActive) BorderStroke(1.dp, MaterialTheme.colorScheme.secondary) else null,
                             modifier = Modifier
                                 .height(26.dp)
                                 .clickable {
@@ -355,7 +355,7 @@ fun DeckScreen(
                                     text = p.name.ifEmpty { "P${idx + 1}" },
                                     fontSize = 11.sp,
                                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isActive) Color.White else Color.White.copy(alpha = 0.6f)
+                                    color = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -376,7 +376,7 @@ fun DeckScreen(
                         Icon(
                             Icons.Filled.Add,
                             contentDescription = "Add Page",
-                            tint = Color.White.copy(alpha = 0.75f),
+                            tint = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -396,7 +396,7 @@ fun DeckScreen(
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = "Delete Page",
-                                tint = Color(0xFFEF4444).copy(alpha = 0.8f),
+                                tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -413,7 +413,7 @@ fun DeckScreen(
                         Icon(
                             imageVector = Icons.Filled.Edit,
                             contentDescription = "Customize Mode",
-                            tint = if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                            tint = if (editMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp)
                         )
                     }
@@ -427,8 +427,8 @@ fun DeckScreen(
                     .weight(1f)
                     .shadow(14.dp, RoundedCornerShape(24.dp)),
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0xFFEEF1F5), // Authentic Light Hardware Chassis
-                border = BorderStroke(1.dp, Color(0xFFD8DEE9))
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(
                     modifier = Modifier
@@ -442,14 +442,14 @@ fun DeckScreen(
                         modifier = Modifier
                             .size(20.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.9f))
-                            .border(1.dp, Color(0xFFCBD5E1), CircleShape),
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Schedule,
                             contentDescription = null,
-                            tint = Color(0xFF64748B),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(12.dp)
                         )
                     }
@@ -559,8 +559,8 @@ fun DeckScreen(
                                 .height(32.dp)
                                 .padding(horizontal = 12.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF0A0A0F))
-                                .border(1.dp, Color(0xFF232733), CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                                 .combinedClickable(
                                     onClick = {
                                         triggerClickHaptic()
@@ -591,7 +591,7 @@ fun DeckScreen(
                                         Text(
                                             text = "${state.host.media.title} — ${state.host.media.artist}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -601,7 +601,7 @@ fun DeckScreen(
                                     Text(
                                         text = "${currentPage.name} • Page ${safePageIndex + 1} of ${pages.size}",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
@@ -609,7 +609,7 @@ fun DeckScreen(
                                     Text(
                                         text = config.infobar.customText,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
@@ -627,14 +627,14 @@ fun DeckScreen(
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             fontFamily = FontFamily.Monospace,
-                                            color = Color.White.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
                                             text = clockTime,
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             fontFamily = FontFamily.Monospace,
-                                            color = Color.White
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
@@ -1010,7 +1010,11 @@ private fun KeyCustomizerSheet(
                                                 modifier = Modifier.weight(1f, fill = false)
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Terminal,
+                                                    imageVector = resolveIcon(
+                                                        app.icon.ifBlank {
+                                                            findBestMatchingDeckIcon(app.name) ?: "code"
+                                                        }
+                                                    ),
                                                     contentDescription = null,
                                                     tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(16.dp)
