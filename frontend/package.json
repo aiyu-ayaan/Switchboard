@@ -8,6 +8,7 @@
     "dev": "concurrently -k -n vite,electron -c magenta,cyan \"vite\" \"pnpm dev:electron\"",
     "dev:electron": "wait-on tcp:127.0.0.1:5273 && tsc -p tsconfig.node.json && cross-env SWITCHBOARD_DEV=1 electron .",
     "build": "vite build && tsc -p tsconfig.node.json",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "package": "electron-builder --config electron-builder.yml --win"
   },

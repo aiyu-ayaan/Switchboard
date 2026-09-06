@@ -275,6 +275,22 @@ export interface SwitchboardBridge {
   chooseDownloadDir(): Promise<string | null>;
   /** Reveals a completed transfer in the OS file manager. */
   revealTransfer(transferId: string): Promise<void>;
+  /**
+   * The Explorer "Send to Switchboard" picker.
+   *
+   * Deliberately asymmetric: the window is told the file *names* so it can
+   * show them, and hands back only the device that was clicked. The paths
+   * actually sent are the ones the main process collected from Explorer, so
+   * this surface cannot be turned into "read any file on disk".
+   */
+  sendPicker: {
+    files(): Promise<string[]>;
+    devices(): Promise<PairedDevice[]>;
+    send(deviceId: string): Promise<void>;
+    cancel(): Promise<void>;
+    /** Fires when a further right-click adds files to an open picker. */
+    onFiles(handler: (files: string[]) => void): () => void;
+  };
   camera: {
     getState(): Promise<CameraState>;
     start(deviceId: string, settings?: CameraSettings): Promise<CameraState>;

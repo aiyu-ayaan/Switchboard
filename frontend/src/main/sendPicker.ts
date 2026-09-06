@@ -1,0 +1,132 @@
+// The "Send to Switchboard" picker window.
+//
+// A small always-on-top list of paired devices: click one and the files
+// Explorer handed us start moving. It is deliberately not the main window —
+// right-clicking a file is a two-second action, and raising a 1120x720 shell
+// over whatever the user was doing to complete it is not.
+import { BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { basename } from 'node:path';
+import type { PairedDevice } from '../shared/types';
+
+interface PickerDeps {
+  isDev: boolean;
+  devServer: string;
+  rendererFile: string;
+  preload: string;
+  iconPath?: string;
+  getDevices: () => Promise<PairedDevice[]>;
+  sendFiles: (deviceId: string, paths: string[]) => Promise<unknown>;
+}
+
+/**
+ * How long to gather paths before opening.
+ *
+ * Explorer's default multi-select model invokes a verb once *per selected
+ * file*, so a five-file selection arrives as five separate launches a few
+ * milliseconds apart. Without this window they would stack five pickers. The
+ * `MultiSelectModel=Player` hint asks Explorer for a single invocation
+ * instead, but it is a hint: this is what makes the batch reliable either way.
+ */
+const BATCH_MS = 400;
+
+let picker: BrowserWindow | null = null;
+let pending: string[] = [];
+let batchTimer: NodeJS.Timeout | null = null;
+let deps: PickerDeps | null = null;
+
+/** What the window is allowed to know about the files: their names. */
+const names = () => pending.map((path) => basename(path));
+
+function pushFiles(): void {
+  picker?.webContents.send('sendPicker:files', names());
+}
+
+function closePicker(): void {
+  pending = [];
+  picker?.close();
+}
+
+function openPicker(): void {
+  if (!deps) return;
+  if (picker && !picker.isDestroyed()) {
+    pushFiles();
+    picker.focus();
+    return;
+  }
+
+  picker = new BrowserWindow({
+    width: 380,
+    height: 460,
+    show: false,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    // The user invoked this from Explorer and is looking at Explorer: a
+    // picker behind that window is a picker they never see.
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#1a1b26',
+    icon: deps.iconPath ? nativeImage.createFromPath(deps.iconPath) : undefined,
+    webPreferences: {
+      preload: deps.preload,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+
+  // Same bundle as the main window, picked apart by the hash. A second Vite
+  // entry point would be a second build target for one 90-line component.
+  if (deps.isDev) picker.loadURL(`${deps.devServer}#send`);
+  else picker.loadFile(deps.rendererFile, { hash: 'send' });
+
+  picker.once('ready-to-show', () => {
+    picker?.show();
+    pushFiles();
+  });
+
+  // Dismiss-on-blur, the way a shell menu behaves. Anything the user clicks
+  // outside it is what they meant to do instead.
+  picker.on('blur', () => picker?.close());
+  picker.on('closed', () => {
+    picker = null;
+    pending = [];
+  });
+}
+
+/**
+ * Adds paths to the picker, opening it once the batch settles.
+ *
+ * De-duplicated because a selection that arrives one file per invocation can
+ * legitimately repeat a path if Explorer retries.
+ */
+export function queueSendPaths(paths: string[]): void {
+  if (paths.length === 0) return;
+  pending = [...new Set([...pending, ...paths])];
+  if (batchTimer) clearTimeout(batchTimer);
+  batchTimer = setTimeout(() => {
+    batchTimer = null;
+    openPicker();
+  }, BATCH_MS);
+}
+
+export function registerSendPicker(dependencies: PickerDeps): void {
+  deps = dependencies;
+
+  // The window asks for its own list on mount: `ready-to-show` can beat the
+  // renderer's first render, and a push nobody is listening for is lost.
+  ipcMain.handle('sendPicker:files', () => names());
+  ipcMain.handle('sendPicker:devices', () => dependencies.getDevices());
+  ipcMain.handle('sendPicker:cancel', () => closePicker());
+
+  // The renderer names a device, never a path. The files sent are the ones
+  // this process collected from Explorer, so a compromised page cannot turn
+  // the picker into "read any file on disk and post it to a phone".
+  ipcMain.handle('sendPicker:send', async (_event, deviceId: string) => {
+    const paths = pending;
+    if (paths.length === 0) return;
+    await dependencies.sendFiles(deviceId, paths);
+    closePicker();
+  });
+}

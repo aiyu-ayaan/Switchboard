@@ -55,6 +55,8 @@ nsis:
   # The daemon holds port 9427 and a SQLite handle; an installer that writes
   # over a running copy leaves a half-updated app and an orphaned process.
   allowElevation: true
+  # Removes the HKCU Explorer verb the app registers at launch.
+  include: resources/installer.nsh
   artifactName: ${productName}-Setup-${version}.${ext}
   uninstallDisplayName: ${productName}
 

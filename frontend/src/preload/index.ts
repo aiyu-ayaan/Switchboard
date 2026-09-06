@@ -15,6 +15,7 @@ import type {
   LocalState,
   MediaAction,
   MediaArtwork,
+  PairedDevice,
   PairingInfo,
   SwitchboardBridge,
   UnlockStatus,
@@ -78,6 +79,17 @@ const bridge: SwitchboardBridge = {
   updateSettings: (patch) => call<HostSettings>('/settings', patch),
   chooseDownloadDir: () => ipcRenderer.invoke('dialog:downloadDir'),
   revealTransfer: (transferId) => ipcRenderer.invoke('transfer:reveal', transferId),
+  sendPicker: {
+    files: () => ipcRenderer.invoke('sendPicker:files') as Promise<string[]>,
+    devices: () => ipcRenderer.invoke('sendPicker:devices') as Promise<PairedDevice[]>,
+    send: (deviceId: string) => ipcRenderer.invoke('sendPicker:send', deviceId) as Promise<void>,
+    cancel: () => ipcRenderer.invoke('sendPicker:cancel') as Promise<void>,
+    onFiles: (handler: (files: string[]) => void) => {
+      const listener = (_event: unknown, files: string[]) => handler(files);
+      ipcRenderer.on('sendPicker:files', listener);
+      return () => ipcRenderer.removeListener('sendPicker:files', listener);
+    }
+  },
   camera: {
     getState: () => call<CameraState>('/camera/state'),
     start: (deviceId, settings) => call<CameraState>('/camera/start', { deviceId, settings }),

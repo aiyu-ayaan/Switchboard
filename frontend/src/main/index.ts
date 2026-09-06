@@ -18,6 +18,8 @@ import { spawn, exec, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { HostSettings, LocalState } from '../shared/types';
+import { installExplorerVerb, pathsFromArgv } from './shellIntegration';
+import { queueSendPaths, registerSendPicker } from './sendPicker';
 
 const DAEMON_PORT = Number(process.env.SWITCHBOARD_PORT ?? 9427);
 const DEV_SERVER = 'http://127.0.0.1:5273';
@@ -148,9 +150,8 @@ function showWindow(): void {
   tray = null;
 }
 
-/** Closing with background mode on parks the app instead of ending it. */
-function hideToTray(): void {
-  mainWindow?.hide();
+/** Puts the tray icon up, so a window-less app is still visible and quittable. */
+function ensureTray(): void {
   if (!tray) {
     const tIcon = trayIconPath();
     const trayImg = tIcon ? nativeImage.createFromPath(tIcon) : nativeImage.createFromDataURL(TRAY_ICON);
@@ -171,6 +172,12 @@ function hideToTray(): void {
     );
     tray.on('click', showWindow);
   }
+}
+
+/** Closing with background mode on parks the app instead of ending it. */
+function hideToTray(): void {
+  mainWindow?.hide();
+  ensureTray();
   if (!backgroundNoticeShown && Notification.isSupported()) {
     backgroundNoticeShown = true;
     new Notification({
@@ -180,7 +187,8 @@ function hideToTray(): void {
   }
 }
 
-function createWindow(): void {
+function createWindow(options: { show?: boolean } = {}): void {
+  const visible = options.show ?? true;
   const iconPath = appIconPath();
   mainWindow = new BrowserWindow({
     width: 1120,
@@ -207,7 +215,9 @@ function createWindow(): void {
     }
   }
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  mainWindow.once('ready-to-show', () => {
+    if (visible) mainWindow?.show();
+  });
 
   // Keep navigation inside the app; anything external opens in the browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -533,19 +543,64 @@ function registerFileBridge(): void {
   });
 }
 
-app.whenReady().then(async () => {
+async function bootstrap(): Promise<void> {
+  // Read before `whenReady`, because Explorer's verb is how this launch was
+  // started: the paths are already on our own command line.
+  const coldSendPaths = pathsFromArgv(process.argv);
+
+  await app.whenReady();
   registerWindowControls();
   registerDaemonBridge();
   registerCameraBridge();
   registerFileBridge();
+  registerSendPicker({
+    isDev,
+    devServer: DEV_SERVER,
+    rendererFile: join(__dirname, '..', 'renderer', 'index.html'),
+    preload: join(__dirname, '..', 'preload', 'index.js'),
+    iconPath: appIconPath(),
+    getDevices: async () => (await daemonFetch<LocalState>('/state')).devices,
+    sendFiles: (deviceId, paths) => daemonFetch('/files/send', { deviceId, paths })
+  });
   await startDaemon();
-  createWindow();
+
+  // Launched by the Explorer verb rather than by the user: the picker is the
+  // entire interaction, so the shell stays out of the way. The window is still
+  // created, hidden — closing the last one would quit the app and take the
+  // daemon, and the transfer, down with it — and the tray icon is what keeps
+  // that running app visible and quittable.
+  createWindow({ show: coldSendPaths.length === 0 });
+  if (coldSendPaths.length > 0) {
+    ensureTray();
+    queueSendPaths(coldSendPaths);
+  }
+
+  // Unpackaged, `execPath` is electron.exe, which cannot launch the app on its
+  // own: registering it would leave a menu entry that opens a blank Electron.
+  if (process.platform === 'win32' && app.isPackaged) {
+    void installExplorerVerb(process.execPath);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else showWindow();
   });
-});
+}
+
+// One instance, always. The daemon binds port 9427 and holds the SQLite
+// identity store, so a second copy would fail to bind and un-pair nothing but
+// itself — and Explorer's verb launches the app afresh on every right-click.
+// Those launches hand their paths to the instance already running.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const paths = pathsFromArgv(argv);
+    if (paths.length > 0) queueSendPaths(paths);
+    else showWindow();
+  });
+  void bootstrap();
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
