@@ -68,6 +68,7 @@ import com.switchboard.app.ui.Section
 import com.switchboard.app.ui.SectionActions
 import com.switchboard.app.ui.SectionScreen
 import com.switchboard.app.ui.SettingsScreen
+import com.switchboard.app.ui.ShareTargetSheet
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -171,11 +172,47 @@ fun SwitchboardApp(
     var showLockConfirmDialog by remember { mutableStateOf(false) }
     val homeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
+    // Files shared in from another app, held until the user names a desktop.
+    var shareFiles by remember { mutableStateOf<List<Uri>?>(null) }
+    // The host that was picked, while the connection to it is still being made.
+    var shareTarget by remember { mutableStateOf<String?>(null) }
+    // Whether that attempt has actually started. Without it, the tap and the
+    // status race: `connect` publishes Connecting asynchronously, so the first
+    // pass still reads Disconnected and would cancel the send that was just
+    // asked for.
+    var shareConnecting by remember { mutableStateOf(false) }
+
     LaunchedEffect(sharedUris) {
         val uris = sharedUris ?: return@LaunchedEffect
-        viewModel.sendFiles(uris)
-        currentScreen = AppScreen.Detail(Section.Files)
+        shareFiles = uris
+        shareTarget = null
+        shareConnecting = false
         (sharedUrisFlow as? MutableStateFlow)?.value = null
+    }
+
+    // The send waits for the socket rather than racing it: a host picked while
+    // the phone was talking to a different desktop is not connected yet at the
+    // moment of the tap, and files queued against the old session would go to
+    // the wrong machine.
+    LaunchedEffect(shareTarget, state.status, state.activeHost) {
+        val target = shareTarget ?: return@LaunchedEffect
+        val files = shareFiles ?: return@LaunchedEffect
+        if (state.status == ConnectionStatus.Connecting) shareConnecting = true
+        when {
+            connected && state.activeHost?.daemonId == target -> {
+                viewModel.sendFiles(files)
+                shareFiles = null
+                shareTarget = null
+                shareConnecting = false
+                currentScreen = AppScreen.Detail(Section.Files)
+            }
+            // The attempt ended without arriving: back to the list, with the
+            // files still in hand, rather than silently dropping them.
+            shareConnecting && state.status == ConnectionStatus.Disconnected -> {
+                shareTarget = null
+                shareConnecting = false
+            }
+        }
     }
 
     LaunchedEffect(connected) {
@@ -428,6 +465,26 @@ fun SwitchboardApp(
                 }
             }
         }
+    }
+
+    // Shown until a desktop is picked; the connect-and-send effect above takes
+    // over from there.
+    val pendingShare = shareFiles
+    if (pendingShare != null && shareTarget == null) {
+        ShareTargetSheet(
+            fileCount = pendingShare.size,
+            hosts = state.hosts,
+            liveHostIds = state.liveHostIds,
+            activeHostId = if (connected) state.activeHost?.daemonId else null,
+            onPick = { host ->
+                shareTarget = host.daemonId
+                shareConnecting = false
+                if (!connected || state.activeHost?.daemonId != host.daemonId) {
+                    viewModel.connect(host)
+                }
+            },
+            onDismiss = { shareFiles = null }
+        )
     }
 
     if (showLockConfirmDialog && connected) {
