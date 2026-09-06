@@ -154,7 +154,10 @@ Enrolment is refused while the desktop is locked. Pairing happens with you at
 the machine; a phone taken afterwards must not be able to grant itself the lock
 screen while you are away from it.
 
-Now lock the desktop. The phone's lock button turns into an unlock button.
+Now lock the desktop. The lock control on the phone's home screen — on the
+host card and in the utility grid — turns into an unlock button within a
+second. It lives on the home screen only: the detail panes carry no lock
+control.
 
 ### Turning it off
 

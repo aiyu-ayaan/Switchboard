@@ -49,6 +49,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -191,6 +192,10 @@ fun SwitchboardApp(
         currentScreen = AppScreen.Main
     }
 
+    // The lock control lives on the home surfaces only, so its click needs the
+    // freshest state rather than whatever composition built these actions.
+    val latestState = rememberUpdatedState(state)
+
     val actions = remember(viewModel, transferConfig.rateUnit) {
         SectionActions(
             onBrightness = viewModel::setBrightness,
@@ -210,7 +215,17 @@ fun SwitchboardApp(
             ),
             onTransferControl = viewModel::controlTransfer,
             rateUnit = transferConfig.rateUnit,
-            onLockSystem = { showLockConfirmDialog = true }
+            onLockSystem = {
+                // No confirm dialog on the unlock path: the fingerprint
+                // prompt is the confirmation, and a dialog in front of it
+                // would only be a tap between the user and their finger.
+                val live = latestState.value
+                if (live.host.locked && live.canUnlockSystem && activity != null) {
+                    viewModel.unlockSystem(activity)
+                } else {
+                    showLockConfirmDialog = true
+                }
+            }
         )
     }
 
@@ -300,49 +315,6 @@ fun SwitchboardApp(
                     }
                 },
                 actions = {
-                    if (connected && state.canLockSystem) {
-                        val isLocked = state.host.locked
-                        val canUnlock = isLocked && state.canUnlockSystem && activity != null
-                        Surface(
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            color = if (isLocked) {
-                                MaterialTheme.colorScheme.errorContainer
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            },
-                            modifier = Modifier
-                                .padding(horizontal = 4.dp)
-                                .size(36.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    // No confirm dialog on the unlock path: the
-                                    // fingerprint prompt is the confirmation,
-                                    // and a dialog in front of it would only be
-                                    // a tap between the user and their finger.
-                                    if (canUnlock && activity != null) viewModel.unlockSystem(activity)
-                                    else showLockConfirmDialog = true
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                                    contentDescription = when {
-                                        canUnlock -> "Unlock workstation with your fingerprint"
-                                        isLocked -> "Host workstation is locked"
-                                        else -> "Lock workstation"
-                                    },
-                                    tint = if (isLocked) {
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    },
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-
                     if (currentScreen is AppScreen.Main) {
                         if (state.status == ConnectionStatus.Connecting) {
                             CircularProgressIndicator(
