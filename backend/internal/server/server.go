@@ -324,6 +324,25 @@ func (s *Server) Broadcast() {
 	}
 }
 
+// BroadcastDeckState pushes the updated Stream Deck configuration to every connected client.
+func (s *Server) BroadcastDeckState(config protocol.DeckConfig) {
+	env, err := protocol.New(protocol.TypeEvent, protocol.ActionDeckState, config)
+	if err != nil {
+		log.Printf("broadcast deck state: %v", err)
+		return
+	}
+	s.mu.RLock()
+	clients := make([]*client, 0, len(s.clients))
+	for _, c := range s.clients {
+		clients = append(clients, c)
+	}
+	s.mu.RUnlock()
+
+	for _, c := range clients {
+		c.send(env)
+	}
+}
+
 // hostState is the snapshot pushed to clients.
 //
 // The files capability is appended here rather than inside system.Controller:
@@ -331,7 +350,7 @@ func (s *Server) Broadcast() {
 // controller can probe a machine for.
 func (s *Server) hostState() protocol.HostState {
 	state := s.control.State(s.daemonID)
-	state.Capabilities = append(state.Capabilities, "files")
+	state.Capabilities = append(state.Capabilities, "files", "deck")
 	return state
 }
 

@@ -309,6 +309,39 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		// reports whatever it finds, and the poller in server.go corrects it.
 		s.Broadcast()
 
+	case protocol.ActionDeckGet:
+		config, err := s.store.DeckConfig()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, config)
+
+	case protocol.ActionDeckSet:
+		var req protocol.DeckConfig
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.store.SaveDeckConfig(req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, req)
+		s.BroadcastDeckState(req)
+
+	case protocol.ActionDeckAction:
+		var req protocol.DeckActionRequest
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.ExecuteDeckAction(req.Action); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "ok"})
+
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
 	}

@@ -80,6 +80,12 @@ const (
 	ActionUnlockEnroll    = "system.unlock.enroll"    // phone -> host: register the public key
 	ActionUnlockChallenge = "system.unlock.challenge" // phone -> host: ask for a nonce
 	ActionSystemUnlock    = "system.unlock"           // phone -> host: signed nonce, please unlock
+
+	// Stream Deck Neo.
+	ActionDeckGet    = "deck.get"    // client -> host: request deck configuration
+	ActionDeckSet    = "deck.set"    // client -> host: update deck configuration
+	ActionDeckAction = "deck.action" // client -> host: trigger a deck button action
+	ActionDeckState  = "deck.state"  // host -> client: broadcast deck configuration
 )
 
 // ChunkSize is the payload slice carried by one file.chunk frame.
@@ -630,3 +636,92 @@ type FileProgress struct {
 type FileHistory struct {
 	Transfers []FileProgress `json:"transfers"`
 }
+
+// ---- Stream Deck Neo Subsystem ----
+
+type DeckAction struct {
+	Type  string `json:"type"`  // "url", "hotkey", "media", "system", "app", "page"
+	Value string `json:"value"` // e.g. "https://youtube.com", "ctrl+c", "play", "lock"
+}
+
+type DeckKey struct {
+	Index     int        `json:"index"`
+	Title     string     `json:"title"`
+	Icon      string     `json:"icon"`
+	BgColor   string     `json:"bgColor,omitempty"`
+	IconColor string     `json:"iconColor,omitempty"`
+	Badge     string     `json:"badge,omitempty"`
+	Action    DeckAction `json:"action"`
+}
+
+type DeckInfobar struct {
+	Mode       string `json:"mode"`       // "clock", "media", "page", "text"
+	CustomText string `json:"customText"`
+	Format     string `json:"format,omitempty"`
+}
+
+type DeckPage struct {
+	ID   string    `json:"id"`
+	Name string    `json:"name"`
+	Keys []DeckKey `json:"keys"`
+}
+
+type DeckConfig struct {
+	ActivePage int         `json:"activePage"`
+	Infobar    DeckInfobar `json:"infobar"`
+	Pages      []DeckPage  `json:"pages"`
+}
+
+type DeckActionRequest struct {
+	PageID   string     `json:"pageId,omitempty"`
+	KeyIndex int        `json:"keyIndex"`
+	Action   DeckAction `json:"action"`
+}
+
+// DefaultDeckConfig returns the default 8-key Stream Deck Neo configuration
+// matching the physical hardware shown in reference models.
+func DefaultDeckConfig() DeckConfig {
+	return DeckConfig{
+		ActivePage: 0,
+		Infobar: DeckInfobar{
+			Mode:       "clock",
+			CustomText: "",
+			Format:     "standard",
+		},
+		Pages: []DeckPage{
+			{
+				ID:   "page-1",
+				Name: "Essentials",
+				Keys: []DeckKey{
+					// Row 1
+					{Index: 0, Title: "Home", Icon: "home", BgColor: "#111827", IconColor: "#3b82f6", Action: DeckAction{Type: "url", Value: "https://google.com"}},
+					{Index: 1, Title: "Notes", Icon: "notes", BgColor: "#111827", IconColor: "#60a5fa", Action: DeckAction{Type: "app", Value: "notepad"}},
+					{Index: 2, Title: "Files", Icon: "folder", BgColor: "#111827", IconColor: "#38bdf8", Badge: "active", Action: DeckAction{Type: "app", Value: "explorer"}},
+					{Index: 3, Title: "Calendar", Icon: "calendar", BgColor: "#111827", IconColor: "#60a5fa", Action: DeckAction{Type: "url", Value: "https://calendar.google.com"}},
+					// Row 2
+					{Index: 4, Title: "Google", Icon: "google", BgColor: "#111827", IconColor: "#4285F4", Action: DeckAction{Type: "url", Value: "https://google.com"}},
+					{Index: 5, Title: "YouTube", Icon: "youtube", BgColor: "#111827", IconColor: "#FF0000", Action: DeckAction{Type: "url", Value: "https://youtube.com"}},
+					{Index: 6, Title: "Spotify", Icon: "spotify", BgColor: "#111827", IconColor: "#1DB954", Action: DeckAction{Type: "media", Value: "toggle"}},
+					{Index: 7, Title: "LinkedIn", Icon: "linkedin", BgColor: "#111827", IconColor: "#0A66C2", Action: DeckAction{Type: "url", Value: "https://linkedin.com"}},
+				},
+			},
+			{
+				ID:   "page-2",
+				Name: "System & Media",
+				Keys: []DeckKey{
+					// Row 1
+					{Index: 0, Title: "Prev Track", Icon: "skip_prev", BgColor: "#111827", IconColor: "#f59e0b", Action: DeckAction{Type: "media", Value: "prev"}},
+					{Index: 1, Title: "Play / Pause", Icon: "play_pause", BgColor: "#111827", IconColor: "#10b981", Action: DeckAction{Type: "media", Value: "toggle"}},
+					{Index: 2, Title: "Next Track", Icon: "skip_next", BgColor: "#111827", IconColor: "#f59e0b", Action: DeckAction{Type: "media", Value: "next"}},
+					{Index: 3, Title: "Mute", Icon: "volume_mute", BgColor: "#111827", IconColor: "#ef4444", Action: DeckAction{Type: "media", Value: "mute"}},
+					// Row 2
+					{Index: 4, Title: "Vol Up", Icon: "volume_up", BgColor: "#111827", IconColor: "#3b82f6", Action: DeckAction{Type: "media", Value: "vol_up"}},
+					{Index: 5, Title: "Vol Down", Icon: "volume_down", BgColor: "#111827", IconColor: "#3b82f6", Action: DeckAction{Type: "media", Value: "vol_down"}},
+					{Index: 6, Title: "Screenshot", Icon: "camera", BgColor: "#111827", IconColor: "#8b5cf6", Action: DeckAction{Type: "hotkey", Value: "win+shift+s"}},
+					{Index: 7, Title: "Lock PC", Icon: "lock", BgColor: "#111827", IconColor: "#ef4444", Action: DeckAction{Type: "system", Value: "lock"}},
+				},
+			},
+		},
+	}
+}
+

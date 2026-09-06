@@ -6,11 +6,14 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"switchboard/backend/internal/protocol"
 )
 
 // ErrNotFound is returned when a lookup matches no row.
@@ -288,6 +291,41 @@ func (d *Database) SetSetting(key, value string) error {
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }
+
+// ---- Stream Deck Neo ----
+
+const deckSettingKey = "deck_config"
+
+// DeckConfig loads the persisted Stream Deck Neo configuration, returning DefaultDeckConfig
+// if none has been saved yet.
+func (d *Database) DeckConfig() (protocol.DeckConfig, error) {
+	var raw string
+	err := d.sql.QueryRow(`SELECT value FROM settings WHERE key = ?`, deckSettingKey).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		def := protocol.DefaultDeckConfig()
+		_ = d.SaveDeckConfig(def)
+		return def, nil
+	}
+	if err != nil {
+		return protocol.DefaultDeckConfig(), err
+	}
+
+	var config protocol.DeckConfig
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		return protocol.DefaultDeckConfig(), nil
+	}
+	return config, nil
+}
+
+// SaveDeckConfig persists the Stream Deck Neo configuration in settings.
+func (d *Database) SaveDeckConfig(config protocol.DeckConfig) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	return d.SetSetting(deckSettingKey, string(data))
+}
+
 
 // scanner covers both *sql.Row and *sql.Rows.
 type scanner interface{ Scan(...any) error }

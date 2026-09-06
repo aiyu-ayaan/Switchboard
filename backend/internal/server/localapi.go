@@ -52,6 +52,10 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("GET /local/camera/frame", s.localCameraFrame)
 	handle("GET /local/camera/stream", s.localCameraStream)
 	handle("GET /local/camera/video", s.localCameraVideo)
+
+	handle("GET /local/deck", s.localGetDeck)
+	handle("POST /local/deck", s.localSetDeck)
+	handle("POST /local/deck/action", s.localDeckAction)
 }
 
 // loopbackOnly rejects any request that did not originate on this machine.
@@ -455,3 +459,40 @@ func (s *Server) localCameraStream(w http.ResponseWriter, r *http.Request) {
 func (s *Server) localCameraVideo(w http.ResponseWriter, r *http.Request) {
 	s.camera.ServeVideo(w, r)
 }
+
+func (s *Server) localGetDeck(w http.ResponseWriter, r *http.Request) {
+	cfg, err := s.store.DeckConfig()
+	if err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, cfg)
+}
+
+func (s *Server) localSetDeck(w http.ResponseWriter, r *http.Request) {
+	var cfg protocol.DeckConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.store.SaveDeckConfig(cfg); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	s.BroadcastDeckState(cfg)
+	writeJSON(w, cfg)
+}
+
+func (s *Server) localDeckAction(w http.ResponseWriter, r *http.Request) {
+	var req protocol.DeckActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.control.ExecuteDeckAction(req.Action); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
