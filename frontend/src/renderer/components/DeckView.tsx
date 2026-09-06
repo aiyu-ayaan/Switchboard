@@ -67,6 +67,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
   settings: Settings
 };
 
+function appIcon(app: InstalledApp): LucideIcon {
+  return ICON_MAP[app.icon || ''] || ICON_MAP[findBestMatchingIcon(app.name) || ''] || Code;
+}
+
 const ICON_CHOICES = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'notes', label: 'Notes', icon: FileText },
@@ -431,10 +435,10 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
         </div>
 
         {/* The Neo Casing Frame */}
-        <div className="relative flex w-full max-w-[540px] flex-col items-center rounded-[36px] bg-[#eef1f5] p-7 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.12),inset_0_2px_4px_rgba(255,255,255,0.8)] border border-[#d8dee9] dark:bg-[#e4e7ed] dark:border-[#c5cbd6]">
+        <div className="relative flex w-full max-w-[540px] flex-col items-center rounded-[36px] border border-edge bg-card p-7 shadow-[0_20px_50px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.05)]">
           {/* Subtle Top Center Neo Logo Circle */}
           <div className="mb-4 flex items-center justify-center">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full border border-black/15 bg-white/60 shadow-sm">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full border border-edge bg-raised shadow-sm">
               <svg className="h-3.5 w-3.5 opacity-60" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
                 <path d="M12 7v5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -462,7 +466,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
                   onDoubleClick={() => handleTriggerAction(key)}
                   className={`group relative flex aspect-square flex-col items-center justify-between overflow-hidden rounded-[20px] p-2.5 transition-all duration-150 active:scale-95 ${
                     isSelected
-                      ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#eef1f5] shadow-lg'
+                  ? 'ring-2 ring-accent ring-offset-2 ring-offset-card shadow-lg'
                       : 'shadow-[0_4px_12px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.2)] hover:brightness-110'
                   }`}
                   style={{
@@ -501,7 +505,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
               type="button"
               onClick={handlePrevPage}
               title="Previous Page"
-              className="group flex flex-col items-center justify-center p-2 transition-transform active:scale-90"
+              className="group flex flex-col items-center justify-center rounded-lg p-2 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-90"
             >
               {/* Glowing LED Bar */}
               <div className="h-1 w-8 rounded-full bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.9)] transition-all group-hover:bg-white group-hover:shadow-[0_0_12px_rgba(255,255,255,1)]" />
@@ -510,19 +514,21 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
             </button>
 
             {/* Central Infobar Display */}
-            <div
+            <button
+              type="button"
               onClick={() => setIsEditingInfobar(true)}
-              className="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-full bg-[#0a0a0f] border border-[#232733] shadow-[inset_0_2px_4px_rgba(0,0,0,0.8),0_1px_2px_rgba(255,255,255,0.4)] transition-all hover:border-accent/60"
+              aria-label="Customize infobar display"
+              className="flex h-9 flex-1 items-center justify-center rounded-full border border-edge bg-[#0a0a0f] shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] transition-all hover:border-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {renderInfobarContent()}
-            </div>
+            </button>
 
             {/* Right Touch Point (Next Page) */}
             <button
               type="button"
               onClick={handleNextPage}
               title="Next Page"
-              className="group flex flex-col items-center justify-center p-2 transition-transform active:scale-90"
+              className="group flex flex-col items-center justify-center rounded-lg p-2 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:scale-90"
             >
               {/* Glowing LED Bar */}
               <div className="h-1 w-8 rounded-full bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.9)] transition-all group-hover:bg-white group-hover:shadow-[0_0_12px_rgba(255,255,255,1)]" />
@@ -806,7 +812,16 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
 
             {selectedKey.action.type === 'app' && (
               <div className="space-y-2">
-                <label className="block text-tiny font-medium text-ink-dim">Installed Applications</label>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="block text-tiny font-medium text-ink-dim">Installed Applications</label>
+                  <button
+                    type="button"
+                    onClick={() => window.switchboard.deck.apps().then(setInstalledApps)}
+                    className="text-[11px] font-medium text-accent hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    Refresh list
+                  </button>
+                </div>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-ink-faint" />
                   <input
@@ -822,6 +837,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
                   {filteredApps.length > 0 ? (
                     filteredApps.map((app) => {
                       const isSelected = selectedKey.action.value === (app.path || app.name);
+                      const AppIcon = appIcon(app);
                       return (
                         <button
                           key={app.path || app.name}
@@ -834,12 +850,12 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
                               action: { type: 'app', value: app.path || app.name }
                             });
                           }}
-                          className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-tiny transition-colors hover:bg-raised ${
+                          className={`w-full flex items-center justify-between px-3 py-2 text-left text-tiny transition-colors hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
                             isSelected ? 'bg-raised text-accent font-medium' : 'text-ink'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <Terminal className="h-3.5 w-3.5 shrink-0 text-accent/80" />
+                            <AppIcon className="h-4 w-4 shrink-0 text-accent/80" aria-hidden="true" />
                             <span className="truncate">{app.name}</span>
                           </div>
                           <span className="text-[10px] text-ink-faint font-mono ml-2 shrink-0 max-w-[120px] truncate">

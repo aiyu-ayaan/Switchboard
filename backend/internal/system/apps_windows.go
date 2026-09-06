@@ -47,13 +47,20 @@ func ListWindowsApps() []protocol.InstalledApp {
 		})
 	}
 
-	// Directories to scan for Start Menu shortcuts
+	// Directories to scan for Start Menu shortcuts. os.ExpandEnv understands
+	// $VARIABLE syntax, not Windows' %VARIABLE% form. The old paths therefore
+	// never resolved on Windows and the picker could only show the built-ins.
+	// Start Menu entries are the launchable, user-facing app catalogue Windows
+	// itself presents, including per-user installs such as VS Code and Chrome.
 	dirs := []string{
-		os.ExpandEnv(`%ProgramData%\Microsoft\Windows\Start Menu\Programs`),
-		os.ExpandEnv(`%AppData%\Microsoft\Windows\Start Menu\Programs`),
+		filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs"),
+		filepath.Join(os.Getenv("AppData"), "Microsoft", "Windows", "Start Menu", "Programs"),
 	}
 
 	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
 		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
