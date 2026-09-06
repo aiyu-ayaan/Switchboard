@@ -188,7 +188,7 @@ installer is code-signed.
 ```
 HKCU\Software\Classes\*\shell\SwitchboardSend
   (Default)        = "Send to Switchboard"
-  Icon             = "<install path>\Switchboard.exe,0"
+  Icon             = "<install path>\resources\icon.ico"
   MultiSelectModel = "Player"
   \command
     (Default)      = "<install path>\Switchboard.exe" --send "%1"
@@ -196,9 +196,27 @@ HKCU\Software\Classes\*\shell\SwitchboardSend
 
 The key lives under `HKCU`, so registering never asks for elevation. It is
 rewritten on every launch rather than once at install time: the command line
-embeds the install path, and a user who moves or reinstalls the app would
-otherwise be left with a menu entry pointing at nothing. The NSIS uninstaller
-deletes it.
+embeds the path the app is running from, and a user who moves, reinstalls, or
+switches between a packaged build and a checkout would otherwise be left with a
+menu entry pointing at nothing. The NSIS uninstaller deletes it.
+
+**It registers from a dev checkout too.** Unpackaged, `execPath` is
+electron.exe, which cannot launch anything on its own — but handed the app
+directory as its first argument it can, so the command becomes
+`"…\electron.exe" "…rontend" --send "%1"` and the verb is testable without
+packaging first. The icon is the branded `.ico` rather than the running
+executable's own, which would otherwise show Electron's atom in the menu.
+
+**Only real files reach the picker.** A launch's arguments are not only the
+shell's — unpackaged the app directory is one of them — so each is checked with
+`statSync().isFile()` before it is offered. Directories are refused by the
+daemon in any case.
+
+**The picker is not dismiss-on-blur.** A shell menu behaves that way, but this
+window is opened by a process the shell has just launched and focus does not
+reliably settle on it: it landed back on Explorer often enough that the picker
+closed itself before it could be clicked. `Escape` and the close button dismiss
+it, and sending closes it.
 
 **One instance, always.** The verb launches the executable on every
 right-click, and the daemon binds port 9427 and holds the SQLite identity
