@@ -151,8 +151,13 @@ function stopDaemon(): void {
 
 /** Brings the window back and retires the tray icon until the next hide. */
 function showWindow(): void {
-  mainWindow?.show();
-  mainWindow?.focus();
+  if (!mainWindow) {
+    createWindow();
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
   tray?.destroy();
   tray = null;
 }
@@ -241,13 +246,17 @@ function createWindow(options: { show?: boolean } = {}): void {
   // Catches the renderer's own titlebar button too, since window:close routes
   // through close() rather than destroying the window.
   mainWindow.on('close', (event) => {
-    if (quitting || !runInBackground) return;
+    if (quitting || isDev || !runInBackground) return;
     event.preventDefault();
     hideToTray();
   });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (isDev) {
+      quitting = true;
+      app.quit();
+    }
   });
 }
 

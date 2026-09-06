@@ -5,7 +5,7 @@
  * Orchestrates Go backend, Electron frontend, and Android Gradle builds in one place.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { connect } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -92,7 +92,7 @@ function shutdown() {
   for (const child of activeChildren) {
     try {
       if (isWindows) {
-        spawn('taskkill', ['/pid', child.pid.toString(), '/f', '/t']);
+        spawnSync('taskkill', ['/pid', child.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
       } else {
         child.kill('SIGTERM');
       }
@@ -196,7 +196,15 @@ async function devAll() {
   const ready = await waitForPort(BACKEND_PORT);
   if (!ready) log('backend', 'Daemon did not come up in time; starting the frontend anyway.');
 
-  const frontend = spinFrontend().catch(err => log('frontend', `Frontend notice: ${err.message}`));
+  const frontend = spinFrontend()
+    .then(() => {
+      log('system', 'Frontend window closed. Shutting down dev environment...');
+      shutdown();
+    })
+    .catch((err) => {
+      log('frontend', `Frontend error: ${err.message}`);
+      shutdown();
+    });
   return Promise.allSettled([backend, frontend, gateway]);
 }
 

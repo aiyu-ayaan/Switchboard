@@ -4,9 +4,7 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Code,
-  ExternalLink,
   FileText,
   Folder,
   Globe,
@@ -15,7 +13,6 @@ import {
   Layers,
   Linkedin,
   Lock,
-  Minus,
   Monitor,
   Music,
   Play,
@@ -28,13 +25,12 @@ import {
   Sparkles,
   Terminal,
   Trash2,
-  Tv,
   Volume2,
   VolumeX,
   Youtube
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { DeckAction, DeckConfig, DeckKey, DeckPage, LocalState } from '../../shared/types';
+import type { DeckConfig, DeckKey, DeckPage, LocalState } from '../../shared/types';
 
 interface DeckViewProps {
   state: LocalState;
@@ -256,13 +252,13 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
       k.index === selectedKeyIndex ? { ...k, ...patch } : k
     );
     // Ensure all 8 keys exist
-    const fullKeys = Array.from({ length: 8 }, (_, i) => {
+    const fullKeys: DeckKey[] = Array.from({ length: 8 }, (_, i) => {
       const existing = updatedKeys.find((k) => k.index === i);
       return existing || {
         index: i,
         title: `Key ${i + 1}`,
         icon: 'code',
-        action: { type: 'url', value: '' }
+        action: { type: 'url' as const, value: '' }
       };
     });
 
