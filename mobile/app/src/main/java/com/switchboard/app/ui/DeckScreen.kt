@@ -139,12 +139,12 @@ private val DECK_ICONS = listOf(
 )
 
 private val TILE_COLOR_PRESETS = listOf(
-    "#16161E", "#1A1B26", "#21222D", "#24283B",
-    "#1F2335", "#1E1E2E", "#2D1F2D", "#1B2D26"
+    "#1A1B26", "#21222D", "#292B38", "#16161E",
+    "#24381C", "#1F2335", "#2D1F2D", "#1B2D26"
 )
 
 private val ICON_COLOR_PRESETS = listOf(
-    "#7AA2F7", "#9ECE6A", "#BB9AF7", "#F7768E",
+    "#9ECE6A", "#7AA2F7", "#BB9AF7", "#F7768E",
     "#2AC3DE", "#E0AF68", "#C0CAF5", "#FFFFFF"
 )
 
@@ -304,135 +304,178 @@ fun DeckScreen(
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // COMPACT TOP CHROME (Only ~28dp tall: Back button, Page Indicator Capsule, and Edit Mode toggle)
+            // COMPACT TOP CHROME (Only ~30dp tall: Back button, Page Indicator Capsule, and Edit Mode toggle)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(28.dp),
+                    .height(30.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left: Discreet exit back button
-                IconButton(
-                    onClick = {
-                        triggerClickHaptic()
-                        onBack()
-                    },
-                    modifier = Modifier.size(28.dp)
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.size(30.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Exit Deck",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    IconButton(
+                        onClick = {
+                            triggerClickHaptic()
+                            onBack()
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Exit Deck",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
 
                 // Center: Page Badge Capsule (Click to cycle pages)
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     modifier = Modifier.clickable { handleNextPage() }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
                         Text(
                             text = currentPage.name.ifEmpty { "Page ${safePageIndex + 1}" },
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
-                            text = "${safePageIndex + 1}/${pages.size}",
-                            fontSize = 9.5.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "${safePageIndex + 1}/${pages.size}",
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
                 // Right: Page Operations and Edit Toggle
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // Add page button
-                    IconButton(
-                        onClick = {
-                            triggerClickHaptic()
-                            val newPages = config.pages + DeckPage(
-                                id = "page-${System.currentTimeMillis()}",
-                                name = "Page ${config.pages.size + 1}"
-                            )
-                            val newActive = newPages.size - 1
-                            activePageIdx = newActive
-                            onSaveConfig(config.copy(pages = newPages, activePage = newActive))
-                        },
-                        modifier = Modifier.size(28.dp)
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Add Page",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-
-                    // Delete page button (if > 1 page)
-                    if (pages.size > 1) {
                         IconButton(
                             onClick = {
                                 triggerClickHaptic()
-                                val newPages = config.pages.filterIndexed { idx, _ -> idx != safePageIndex }
-                                val newActive = (safePageIndex - 1).coerceAtLeast(0)
+                                val newPages = config.pages + DeckPage(
+                                    id = "page-${System.currentTimeMillis()}",
+                                    name = "Page ${config.pages.size + 1}"
+                                )
+                                val newActive = newPages.size - 1
                                 activePageIdx = newActive
                                 onSaveConfig(config.copy(pages = newPages, activePage = newActive))
                             },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.fillMaxSize()
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Delete,
-                                contentDescription = "Delete Page",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(14.dp)
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Add Page",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
 
+                    // Delete page button (if > 1 page)
+                    if (pages.size > 1) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    triggerClickHaptic()
+                                    val newPages = config.pages.filterIndexed { idx, _ -> idx != safePageIndex }
+                                    val newActive = (safePageIndex - 1).coerceAtLeast(0)
+                                    activePageIdx = newActive
+                                    onSaveConfig(config.copy(pages = newPages, activePage = newActive))
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Delete Page",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+
                     // Edit Mode Toggle
-                    IconButton(
-                        onClick = {
-                            triggerClickHaptic()
-                            editMode = !editMode
-                        },
-                        modifier = Modifier.size(28.dp)
+                    Surface(
+                        shape = CircleShape,
+                        color = if (editMode) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(
+                            1.dp,
+                            if (editMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Icon(
-                            imageVector = if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
-                            contentDescription = "Edit Mode",
-                            tint = if (editMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp)
-                        )
+                        IconButton(
+                            onClick = {
+                                triggerClickHaptic()
+                                editMode = !editMode
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(
+                                imageVector = if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
+                                contentDescription = "Edit Mode",
+                                tint = if (editMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
 
             // PHYSICAL DECK HARDWARE CASING (Fills remaining height)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 8.dp
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shadowElevation = 6.dp
             ) {
                 Column(
                     modifier = Modifier
@@ -530,7 +573,7 @@ fun DeckScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp)
+                            .height(34.dp)
                             .padding(horizontal = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -544,12 +587,12 @@ fun DeckScreen(
                         // Central OLED Infobar Capsule
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(30.dp)
-                                .padding(horizontal = 10.dp)
+                                .height(32.dp)
+                                .padding(horizontal = 8.dp)
                                 .combinedClickable(
                                     onClick = {
                                         triggerClickHaptic()
@@ -569,7 +612,7 @@ fun DeckScreen(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 12.dp)
+                                    .padding(horizontal = 14.dp)
                             ) {
                                 val mode = config.infobar.mode
                                 when {
@@ -584,7 +627,7 @@ fun DeckScreen(
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(13.dp)
                                             )
-                                            Spacer(Modifier.width(4.dp))
+                                            Spacer(Modifier.width(5.dp))
                                             Text(
                                                 text = "${state.host.media.title} — ${state.host.media.artist}",
                                                 style = MaterialTheme.typography.labelSmall,
@@ -595,19 +638,41 @@ fun DeckScreen(
                                         }
                                     }
                                     mode == "page" -> {
-                                        Text(
-                                            text = "${currentPage.name} • Page ${safePageIndex + 1} of ${pages.size}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = currentPage.name.ifEmpty { "Page ${safePageIndex + 1}" },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = "•",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = "${safePageIndex + 1} / ${pages.size}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     }
                                     mode == "text" && config.infobar.customText.isNotEmpty() -> {
                                         Text(
                                             text = config.infobar.customText,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                     else -> {
@@ -617,19 +682,30 @@ fun DeckScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = clockDate,
-                                                fontSize = 9.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(5.dp)
+                                                        .clip(CircleShape)
+                                                        .background(MaterialTheme.colorScheme.primary)
+                                                )
+                                                Text(
+                                                    text = clockDate,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                             Text(
                                                 text = clockTime,
-                                                fontSize = 9.5.sp,
+                                                fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 fontFamily = FontFamily.Monospace,
-                                                color = MaterialTheme.colorScheme.onSurface
+                                                color = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     }
@@ -692,23 +768,27 @@ private fun PhysicalDeckKeyButton(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val defaultBg = MaterialTheme.colorScheme.surfaceContainerLowest
-    val defaultIconColor = MaterialTheme.colorScheme.secondary
+    val defaultBg = MaterialTheme.colorScheme.surface
+    val defaultIconColor = MaterialTheme.colorScheme.primary
     val bgColor = parseHexColor(key.bgColor, defaultBg)
-    val iconColor = parseHexColor(key.iconColor, defaultIconColor)
+    val iconColor = if (key.iconColor.isNullOrBlank() || key.iconColor.equals("#7AA2F7", ignoreCase = true)) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        parseHexColor(key.iconColor, defaultIconColor)
+    }
     val iconVector = resolveIcon(key.icon)
 
     Box(
         modifier = modifier
-            .shadow(if (isSelected) 4.dp else 2.dp, RoundedCornerShape(14.dp))
+            .shadow(if (isSelected) 6.dp else 2.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(bgColor)
             .border(
                 width = if (isSelected) 2.dp else 1.dp,
                 color = when {
-                    isSelected -> MaterialTheme.colorScheme.secondary
+                    isSelected -> MaterialTheme.colorScheme.primary
                     editMode -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                    else -> Color.White.copy(alpha = 0.08f)
+                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
                 },
                 shape = RoundedCornerShape(14.dp)
             )
@@ -723,11 +803,11 @@ private fun PhysicalDeckKeyButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.42f)
+                .fillMaxHeight(0.38f)
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.12f), Color.Transparent)
+                        listOf(Color.White.copy(alpha = 0.08f), Color.Transparent)
                     )
                 )
         )
@@ -739,23 +819,30 @@ private fun PhysicalDeckKeyButton(
                     .size(8.dp)
                     .align(Alignment.TopEnd)
                     .clip(CircleShape)
-                    .background(Color(0xFF34D399))
-                    .border(0.5.dp, Color.Black.copy(alpha = 0.5f), CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
             )
         }
 
         // Edit mode index tag (top-left)
         if (editMode) {
-            Text(
-                text = "${key.index + 1}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 2.dp, top = 2.dp)
-            )
+                    .padding(2.dp)
+            ) {
+                Text(
+                    text = "${key.index + 1}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
         }
 
         // Main Icon & Title
@@ -776,8 +863,8 @@ private fun PhysicalDeckKeyButton(
                 Text(
                     text = key.title,
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -797,20 +884,22 @@ private fun HardwareTouchPoint(
     isLeft: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .size(32.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Icon(
-            imageVector = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = if (isLeft) "Previous Page" else "Next Page",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = if (isLeft) Icons.AutoMirrored.Filled.ArrowBack else Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = if (isLeft) "Previous Page" else "Next Page",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+            )
+        }
     }
 }
 
@@ -832,7 +921,11 @@ private fun KeyCustomizerSheet(
     var actionValue by remember { mutableStateOf(key.action.value) }
     var hasBadge by remember { mutableStateOf(!key.badge.isNullOrEmpty()) }
     var bgColorHex by remember { mutableStateOf(key.bgColor ?: "#1A1B26") }
-    var iconColorHex by remember { mutableStateOf(key.iconColor ?: "#7AA2F7") }
+    var iconColorHex by remember {
+        mutableStateOf(
+            if (key.iconColor.isNullOrBlank() || key.iconColor.equals("#7AA2F7", ignoreCase = true)) "#9ECE6A" else key.iconColor
+        )
+    }
     var appSearch by remember { mutableStateOf("") }
 
     ModalBottomSheet(
@@ -875,7 +968,7 @@ private fun KeyCustomizerSheet(
                         actionType = "url"
                         actionValue = "https://google.com"
                         bgColorHex = "#1A1B26"
-                        iconColorHex = "#7AA2F7"
+                        iconColorHex = "#9ECE6A"
                         hasBadge = false
                     }
                 ) {
@@ -1002,7 +1095,7 @@ private fun KeyCustomizerSheet(
                                                         selectedIcon = matched
                                                     }
                                                 }
-                                                .background(if (isChosen) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) else Color.Transparent)
+                                                .background(if (isChosen) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent)
                                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1156,15 +1249,15 @@ private fun KeyCustomizerSheet(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .border(1.dp, if (isSelected) MaterialTheme.colorScheme.secondary else Color.Transparent, RoundedCornerShape(8.dp))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .border(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
                                 .clickable { selectedIcon = iconItem.id },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = iconItem.icon,
                                 contentDescription = iconItem.label,
-                                tint = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -1180,15 +1273,15 @@ private fun KeyCustomizerSheet(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .border(1.dp, if (isSelected) MaterialTheme.colorScheme.secondary else Color.Transparent, RoundedCornerShape(8.dp))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .border(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
                                 .clickable { selectedIcon = iconItem.id },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = iconItem.icon,
                                 contentDescription = iconItem.label,
-                                tint = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -1315,8 +1408,8 @@ private fun InfobarCustomizerSheet(
                     val isSelected = selectedMode == mode
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { selectedMode = mode }
@@ -1329,13 +1422,13 @@ private fun InfobarCustomizerSheet(
                             Text(
                                 text = label,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                             )
                             if (isSelected) {
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
