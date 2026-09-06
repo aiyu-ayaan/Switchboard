@@ -23,6 +23,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +41,9 @@ data class ConnectionState(
     val host: HostState = HostState(),
     /** Cover art for [HostState.media], decoded once per track. */
     val artwork: ImageBitmap? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** The session is held open past the UI, and redialled when it drops. */
+    val alwaysOn: Boolean = false
 )
 
 /**
@@ -57,6 +61,7 @@ data class ConnectionState(
  */
 class SwitchboardConnection private constructor(context: Context) {
 
+    private val appContext = context.applicationContext
     private val store = HostStore(context)
     private val transfers = TransferEngine.get(context)
     val camera = CameraController.get(context)
@@ -64,7 +69,9 @@ class SwitchboardConnection private constructor(context: Context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val _state = MutableStateFlow(ConnectionState(hosts = store.hosts()))
+    private val _state = MutableStateFlow(
+        ConnectionState(hosts = store.hosts(), alwaysOn = store.alwaysOn)
+    )
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
     private var connection: Job? = null
@@ -90,6 +97,45 @@ class SwitchboardConnection private constructor(context: Context) {
         val last = store.lastHostId?.let { id -> store.hosts().find { it.daemonId == id } }
             ?: store.hosts().firstOrNull()
         last?.let(::connect)
+        // The setting outlives the process. This constructor also runs when the
+        // system restarts the service on its own, and the notification has to
+        // come back with it or the process loses its reason to be resident.
+        if (store.alwaysOn && last != null) ConnectionService.start(appContext)
+    }
+
+    // ---- Always-on ----
+
+    /**
+     * Turns the persistent session on or off.
+     *
+     * Enabling it only starts the service; the reconnect loop is armed by the
+     * next attempt, so a user who flips this while disconnected still has to
+     * pick a desktop once. Disabling it drops the notification and lets the
+     * ordinary "no UI, nothing moving" teardown apply again.
+     */
+    fun setAlwaysOn(enabled: Boolean) {
+        if (store.alwaysOn == enabled) return
+        store.alwaysOn = enabled
+        _state.update { it.copy(alwaysOn = enabled) }
+
+        if (enabled) {
+            ConnectionService.start(appContext)
+            // Flipping this on from the pairing screen should reach the last
+            // desktop rather than wait for a tap. The job is checked rather
+            // than the field: a session that dropped while always-on was off
+            // leaves a finished job behind, and that is exactly the case the
+            // user is switching this on to fix.
+            if (connection?.isActive != true) {
+                val last = store.lastHostId?.let { id -> store.hosts().find { it.daemonId == id } }
+                    ?: store.hosts().firstOrNull()
+                last?.let(::connect)
+            }
+        } else {
+            ConnectionService.stop(appContext)
+            if (shouldTearDown(uiHolders > 0, transfers.transfers.value, alwaysOn = false)) {
+                disconnect()
+            }
+        }
     }
 
     // ---- UI attachment ----
@@ -102,20 +148,20 @@ class SwitchboardConnection private constructor(context: Context) {
         if (idleWatch == null) {
             idleWatch = scope.launch {
                 transfers.transfers.collect { list ->
-                    if (shouldTearDown(uiHolders > 0, list)) disconnect()
+                    if (shouldTearDown(uiHolders > 0, list, store.alwaysOn)) disconnect()
                 }
             }
         }
     }
 
     /**
-     * The last screen has gone. Anything still moving keeps the session; an
-     * idle app must not sit on a socket and a foreground service forever, so
-     * with nothing in flight the connection goes now.
+     * The last screen has gone. Anything still moving keeps the session, and so
+     * does always-on; an idle app that asked for neither must not sit on a
+     * socket and a foreground service forever, so the connection goes now.
      */
     fun releaseUi() {
         uiHolders--
-        if (shouldTearDown(uiHolders > 0, transfers.transfers.value)) disconnect()
+        if (shouldTearDown(uiHolders > 0, transfers.transfers.value, store.alwaysOn)) disconnect()
     }
 
     // ---- Session ----
@@ -177,93 +223,138 @@ class SwitchboardConnection private constructor(context: Context) {
         }
 
         connection = scope.launch {
-            android.util.Log.i(TAG, "Starting connection collect for credentials=$credentials")
-            client.connect(credentials).collect { event ->
-                // Deliberately not logged per event. This collector runs on the
-                // main thread, and file acks and chunks arrive tens of times a
-                // second — stringifying each one's JSON payload here put that
-                // work on the UI thread for the length of every transfer. The
-                // lifecycle branches below log themselves.
-                when (event) {
-                    is ConnectionEvent.Connected -> {
-                        // A manual pairing only knows a placeholder ID until the
-                        // host introduces itself. Re-key the entry to the real
-                        // daemon ID so scanning the same desktop later updates
-                        // this record instead of adding a duplicate.
-                        val realId = event.daemonId.ifEmpty { host.daemonId }
-                        if (realId != host.daemonId) store.forget(host.daemonId)
+            var attemptCredentials = credentials
+            var attemptHost = host
+            var failures = 0
 
-                        // Pin the key the host proved it holds. After a manual
-                        // pairing this is the first time we learn it, and every
-                        // later resume is checked against it.
-                        val saved = host.copy(
-                            daemonId = realId,
-                            hostName = event.hostName.ifEmpty { host.hostName },
-                            hostKey = event.hostKey.ifEmpty { host.hostKey },
-                            deviceId = event.deviceId,
-                            lastConnected = System.currentTimeMillis()
-                        )
-                        // The engine only learns how to reach the desktop here;
-                        // before the handshake there is no session to write to.
-                        transfers.bind { action, payload, blob -> client.send(action, payload, blob) }
-                        camera.bind { action, payload, blob -> client.send(action, payload, blob) }
-                        store.save(saved)
-                        store.lastHostId = saved.daemonId
-                        _state.update {
-                            it.copy(
-                                status = ConnectionStatus.Connected,
-                                activeHost = saved,
-                                hosts = store.hosts(),
-                                error = null
-                            )
-                        }
-                    }
+            while (isActive) {
+                android.util.Log.i(TAG, "Starting connection collect for credentials=$attemptCredentials")
+                var handshook = false
 
-                    is ConnectionEvent.State -> {
-                        _state.update { it.copy(host = event.state) }
-                        syncArtwork(event.state.media.artworkId)
-                    }
+                client.connect(attemptCredentials).collect { event ->
+                    if (event is ConnectionEvent.Connected) handshook = true
+                    attemptHost = handle(event, attemptHost)
+                }
 
-                    is ConnectionEvent.Artwork -> {
-                        // A late reply for a track that has already changed is
-                        // dropped rather than shown against the wrong song.
-                        if (event.artwork.artworkId == artworkId) {
-                            val decoded = decodeArtwork(event.artwork.data)
-                            _state.update { it.copy(artwork = decoded) }
-                        }
-                    }
+                // The flow completes only once the socket is gone. Without
+                // always-on that is the end of the session; with it, the drop
+                // is the thing this loop exists to paper over.
+                if (!store.alwaysOn) break
 
-                    is ConnectionEvent.UnlockChallengeIssued ->
-                        unlockChallenges.emit(event.challenge)
+                // A pairing code is spent on first use, so a pairing that never
+                // reached a handshake cannot be usefully repeated -- redialling
+                // would only burn attempts against the host's rate limiter. The
+                // user has to scan again.
+                if (!handshook && attemptCredentials is Credentials.Pair) break
 
-                    is ConnectionEvent.FileFrame ->
-                        transfers.onFrame(event.action, event.payload, event.blob)
+                failures = if (handshook) 0 else failures + 1
 
-                    is ConnectionEvent.CameraCommand ->
-                        camera.onCommand(event.action, event.payload)
+                // Re-read the record before redialling: mDNS may have moved the
+                // desktop to a new lease while this attempt failed against the
+                // old address. Resume rather than Pair, because by this point
+                // the host key is pinned and the code is gone.
+                attemptHost = store.hosts().find { it.daemonId == attemptHost.daemonId } ?: attemptHost
+                attemptCredentials = Credentials.Resume(attemptHost)
+                _state.update {
+                    it.copy(status = ConnectionStatus.Connecting, activeHost = attemptHost)
+                }
+                delay(retryDelayMs(failures))
+            }
+        }
+    }
 
-                    is ConnectionEvent.Failed -> {
-                        transfers.unbind()
-                        camera.unbind()
-                        _state.update {
-                            it.copy(
-                                status = ConnectionStatus.Disconnected,
-                                activeHost = null,
-                                error = event.reason
-                            )
-                        }
-                    }
+    /**
+     * Applies one event, returning the host record it leaves in force.
+     *
+     * Split out of the collect so the retry loop above can wrap it: a
+     * handshake rewrites the record it was dialled with, and the next attempt
+     * has to start from that rewritten one.
+     */
+    private suspend fun handle(event: ConnectionEvent, host: KnownHost): KnownHost {
+        // Deliberately not logged per event. This runs on the main thread, and
+        // file acks and chunks arrive tens of times a second -- stringifying
+        // each one's JSON payload here put that work on the UI thread for the
+        // length of every transfer. The lifecycle branches below log themselves.
+        when (event) {
+            is ConnectionEvent.Connected -> {
+                // A manual pairing only knows a placeholder ID until the
+                // host introduces itself. Re-key the entry to the real
+                // daemon ID so scanning the same desktop later updates
+                // this record instead of adding a duplicate.
+                val realId = event.daemonId.ifEmpty { host.daemonId }
+                if (realId != host.daemonId) store.forget(host.daemonId)
 
-                    ConnectionEvent.Disconnected -> {
-                        transfers.unbind()
-                        camera.unbind()
-                        _state.update {
-                            it.copy(status = ConnectionStatus.Disconnected, activeHost = null)
-                        }
-                    }
+                // Pin the key the host proved it holds. After a manual
+                // pairing this is the first time we learn it, and every
+                // later resume is checked against it.
+                val saved = host.copy(
+                    daemonId = realId,
+                    hostName = event.hostName.ifEmpty { host.hostName },
+                    hostKey = event.hostKey.ifEmpty { host.hostKey },
+                    deviceId = event.deviceId,
+                    lastConnected = System.currentTimeMillis()
+                )
+                // The engine only learns how to reach the desktop here;
+                // before the handshake there is no session to write to.
+                transfers.bind { action, payload, blob -> client.send(action, payload, blob) }
+                camera.bind { action, payload, blob -> client.send(action, payload, blob) }
+                store.save(saved)
+                store.lastHostId = saved.daemonId
+                _state.update {
+                    it.copy(
+                        status = ConnectionStatus.Connected,
+                        activeHost = saved,
+                        hosts = store.hosts(),
+                        error = null
+                    )
+                }
+                return saved
+            }
+
+            is ConnectionEvent.State -> {
+                _state.update { it.copy(host = event.state) }
+                syncArtwork(event.state.media.artworkId)
+            }
+
+            is ConnectionEvent.Artwork -> {
+                // A late reply for a track that has already changed is
+                // dropped rather than shown against the wrong song.
+                if (event.artwork.artworkId == artworkId) {
+                    val decoded = decodeArtwork(event.artwork.data)
+                    _state.update { it.copy(artwork = decoded) }
+                }
+            }
+
+            is ConnectionEvent.UnlockChallengeIssued ->
+                unlockChallenges.emit(event.challenge)
+
+            is ConnectionEvent.FileFrame ->
+                transfers.onFrame(event.action, event.payload, event.blob)
+
+            is ConnectionEvent.CameraCommand ->
+                camera.onCommand(event.action, event.payload)
+
+            is ConnectionEvent.Failed -> {
+                transfers.unbind()
+                camera.unbind()
+                _state.update {
+                    it.copy(
+                        status = ConnectionStatus.Disconnected,
+                        activeHost = null,
+                        error = event.reason
+                    )
+                }
+            }
+
+            ConnectionEvent.Disconnected -> {
+                transfers.unbind()
+                camera.unbind()
+                _state.update {
+                    it.copy(status = ConnectionStatus.Disconnected, activeHost = null)
                 }
             }
         }
+        return host
     }
 
     fun disconnect() {
@@ -356,8 +447,24 @@ class SwitchboardConnection private constructor(context: Context) {
          * socket: the session survives the UI only for as long as something is
          * actually using it.
          */
-        internal fun shouldTearDown(uiActive: Boolean, transfers: List<FileProgress>): Boolean =
-            !uiActive && transfers.none { !TransferStatus.isTerminal(it.status) }
+        internal fun shouldTearDown(
+            uiActive: Boolean,
+            transfers: List<FileProgress>,
+            alwaysOn: Boolean = false
+        ): Boolean =
+            !uiActive &&
+                !alwaysOn &&
+                transfers.none { !TransferStatus.isTerminal(it.status) }
+
+        /**
+         * Backoff between reconnect attempts, doubling to a 30s ceiling.
+         *
+         * A desktop that is simply switched off must not be dialled in a tight
+         * loop for hours, and the ceiling is low enough that the phone is back
+         * within half a minute of it waking up.
+         */
+        internal fun retryDelayMs(consecutiveFailures: Int): Long =
+            (1_000L shl consecutiveFailures.coerceIn(0, 5)).coerceAtMost(30_000L)
 
         @Volatile
         private var instance: SwitchboardConnection? = null

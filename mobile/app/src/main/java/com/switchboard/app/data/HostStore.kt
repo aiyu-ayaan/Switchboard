@@ -83,9 +83,26 @@ class HostStore(context: Context) {
             prefs.putString(KEY_LAST_HOST, value)
         }
 
+    /**
+     * Whether the session should outlive the UI: keep the socket up, and keep
+     * redialling the last desktop, even with the task swiped away.
+     *
+     * Stored here rather than in a preferences file because it is read the
+     * instant the process starts -- a foreground service the system restarts
+     * has to know whether it is meant to be running before anything else is
+     * built -- and this store is already the one thing the connection loads
+     * first.
+     */
+    var alwaysOn: Boolean
+        get() = prefs.getString(KEY_ALWAYS_ON) == "1"
+        set(value) {
+            prefs.putString(KEY_ALWAYS_ON, if (value) "1" else "0")
+        }
+
     private companion object {
         const val KEY_IDENTITY = "identity-seed"
         const val KEY_HOSTS = "known-hosts"
+        const val KEY_ALWAYS_ON = "always-on"
         const val KEY_LAST_HOST = "last-host"
         const val LEGACY_PREFS = "switchboard-secure"
 

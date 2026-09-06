@@ -12,6 +12,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!--
+      "Stay connected" holds the socket open past the UI. connectedDevice
+      rather than dataSync, which Android 15 caps at a few hours a day;
+      CHANGE_NETWORK_STATE is the qualifying permission that type requires,
+      and is granted at install with no prompt.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!--
+      Doze suspends network access for optimised apps, which would strand a
+      connection the user asked to keep. Requested from Settings, only when
+      they turn that setting on, and the app works without it.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Progress and result notifications; requested at the first transfer. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -62,6 +76,11 @@
             android:name=".transfer.TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".ConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <service
             android:name=".camera.CameraService"

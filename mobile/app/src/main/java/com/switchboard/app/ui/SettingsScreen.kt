@@ -1,8 +1,11 @@
 package com.switchboard.app.ui
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ColorLens
@@ -32,6 +36,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -79,6 +84,8 @@ fun SettingsScreen(
     themeConfig: ThemeConfig,
     transferConfig: TransferConfig,
     unlockConfig: UnlockConfig,
+    alwaysOn: Boolean,
+    onSetAlwaysOn: (Boolean) -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetSaveDirectory: (String) -> Unit,
@@ -90,6 +97,36 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var folderError by remember { mutableStateOf<String?>(null) }
+
+    val power = remember { context.getSystemService(PowerManager::class.java) }
+    // Re-read rather than observed: the platform offers no callback for this,
+    // and the only thing that changes it is the system dialog below, which
+    // reports back when it closes.
+    var batteryExempt by remember {
+        mutableStateOf(power?.isIgnoringBatteryOptimizations(context.packageName) ?: true)
+    }
+    val batteryPrompt = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // That dialog always reports cancelled, so the answer comes from asking
+        // the system again rather than from the result code.
+        batteryExempt = power?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+    }
+
+    // Without notification permission the service still runs, but its ongoing
+    // notification is silently dropped -- which is how a user ends up unable to
+    // find the switch that turns the connection off.
+    val notifications = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { onSetAlwaysOn(true) }
+
+    val enableAlwaysOn: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onSetAlwaysOn(true)
+        }
+    }
 
     val pickFolder = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -123,6 +160,55 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            Text(
+                text = "Connection",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+        }
+
+        item {
+            SettingsCard {
+                SwitchRow(
+                    icon = Icons.Filled.Sync,
+                    title = "Stay Connected",
+                    description = "Hold the link to your desktop while Switchboard is in the " +
+                        "background or cleared from Recents, and redial on its own when it drops.",
+                    checked = alwaysOn,
+                    onCheckedChange = { on -> if (on) enableAlwaysOn() else onSetAlwaysOn(false) }
+                )
+            }
+        }
+
+        // Only worth the user's attention once they have asked for a connection
+        // that Doze would otherwise cut. Offering it earlier is asking for a
+        // battery exemption for a feature they have not turned on.
+        if (alwaysOn && !batteryExempt) {
+            item {
+                SettingsCard {
+                    ThemeModeOption(
+                        title = "Allow Background Battery Use",
+                        description = "Android may currently suspend Switchboard's network " +
+                            "access while the screen is off, which drops the connection. " +
+                            "Tap to exempt it.",
+                        icon = Icons.Filled.BatterySaver,
+                        selected = false,
+                        onClick = {
+                            batteryPrompt.launch(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:" + context.packageName)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
         item {
             Text(
                 text = "Appearance",
@@ -182,63 +268,19 @@ fun SettingsScreen(
 
         item {
             val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.ColorLens,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = "Dynamic Theming",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = if (dynamicAvailable) {
-                                "Derive tonal palette from your Android wallpaper (Material You)"
-                            } else {
-                                "Material You dynamic theming requires Android 12+"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Switch(
-                        checked = themeConfig.dynamicColor && dynamicAvailable,
-                        onCheckedChange = onSetDynamicColor,
-                        enabled = dynamicAvailable,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    )
-                }
+            SettingsCard {
+                SwitchRow(
+                    icon = Icons.Filled.ColorLens,
+                    title = "Dynamic Theming",
+                    description = if (dynamicAvailable) {
+                        "Derive tonal palette from your Android wallpaper (Material You)"
+                    } else {
+                        "Material You dynamic theming requires Android 12+"
+                    },
+                    checked = themeConfig.dynamicColor && dynamicAvailable,
+                    onCheckedChange = onSetDynamicColor,
+                    enabled = dynamicAvailable
+                )
             }
         }
 
@@ -538,6 +580,77 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+/** The bordered container every settings group sits in. */
+@Composable
+private fun SettingsCard(content: @Composable () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SwitchRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.size(42.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        )
     }
 }
 

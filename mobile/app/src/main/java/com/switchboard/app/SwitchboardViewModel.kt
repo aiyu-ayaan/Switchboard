@@ -74,7 +74,9 @@ data class UiState(
     val unlockAvailableOnPhone: Boolean = false,
     /** This phone holds such a key. Kept in state so the top bar does not
      *  hit the keystore on every recomposition. */
-    val unlockEnrolled: Boolean = false
+    val unlockEnrolled: Boolean = false,
+    /** The session is held open past the UI, and redialled when it drops. */
+    val alwaysOn: Boolean = false
 ) {
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
@@ -155,7 +157,8 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                         activeHost = live.activeHost,
                         host = live.host,
                         artwork = live.artwork,
-                        error = live.error
+                        error = live.error,
+                        alwaysOn = live.alwaysOn
                     )
                 }
             }
@@ -226,6 +229,15 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         connection.disconnect()
         triggerLiveProbe()
     }
+
+    /**
+     * Keeps the desktop connected while the app is backgrounded or swiped away.
+     *
+     * The foreground service this starts can only be started from a visible
+     * app, which is where this call comes from, so the flip and the service
+     * cannot drift apart.
+     */
+    fun setAlwaysOn(enabled: Boolean) = connection.setAlwaysOn(enabled)
 
     /** "Forget system": drops stored keys for a host and leaves it if active. */
     fun forget(host: KnownHost) {

@@ -55,4 +55,6 @@ Switchboard operates with a strict **local-first, zero-trust philosophy**:
   - `CAMERA`: Used exclusively while the QR scanner viewfinder is active.
   - `INTERNET` & `ACCESS_NETWORK_STATE`: For local network communication.
   - `POST_NOTIFICATIONS` & `FOREGROUND_SERVICE`: For uninterrupted background file transfers.
+  - `FOREGROUND_SERVICE_CONNECTED_DEVICE` & `CHANGE_NETWORK_STATE`: For the optional **Stay Connected** mode, which holds the desktop session open while the app is backgrounded or cleared from Recents.
+  - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`: Offered only from Settings, and only while **Stay Connected** is on — Android's Doze mode otherwise suspends network access with the screen off. The app works without it.
   - *No broad storage permissions required*: File transfers use the secure Android Storage Access Framework (SAF).

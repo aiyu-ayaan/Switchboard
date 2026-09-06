@@ -2,6 +2,7 @@ package com.switchboard.app
 
 import com.switchboard.app.net.FileProgress
 import com.switchboard.app.net.TransferStatus
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -42,5 +43,27 @@ class SwitchboardConnectionTest {
     @Test
     fun keepsTheSession_whileAScreenIsAttached() {
         assertFalse(SwitchboardConnection.shouldTearDown(uiActive = true, transfers = emptyList()))
+    }
+
+    @Test
+    fun keepsTheSession_whileAlwaysOnIsSet() {
+        // The whole point of the setting: no UI, nothing moving, still held.
+        assertFalse(
+            SwitchboardConnection.shouldTearDown(
+                uiActive = false,
+                transfers = emptyList(),
+                alwaysOn = true
+            )
+        )
+    }
+
+    @Test
+    fun retryDelay_backsOffToACeiling() {
+        assertEquals(1_000L, SwitchboardConnection.retryDelayMs(0))
+        assertEquals(2_000L, SwitchboardConnection.retryDelayMs(1))
+        assertEquals(16_000L, SwitchboardConnection.retryDelayMs(4))
+        // Capped, and stays capped however long the desktop stays off.
+        assertEquals(30_000L, SwitchboardConnection.retryDelayMs(5))
+        assertEquals(30_000L, SwitchboardConnection.retryDelayMs(50))
     }
 }

@@ -53,6 +53,14 @@ This guide provides solutions for common connectivity, hardware, and permission 
 
 ## 📱 Android Client Tips
 
+### Connection Drops When the App Leaves the Screen
+By default the session ends once the last screen is gone and nothing is transferring — an idle app should not sit on a socket. To keep a desktop connected instead:
+  1. Open **Settings ➔ Connection** in the Android app and turn on **Stay Connected**.
+  2. Grant the notification permission when asked. The ongoing notification is what keeps the process resident, and it carries the **Turn off** button for the mode.
+  3. If the **Allow Background Battery Use** row appears below the switch, tap it and accept. Without the exemption, Android's Doze mode suspends network access while the screen is off and the link sleeps with it.
+
+With this on, the phone reconnects on its own after a drop — retrying with a backoff that doubles from one second to a thirty-second ceiling, so a desktop that was switched off is picked up within half a minute of waking. Tapping **Switch desktop** or **Disconnect** in the app is still an explicit stop and is not undone by the reconnect.
+
 ### File Transfers Pause in Background
 - If Android terminates transfers when the screen is locked:
   1. Go to Android **Settings ➔ Apps ➔ Switchboard**.

@@ -89,7 +89,7 @@ class TransferService : Service() {
                 withContext(Dispatchers.Default) {
                     val manager = NotificationManagerCompat.from(this@TransferService)
                     finished.forEach { notifyTerminal(manager, it) }
-                    if (repost) manager.notify(PROGRESS_ID, buildProgressNotification(active))
+                    if (repost) manager.postOrSkip(PROGRESS_ID, buildProgressNotification(active))
                 }
             }
         }
@@ -192,7 +192,21 @@ class TransferService : Service() {
             .setAutoCancel(true)
             .build()
 
-        manager.notify(progress.transferId.hashCode(), notification)
+        manager.postOrSkip(progress.transferId.hashCode(), notification)
+    }
+
+    /**
+     * startForeground posts the first notification whatever the user has
+     * granted; every later post needs POST_NOTIFICATIONS and throws without it
+     * rather than no-opping. Losing the service to that would fail the transfer
+     * it exists to protect, and the notification is the part the user has
+     * already chosen not to see.
+     */
+    private fun NotificationManagerCompat.postOrSkip(id: Int, notification: Notification) {
+        try {
+            notify(id, notification)
+        } catch (_: SecurityException) {
+        }
     }
 
     /**

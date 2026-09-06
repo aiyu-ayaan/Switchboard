@@ -418,6 +418,8 @@ fun SwitchboardApp(
                         SettingsScreen(
                             themeConfig = themeConfig,
                             transferConfig = transferConfig,
+                            alwaysOn = state.alwaysOn,
+                            onSetAlwaysOn = viewModel::setAlwaysOn,
                             unlockConfig = UnlockConfig(
                                 availableOnPhone = state.unlockAvailableOnPhone,
                                 enrolled = state.unlockEnrolled,
