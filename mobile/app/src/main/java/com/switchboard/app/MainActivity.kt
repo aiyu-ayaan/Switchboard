@@ -284,7 +284,13 @@ fun SwitchboardApp(
 
     val isDeckScreen = currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck
 
+    BackHandler(enabled = isDeckScreen) {
+        (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        currentScreen = AppScreen.Main
+    }
+
     Scaffold(
+        contentWindowInsets = if (isDeckScreen) androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) else androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
         topBar = {
             if (!isDeckScreen) {
                 TopAppBar(
@@ -602,14 +608,14 @@ fun SwitchboardApp(
             },
             title = {
                 Text(
-                    text = "Landscape Mode Required",
+                    text = "Elgato Stream Deck Neo",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = "Stream Deck Neo is designed for horizontal operation to deliver an authentic 8-key hardware experience. Switchboard will rotate your screen into landscape mode.",
+                    text = "Elgato Stream Deck Neo is designed for horizontal operation to deliver an authentic 8-key hardware experience. Switchboard will rotate your screen into landscape mode.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

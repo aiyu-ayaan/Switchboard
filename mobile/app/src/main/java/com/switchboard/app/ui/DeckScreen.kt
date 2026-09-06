@@ -1,26 +1,35 @@
 package com.switchboard.app.ui
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -168,13 +177,27 @@ fun DeckScreen(
     modifier: Modifier = Modifier
 ) {
     val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     val config = state.deckConfig
     var activePageIdx by remember(config.activePage) { mutableIntStateOf(config.activePage) }
     var editMode by remember { mutableStateOf(false) }
 
-    // Selected key for bottom sheet customization
+    // Selected key for focus ring and bottom sheet customization
     var editingKey by remember { mutableStateOf<DeckKey?>(null) }
+    var selectedKeyIndex by remember { mutableIntStateOf(0) }
     var editingInfobar by remember { mutableStateOf(false) }
+
+    fun triggerClickHaptic() {
+        if (!view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+
+    fun triggerLongPressHaptic() {
+        if (!view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
 
     // Live clock ticker
     var clockTime by remember { mutableStateOf("") }
@@ -208,7 +231,7 @@ fun DeckScreen(
     }
 
     val handlePrevPage = {
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        triggerClickHaptic()
         if (pages.size > 1) {
             activePageIdx = (safePageIndex - 1 + pages.size) % pages.size
             onSaveConfig(config.copy(activePage = activePageIdx))
@@ -216,296 +239,419 @@ fun DeckScreen(
     }
 
     val handleNextPage = {
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        triggerClickHaptic()
         if (pages.size > 1) {
             activePageIdx = (safePageIndex + 1) % pages.size
             onSaveConfig(config.copy(activePage = activePageIdx))
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0C13)),
+            .background(Color(0xFF0F111A))
+            .windowInsetsPadding(WindowInsets.safeDrawing),
         contentAlignment = Alignment.Center
     ) {
-        // Main Stream Deck Neo hardware body - Fullscreen dark console
-        Surface(
+        val totalWidth = maxWidth
+        val totalHeight = maxHeight
+
+        // Dynamic responsive sizing calculations
+        val headerHeight = 34.dp
+        val footerHeight = 18.dp
+        val verticalSpacing = 6.dp
+        val casingPaddingV = 16.dp
+        val logoHeight = 22.dp
+        val logoGap = 6.dp
+        val infobarHeight = 32.dp
+        val infobarGap = 8.dp
+        val rowGap = 8.dp
+        val colGap = 8.dp
+
+        val casingMaxHeight = totalHeight - headerHeight - footerHeight - (verticalSpacing * 2)
+        val availableHeightForKeys = casingMaxHeight - casingPaddingV - logoHeight - logoGap - infobarHeight - infobarGap
+        val maxKeyH = (availableHeightForKeys - rowGap) / 2
+
+        val casingPaddingH = 24.dp
+        val availableWidthForKeys = totalWidth - 32.dp - casingPaddingH - (colGap * 3)
+        val maxKeyW = availableWidthForKeys / 4
+
+        val keySize = minOf(maxKeyH, maxKeyW, 88.dp).coerceIn(44.dp, 88.dp)
+        val casingWidth = (keySize * 4 + colGap * 3 + casingPaddingH).coerceIn(280.dp, totalWidth - 16.dp)
+
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-                .shadow(20.dp, RoundedCornerShape(26.dp)),
-            shape = RoundedCornerShape(26.dp),
-            color = Color(0xFF13141F), // Dark matte console casing
-            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF26283A))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(
+            // TOP HEADER: Title, Hardware Mirror badge, Page Tabs, Add/Delete Page, Edit Mode
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+                    .width(casingWidth.coerceAtLeast(totalWidth.coerceAtMost(600.dp)))
+                    .height(headerHeight)
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Top Header: Integrated Back button, Page title, Central Emblem & Edit Mode Toggle
+                // Left: Back button + "Elgato Stream Deck Neo" + "Hardware Mirror" badge
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    IconButton(
+                        onClick = {
+                            triggerClickHaptic()
+                            onBack()
+                        },
+                        modifier = Modifier.size(32.dp)
                     ) {
-                        IconButton(
-                            onClick = onBack,
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Exit Deck",
-                                tint = Color.White.copy(alpha = 0.85f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Page indicator / name
-                        Text(
-                            text = "${currentPage.name} (${safePageIndex + 1}/${pages.size})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.SemiBold
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Exit Deck",
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
-                    // Stream Deck Neo Central Emblem
+                    Text(
+                        text = "Elgato Stream Deck Neo",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF38BDF8).copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "Hardware Mirror",
+                            color = Color(0xFF38BDF8),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Right: Page Switcher Tabs, Add, Delete, Edit buttons
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Page tabs
+                    pages.forEachIndexed { idx, p ->
+                        val isActive = idx == safePageIndex
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isActive) Color(0xFF262A38) else Color.Transparent,
+                            border = if (isActive) BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f)) else null,
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clickable {
+                                    triggerClickHaptic()
+                                    activePageIdx = idx
+                                    onSaveConfig(config.copy(activePage = idx))
+                                }
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
+                                Text(
+                                    text = p.name.ifEmpty { "P${idx + 1}" },
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isActive) Color.White else Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Add Page button
+                    IconButton(
+                        onClick = {
+                            triggerClickHaptic()
+                            val newPages = config.pages + DeckPage(
+                                id = "page-${System.currentTimeMillis()}",
+                                name = "Page ${config.pages.size + 1}"
+                            )
+                            onSaveConfig(config.copy(pages = newPages))
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Add,
+                            contentDescription = "Add Page",
+                            tint = Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Delete Page button (if > 1 page)
+                    if (config.pages.size > 1) {
+                        IconButton(
+                            onClick = {
+                                triggerClickHaptic()
+                                val newPages = config.pages.filterIndexed { idx, _ -> idx != safePageIndex }
+                                val newActive = (safePageIndex - 1).coerceAtLeast(0)
+                                activePageIdx = newActive
+                                onSaveConfig(config.copy(pages = newPages, activePage = newActive))
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Delete Page",
+                                tint = Color(0xFFEF4444).copy(alpha = 0.8f),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+
+                    // Edit / Customize mode button
+                    IconButton(
+                        onClick = {
+                            triggerClickHaptic()
+                            editMode = !editMode
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "Customize Mode",
+                            tint = if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+
+            // HARDWARE CASING: The authentic Stream Deck Neo light casing frame
+            Surface(
+                modifier = Modifier
+                    .width(casingWidth)
+                    .shadow(16.dp, RoundedCornerShape(32.dp)),
+                shape = RoundedCornerShape(32.dp),
+                color = Color(0xFFEEF1F5), // Authentic Elgato Neo White casing
+                border = BorderStroke(1.dp, Color(0xFFD8DEE9))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Top Center Clock Emblem
                     Box(
                         modifier = Modifier
                             .size(22.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF1E2032))
-                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape),
+                            .background(Color.White.copy(alpha = 0.85f))
+                            .border(1.dp, Color(0xFFCBD5E1), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "G",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                        Icon(
+                            imageVector = Icons.Filled.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(13.dp)
                         )
                     }
 
-                    // Customize Mode Toggle Button
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (editMode) {
-                            IconButton(
-                                onClick = {
-                                    val newPages = config.pages + DeckPage(
-                                        id = "page-${System.currentTimeMillis()}",
-                                        name = "Page ${config.pages.size + 1}"
-                                    )
-                                    onSaveConfig(config.copy(pages = newPages))
-                                },
-                                modifier = Modifier.size(30.dp)
+                    Spacer(Modifier.height(5.dp))
+
+                    // 8 Squircle LCD Keys Grid (2 rows x 4 columns)
+                    AnimatedContent(
+                        targetState = safePageIndex,
+                        transitionSpec = {
+                            fadeIn(tween(180)) togetherWith fadeOut(tween(180))
+                        },
+                        label = "pageKeysAnim"
+                    ) { _ ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(rowGap)
+                        ) {
+                            // Row 1: Keys 0..3
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(colGap)
                             ) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add Page", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(16.dp))
-                            }
-                        }
-
-                        IconButton(
-                            onClick = { editMode = !editMode },
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Edit,
-                                contentDescription = "Customize Mode",
-                                tint = if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                // 8 Squircle LCD Keys Grid (2 rows x 4 columns)
-                AnimatedContent(
-                    targetState = safePageIndex,
-                    transitionSpec = {
-                        fadeIn(tween(180)) togetherWith fadeOut(tween(180))
-                    },
-                    label = "pageKeysAnim",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(vertical = 4.dp)
-                ) { _ ->
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Top Row: Keys 0..3
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            for (i in 0..3) {
-                                val key = keys[i]
-                                NeoKeyButton(
-                                    key = key,
-                                    editMode = editMode,
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        if (editMode) {
+                                for (i in 0..3) {
+                                    val key = keys[i]
+                                    NeoKeyButton(
+                                        key = key,
+                                        isSelected = selectedKeyIndex == key.index,
+                                        editMode = editMode,
+                                        keySize = keySize,
+                                        onClick = {
+                                            triggerClickHaptic()
+                                            selectedKeyIndex = key.index
+                                            if (editMode) {
+                                                editingKey = key
+                                            } else {
+                                                onAction(key.index, key.action, currentPage.id)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            triggerLongPressHaptic()
+                                            selectedKeyIndex = key.index
                                             editingKey = key
-                                        } else {
-                                            onAction(key.index, key.action, currentPage.id)
                                         }
-                                    },
-                                    onLongClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        editingKey = key
-                                    }
-                                )
-                            }
-                        }
-
-                        // Bottom Row: Keys 4..7
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            for (i in 4..7) {
-                                val key = keys[i]
-                                NeoKeyButton(
-                                    key = key,
-                                    editMode = editMode,
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        if (editMode) {
-                                            editingKey = key
-                                        } else {
-                                            onAction(key.index, key.action, currentPage.id)
-                                        }
-                                    },
-                                    onLongClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        editingKey = key
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Bottom Strip: Left Touch Point + Infobar + Right Touch Point
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left Touch Point (Prev Page)
-                    TouchPointButton(onClick = handlePrevPage)
-
-                    // Central Infobar
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(28.dp)
-                            .padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF08090E))
-                            .border(1.dp, Color(0xFF222538), RoundedCornerShape(14.dp))
-                            .combinedClickable(
-                                onClick = {
-                                    if (editMode) editingInfobar = true
-                                },
-                                onLongClick = {
-                                    editingInfobar = true
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val mode = config.infobar.mode
-                        when {
-                            mode == "media" && state.host.media.active && state.host.media.title.isNotEmpty() -> {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.MusicNote,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(12.dp)
                                     )
-                                    Spacer(Modifier.width(4.dp))
+                                }
+                            }
+
+                            // Row 2: Keys 4..7
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(colGap)
+                            ) {
+                                for (i in 4..7) {
+                                    val key = keys[i]
+                                    NeoKeyButton(
+                                        key = key,
+                                        isSelected = selectedKeyIndex == key.index,
+                                        editMode = editMode,
+                                        keySize = keySize,
+                                        onClick = {
+                                            triggerClickHaptic()
+                                            selectedKeyIndex = key.index
+                                            if (editMode) {
+                                                editingKey = key
+                                            } else {
+                                                onAction(key.index, key.action, currentPage.id)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            triggerLongPressHaptic()
+                                            selectedKeyIndex = key.index
+                                            editingKey = key
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(7.dp))
+
+                    // Bottom Row: Left Touch Point + Centered Infobar + Right Touch Point
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Left Touch Point (Prev Page)
+                        TouchPointButton(onClick = handlePrevPage)
+
+                        // Central Infobar
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height((keySize.value * 0.42f).coerceIn(28f, 36f).dp)
+                                .padding(horizontal = 10.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF0A0A0F))
+                                .border(1.dp, Color(0xFF232733), CircleShape)
+                                .combinedClickable(
+                                    onClick = {
+                                        triggerClickHaptic()
+                                        if (editMode) editingInfobar = true
+                                    },
+                                    onLongClick = {
+                                        triggerLongPressHaptic()
+                                        editingInfobar = true
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val mode = config.infobar.mode
+                            when {
+                                mode == "media" && state.host.media.active && state.host.media.title.isNotEmpty() -> {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.MusicNote,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "${state.host.media.title} — ${state.host.media.artist}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                mode == "page" -> {
                                     Text(
-                                        text = "${state.host.media.title} — ${state.host.media.artist}",
+                                        text = "${currentPage.name} • Page ${safePageIndex + 1} of ${pages.size}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        fontFamily = FontFamily.Monospace
                                     )
                                 }
-                            }
-                            mode == "page" -> {
-                                Text(
-                                    text = "${currentPage.name} • Page ${safePageIndex + 1} of ${pages.size}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            mode == "text" && config.infobar.customText.isNotEmpty() -> {
-                                Text(
-                                    text = config.infobar.customText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            else -> {
-                                // Authentic Stream Deck Neo Infobar Clock & Date format
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                mode == "text" && config.infobar.customText.isNotEmpty() -> {
                                     Text(
-                                        text = clockDate,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = Color.White.copy(alpha = 0.65f)
+                                        text = config.infobar.customText,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontFamily = FontFamily.Monospace
                                     )
-                                    Text(
-                                        text = clockTime,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = Color(0xFF67E8F9)
-                                    )
+                                }
+                                else -> {
+                                    // Authentic Stream Deck Neo Infobar Clock & Date format
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = clockDate,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = Color.White.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = clockTime,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = Color.White
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Right Touch Point (Next Page)
-                    TouchPointButton(onClick = handleNextPage)
+                        // Right Touch Point (Next Page)
+                        TouchPointButton(onClick = handleNextPage)
+                    }
                 }
             }
+
+            // FOOTER SUBTITLE
+            Text(
+                text = if (editMode) "Tap any key to configure • Long-press to edit • Touch points cycle pages"
+                       else "Tap any key to execute • Long-press to edit • Touch points cycle pages",
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.45f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
         }
     }
 
@@ -547,32 +693,34 @@ fun DeckScreen(
 @Composable
 private fun NeoKeyButton(
     key: DeckKey,
+    isSelected: Boolean,
     editMode: Boolean,
+    keySize: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val bgColor = parseHexColor(key.bgColor, Color(0xFF1B1C2A))
+    val bgColor = parseHexColor(key.bgColor, Color(0xFF0D1117))
     val iconColor = parseHexColor(key.iconColor, Color(0xFF60A5FA))
     val iconVector = resolveIcon(key.icon)
+    val cornerRadius = (keySize * 0.22f).coerceIn(12.dp, 20.dp)
 
     Box(
         modifier = modifier
-            .fillMaxHeight()
-            .aspectRatio(1f)
-            .shadow(6.dp, RoundedCornerShape(18.dp))
-            .clip(RoundedCornerShape(18.dp))
+            .size(keySize)
+            .shadow(if (isSelected) 8.dp else 4.dp, RoundedCornerShape(cornerRadius))
+            .clip(RoundedCornerShape(cornerRadius))
             .background(bgColor)
             .border(
-                1.dp,
-                if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.12f),
-                RoundedCornerShape(18.dp)
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) Color(0xFF3B82F6) else if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.10f),
+                RoundedCornerShape(cornerRadius)
             )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(4.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         // Glass glossy top reflection
@@ -583,7 +731,7 @@ private fun NeoKeyButton(
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                        listOf(Color.White.copy(alpha = 0.16f), Color.Transparent)
                     )
                 )
         )
@@ -592,7 +740,7 @@ private fun NeoKeyButton(
         if (!key.badge.isNullOrEmpty()) {
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size((keySize * 0.12f).coerceIn(7.dp, 10.dp))
                     .align(Alignment.TopEnd)
                     .padding(1.dp)
                     .clip(CircleShape)
@@ -611,16 +759,16 @@ private fun NeoKeyButton(
                 imageVector = iconVector,
                 contentDescription = key.title,
                 tint = iconColor,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size((keySize * 0.38f).coerceIn(18.dp, 30.dp))
             )
             if (key.title.isNotEmpty()) {
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height((keySize * 0.04f).coerceIn(2.dp, 4.dp)))
                 Text(
                     text = key.title,
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
+                    fontSize = (keySize.value * 0.12f).coerceIn(8f, 10.5f).sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.9f),
+                    color = Color.White.copy(alpha = 0.92f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
@@ -631,24 +779,28 @@ private fun NeoKeyButton(
 }
 
 /**
- * Capacitive Touch Point Button with horizontal glowing LED indicator line.
+ * Capacitive Touch Point Button with horizontal glowing LED indicator line and sensor dot.
  */
 @Composable
-private fun TouchPointButton(onClick: () -> Unit) {
+private fun TouchPointButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .combinedClickable(onClick = onClick)
-            .padding(4.dp)
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        // Glowing cyan/white LED line
+        // Glowing white LED line
         Box(
             modifier = Modifier
                 .width(28.dp)
-                .height(3.dp)
+                .height(3.5.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(Color(0xFF67E8F9))
-                .shadow(4.dp, RoundedCornerShape(2.dp))
+                .background(Color.White)
         )
         Spacer(Modifier.height(3.dp))
         // Subtle sensor dot
@@ -656,7 +808,7 @@ private fun TouchPointButton(onClick: () -> Unit) {
             modifier = Modifier
                 .size(4.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.25f))
+                .background(Color.Black.copy(alpha = 0.35f))
         )
     }
 }
