@@ -66,7 +66,8 @@ data class UiState(
     /** Desktops seen over mDNS, so pairing does not need a typed IP address. */
     val discovered: List<DiscoveredHost> = emptyList(),
     /** The session is held open past the UI, and redialled when it drops. */
-    val alwaysOn: Boolean = false
+    val alwaysOn: Boolean = false,
+    val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig()
 ) {
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
@@ -75,6 +76,7 @@ data class UiState(
     val canRouteOutput: Boolean get() = host.capabilities.contains("outputs")
     val canDriveInput: Boolean get() = host.capabilities.contains("input")
     val canLockSystem: Boolean get() = host.capabilities.contains("lock")
+    val canControlDeck: Boolean get() = host.capabilities.contains("deck")
 }
 
 /**
@@ -126,7 +128,8 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                         host = live.host,
                         artwork = live.artwork,
                         error = live.error,
-                        alwaysOn = live.alwaysOn
+                        alwaysOn = live.alwaysOn,
+                        deckConfig = live.deckConfig
                     )
                 }
             }
@@ -463,5 +466,15 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         connection.patchHost { host ->
             host.copy(displays = host.displays.map { if (it.id == id) transform(it) else it })
         }
+    }
+
+    // ---- Stream Deck Neo ----
+
+    fun triggerDeckAction(keyIndex: Int, action: com.switchboard.app.net.DeckAction, pageId: String? = null) {
+        connection.sendDeckAction(keyIndex, action, pageId)
+    }
+
+    fun saveDeckConfig(config: com.switchboard.app.net.DeckConfig) {
+        connection.saveDeckConfig(config)
     }
 }

@@ -31,6 +31,10 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import android.app.Activity
+import android.content.pm.ActivityInfo
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -161,11 +166,25 @@ fun SwitchboardApp(
     }
 
     val connected = state.status == ConnectionStatus.Connected
+    val context = LocalContext.current
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
     var showLockConfirmDialog by remember { mutableStateOf(false) }
+    var showLandscapePromptDialog by remember { mutableStateOf(false) }
     val homeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    LaunchedEffect(currentScreen) {
+        if (currentScreen !is AppScreen.Detail || (currentScreen as AppScreen.Detail).section != Section.Deck) {
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     // Files shared in from another app, held until the user names a desktop.
     var shareFiles by remember { mutableStateOf<List<Uri>?>(null) }
@@ -214,13 +233,20 @@ fun SwitchboardApp(
         if (!connected) {
             showConnectionInfo = false
             showLockConfirmDialog = false
+            showLandscapePromptDialog = false
             if (currentScreen is AppScreen.Detail) {
+                if ((currentScreen as AppScreen.Detail).section == Section.Deck) {
+                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
                 currentScreen = AppScreen.Main
             }
         }
     }
 
     BackHandler(enabled = currentScreen !is AppScreen.Main) {
+        if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
         currentScreen = AppScreen.Main
     }
 
@@ -249,7 +275,9 @@ fun SwitchboardApp(
             rateUnit = transferConfig.rateUnit,
             onLockSystem = {
                 showLockConfirmDialog = true
-            }
+            },
+            onDeckAction = viewModel::triggerDeckAction,
+            onSaveDeckConfig = viewModel::saveDeckConfig
         )
     }
 
@@ -259,7 +287,12 @@ fun SwitchboardApp(
                 navigationIcon = {
                     if (currentScreen !is AppScreen.Main) {
                         IconButton(
-                            onClick = { currentScreen = AppScreen.Main },
+                            onClick = {
+                                if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                }
+                                currentScreen = AppScreen.Main
+                            },
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
@@ -439,7 +472,13 @@ fun SwitchboardApp(
                             HomeScreen(
                                 state = state,
                                 actions = actions,
-                                onOpen = { currentScreen = AppScreen.Detail(it) },
+                                onOpen = { section ->
+                                    if (section == Section.Deck) {
+                                        showLandscapePromptDialog = true
+                                    } else {
+                                        currentScreen = AppScreen.Detail(section)
+                                    }
+                                },
                                 listState = homeListState
                             )
                         }
@@ -535,6 +574,53 @@ fun SwitchboardApp(
                 currentScreen = AppScreen.Settings
             },
             onDismiss = { showConnectionInfo = false }
+        )
+    }
+
+    if (showLandscapePromptDialog) {
+        AlertDialog(
+            onDismissRequest = { showLandscapePromptDialog = false },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.ScreenRotation,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = "Landscape Mode Required",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Stream Deck Neo is designed for horizontal operation to deliver an authentic 8-key hardware experience. Switchboard will rotate your screen into landscape mode.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLandscapePromptDialog = false
+                        (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        currentScreen = AppScreen.Detail(Section.Deck)
+                    }
+                ) {
+                    Text("Continue to Deck")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showLandscapePromptDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

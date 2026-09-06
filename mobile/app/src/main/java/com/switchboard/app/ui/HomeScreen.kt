@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
@@ -88,6 +89,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Displays("Displays", Icons.Filled.Monitor),
     Audio("Audio & Media", Icons.AutoMirrored.Filled.VolumeUp),
     Media("Media", Icons.Filled.MusicNote),
+    Deck("Stream Deck Neo", Icons.Filled.GridView),
     Touchpad("Touchpad", Icons.Filled.Mouse),
     Camera("Camera", Icons.Filled.PhotoCamera),
     Files("Files", Icons.Filled.Folder);
@@ -97,6 +99,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         Audio -> state.canControlVolume || state.canControlMedia
         // When media is active/playing or integrated into Audio, hide separate Media row if Audio is available
         Media -> state.canControlMedia && !state.canControlVolume
+        Deck -> true
         Touchpad -> state.canDriveInput
         // Always available: the camera is this phone's, so nothing about the
         // desktop's capabilities decides whether it can be offered.
@@ -119,6 +122,7 @@ enum class Section(val title: String, val icon: ImageVector) {
             }
         }
         Media -> state.host.media.summary
+        Deck -> "8-key macro deck with infobar & paging"
         Touchpad -> "Drive the pointer and shell gestures"
         Camera -> "Use this phone as a webcam"
         Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
@@ -142,7 +146,9 @@ class SectionActions(
     val touchpad: TouchpadActions,
     val onTransferControl: (String, String) -> Unit,
     val rateUnit: RateUnit,
-    val onLockSystem: () -> Unit = {}
+    val onLockSystem: () -> Unit = {},
+    val onDeckAction: (Int, com.switchboard.app.net.DeckAction, String?) -> Unit = { _, _, _ -> },
+    val onSaveDeckConfig: (com.switchboard.app.net.DeckConfig) -> Unit = {}
 )
 
 /**
@@ -992,6 +998,10 @@ fun SectionScreen(
         TouchpadScreen(actions.touchpad, modifier)
         return
     }
+    if (section == Section.Deck) {
+        DeckScreen(state, actions.onDeckAction, actions.onSaveDeckConfig, modifier)
+        return
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1100,6 +1110,11 @@ private fun SectionBody(
             Section.Touchpad -> EmptyCard(
                 title = "Touchpad",
                 body = "Open the Touchpad section for the pointer, gestures and buttons."
+            )
+
+            Section.Deck -> EmptyCard(
+                title = "Stream Deck Neo",
+                body = "Open the Stream Deck Neo section for the 8-key macro surface, dynamic infobar and paging controls."
             )
 
             Section.Camera -> CameraScreen()

@@ -43,7 +43,8 @@ data class ConnectionState(
     val artwork: ImageBitmap? = null,
     val error: String? = null,
     /** The session is held open past the UI, and redialled when it drops. */
-    val alwaysOn: Boolean = false
+    val alwaysOn: Boolean = false,
+    val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig()
 )
 
 /**
@@ -300,6 +301,7 @@ class SwitchboardConnection private constructor(context: Context) {
                 camera.bind { action, payload, blob -> client.send(action, payload, blob) }
                 store.save(saved)
                 store.lastHostId = saved.daemonId
+                client.send(Actions.DECK_GET)
                 _state.update {
                     it.copy(
                         status = ConnectionStatus.Connected,
@@ -314,6 +316,10 @@ class SwitchboardConnection private constructor(context: Context) {
             is ConnectionEvent.State -> {
                 _state.update { it.copy(host = event.state) }
                 syncArtwork(event.state.media.artworkId)
+            }
+
+            is ConnectionEvent.DeckState -> {
+                _state.update { it.copy(deckConfig = event.config) }
             }
 
             is ConnectionEvent.Artwork -> {
@@ -400,6 +406,15 @@ class SwitchboardConnection private constructor(context: Context) {
     fun hosts(): List<KnownHost> = store.hosts()
 
     fun send(action: String, payload: WirePayload? = null) = client.send(action, payload)
+
+    fun sendDeckAction(keyIndex: Int, action: com.switchboard.app.net.DeckAction, pageId: String? = null) {
+        send(Actions.DECK_ACTION, com.switchboard.app.net.DeckActionRequest(pageId = pageId, keyIndex = keyIndex, action = action))
+    }
+
+    fun saveDeckConfig(config: com.switchboard.app.net.DeckConfig) {
+        _state.update { it.copy(deckConfig = config) }
+        send(Actions.DECK_SET, config)
+    }
 
     /** Applies a value locally so the control tracks the finger; the host's next broadcast reconciles it. */
     fun patchHost(transform: (HostState) -> HostState) =

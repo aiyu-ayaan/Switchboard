@@ -33,6 +33,7 @@ sealed interface ConnectionEvent {
     ) : ConnectionEvent
     data class State(val state: HostState) : ConnectionEvent
     data class Artwork(val artwork: MediaArtwork) : ConnectionEvent
+    data class DeckState(val config: DeckConfig) : ConnectionEvent
 
     /**
      * Any `file.*` frame, handed over undecoded. Transfers are stateful and
@@ -287,6 +288,15 @@ class SwitchboardClient(
                             )
                         )
 
+                        envelope.action == Actions.DECK_STATE && payload != null -> trySend(
+                            ConnectionEvent.DeckState(
+                                SwitchboardJson.decodeFromJsonElement(
+                                    DeckConfig.serializer(),
+                                    payload
+                                )
+                            )
+                        )
+
                         envelope.action.startsWith("camera.") ->
                             trySend(ConnectionEvent.CameraCommand(envelope.action, payload))
 
@@ -381,6 +391,8 @@ class SwitchboardClient(
         is InputButton -> SwitchboardJson.encodeToJsonElement(InputButton.serializer(), payload)
         is InputScroll -> SwitchboardJson.encodeToJsonElement(InputScroll.serializer(), payload)
         is InputGesture -> SwitchboardJson.encodeToJsonElement(InputGesture.serializer(), payload)
+        is DeckConfig -> SwitchboardJson.encodeToJsonElement(DeckConfig.serializer(), payload)
+        is DeckActionRequest -> SwitchboardJson.encodeToJsonElement(DeckActionRequest.serializer(), payload)
         is CameraSettings -> SwitchboardJson.encodeToJsonElement(CameraSettings.serializer(), payload)
         is CameraState -> SwitchboardJson.encodeToJsonElement(CameraState.serializer(), payload)
         is CameraFrame -> SwitchboardJson.encodeToJsonElement(CameraFrame.serializer(), payload)

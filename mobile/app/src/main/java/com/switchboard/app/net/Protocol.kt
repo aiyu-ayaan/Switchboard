@@ -45,6 +45,12 @@ object Actions {
     const val FILE_CONTROL = "file.control"
     const val FILE_PROGRESS = "file.progress"
     const val FILE_LIST = "file.list"
+
+    // Stream Deck Neo.
+    const val DECK_GET = "deck.get"
+    const val DECK_SET = "deck.set"
+    const val DECK_ACTION = "deck.action"
+    const val DECK_STATE = "deck.state"
 }
 
 /**
@@ -526,3 +532,51 @@ data class FileProgress(
 
 @Serializable
 data class FileHistory(val transfers: List<FileProgress> = emptyList())
+
+// ---- Stream Deck Neo Subsystem ----
+
+@Serializable
+data class DeckAction(
+    val type: String = "url",
+    val value: String = ""
+)
+
+@Serializable
+data class DeckKey(
+    val index: Int = 0,
+    val title: String = "",
+    val icon: String = "code",
+    val bgColor: String? = null,
+    val iconColor: String? = null,
+    val badge: String? = null,
+    val action: DeckAction = DeckAction()
+)
+
+@Serializable
+data class DeckInfobar(
+    val mode: String = "clock",
+    val customText: String = "",
+    val format: String? = null
+)
+
+@Serializable
+data class DeckPage(
+    val id: String = "page-1",
+    val name: String = "Page 1",
+    val keys: List<DeckKey> = emptyList()
+)
+
+@Serializable
+data class DeckConfig(
+    val activePage: Int = 0,
+    val infobar: DeckInfobar = DeckInfobar(),
+    val pages: List<DeckPage> = emptyList()
+) : WirePayload
+
+@Serializable
+data class DeckActionRequest(
+    val pageId: String? = null,
+    val keyIndex: Int = 0,
+    val action: DeckAction = DeckAction()
+) : WirePayload
+
