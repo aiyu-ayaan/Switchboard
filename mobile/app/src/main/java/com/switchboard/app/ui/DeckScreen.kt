@@ -13,10 +13,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -30,9 +32,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -41,8 +41,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -55,20 +60,24 @@ import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -90,13 +99,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.switchboard.app.ConnectionStatus
 import com.switchboard.app.UiState
 import com.switchboard.app.net.DeckAction
 import com.switchboard.app.net.DeckConfig
@@ -117,19 +129,31 @@ private val DECK_ICONS = listOf(
     DeckIconItem("notes", "Notes", Icons.Filled.Description),
     DeckIconItem("folder", "Files", Icons.Filled.Folder),
     DeckIconItem("calendar", "Calendar", Icons.Filled.CalendarToday),
-    DeckIconItem("google", "Google", Icons.Filled.Language),
+    DeckIconItem("google", "Web", Icons.Filled.Language),
     DeckIconItem("youtube", "YouTube", Icons.Filled.PlayArrow),
-    DeckIconItem("spotify", "Spotify", Icons.Filled.MusicNote),
-    DeckIconItem("linkedin", "LinkedIn", Icons.Filled.Work),
+    DeckIconItem("spotify", "Music", Icons.Filled.MusicNote),
     DeckIconItem("terminal", "Terminal", Icons.Filled.Terminal),
-    DeckIconItem("play_pause", "Media", Icons.Filled.PlayArrow),
-    DeckIconItem("volume_up", "Volume", Icons.AutoMirrored.Filled.VolumeUp),
+    DeckIconItem("play_pause", "Play/Pause", Icons.Filled.PlayArrow),
+    DeckIconItem("skip_next", "Next", Icons.Filled.SkipNext),
+    DeckIconItem("skip_prev", "Previous", Icons.Filled.SkipPrevious),
+    DeckIconItem("volume_up", "Volume +", Icons.AutoMirrored.Filled.VolumeUp),
     DeckIconItem("volume_mute", "Mute", Icons.AutoMirrored.Filled.VolumeOff),
     DeckIconItem("lock", "Lock", Icons.Filled.Lock),
     DeckIconItem("camera", "Screenshot", Icons.Filled.PhotoCamera),
     DeckIconItem("code", "Code", Icons.Filled.Code),
     DeckIconItem("monitor", "Display", Icons.Filled.Monitor),
-    DeckIconItem("settings", "Settings", Icons.Filled.Settings)
+    DeckIconItem("settings", "Settings", Icons.Filled.Settings),
+    DeckIconItem("work", "Work", Icons.Filled.Work)
+)
+
+private val TILE_COLOR_PRESETS = listOf(
+    "#16161E", "#1A1B26", "#21222D", "#24283B",
+    "#1F2335", "#1E1E2E", "#2D1F2D", "#1B2D26"
+)
+
+private val ICON_COLOR_PRESETS = listOf(
+    "#7AA2F7", "#9ECE6A", "#BB9AF7", "#F7768E",
+    "#2AC3DE", "#E0AF68", "#C0CAF5", "#FFFFFF"
 )
 
 private fun resolveIcon(iconId: String): ImageVector {
@@ -139,36 +163,47 @@ private fun resolveIcon(iconId: String): ImageVector {
 private fun findBestMatchingDeckIcon(name: String): String? {
     val lower = name.lowercase(Locale.ROOT)
     return when {
-        lower.contains("code") || lower.contains("visual studio") || lower.contains("git") -> "code"
-        lower.contains("term") || lower.contains("cmd") || lower.contains("powershell") -> "terminal"
-        lower.contains("chrome") || lower.contains("edge") || lower.contains("firefox") || lower.contains("browser") -> "google"
-        lower.contains("spotify") || lower.contains("music") -> "spotify"
-        lower.contains("note") || lower.contains("word") || lower.contains("doc") -> "notes"
-        lower.contains("file") || lower.contains("explorer") -> "folder"
+        lower.contains("code") || lower.contains("visual studio") || lower.contains("git") || lower.contains("idea") -> "code"
+        lower.contains("term") || lower.contains("cmd") || lower.contains("powershell") || lower.contains("bash") -> "terminal"
+        lower.contains("chrome") || lower.contains("edge") || lower.contains("firefox") || lower.contains("browser") || lower.contains("brave") -> "google"
+        lower.contains("spotify") || lower.contains("music") || lower.contains("itunes") -> "spotify"
+        lower.contains("note") || lower.contains("word") || lower.contains("doc") || lower.contains("text") -> "notes"
+        lower.contains("file") || lower.contains("explorer") || lower.contains("folder") -> "folder"
         lower.contains("snip") || lower.contains("camera") || lower.contains("screen") -> "camera"
         lower.contains("setting") || lower.contains("control") || lower.contains("task") -> "settings"
         lower.contains("calc") || lower.contains("calendar") -> "calendar"
+        lower.contains("youtube") || lower.contains("video") || lower.contains("vlc") -> "youtube"
+        lower.contains("discord") || lower.contains("slack") || lower.contains("mail") -> "work"
         else -> null
     }
 }
 
 private fun parseHexColor(hex: String?, fallback: Color): Color {
-    if (hex.isNullOrEmpty()) return fallback
+    if (hex.isNullOrBlank()) return fallback
     return runCatching {
-        val clean = hex.removePrefix("#")
+        val clean = hex.trim().removePrefix("#")
         val colorInt = clean.toLong(16)
         if (clean.length == 6) {
             Color((0xFF000000 or colorInt).toInt())
-        } else {
+        } else if (clean.length == 8) {
             Color(colorInt.toInt())
+        } else {
+            fallback
         }
     }.getOrDefault(fallback)
 }
 
 /**
- * Authentic Elgato Stream Deck Neo view for Android.
- * Replicates the hardware face: 8 squircle LCD keys in 2x4 grid, dynamic Infobar,
- * and capacitive touch points with glowing LED indicators.
+ * Modern Switchboard Deck Screen.
+ *
+ * Sleek, responsive touch command surface matching the Desktop Deck UI.
+ * Features:
+ * - Tokyo Night Material 3 visual language
+ * - Full portrait and landscape responsiveness
+ * - Header with connectivity status and page management
+ * - 2x4 squircle key command grid with customizable colors, icons, badges, and haptic feedback
+ * - Dynamic infobar pill matching desktop modes (clock, media, page, text)
+ * - Modal bottom sheets for key and infobar customization
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -185,7 +220,7 @@ fun DeckScreen(
     val view = LocalView.current
     val config = state.deckConfig
 
-    // Keep display awake continuously while the Stream Deck Neo screen is active
+    // Keep screen awake while Deck is in active use
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -199,14 +234,17 @@ fun DeckScreen(
     var activePageIdx by remember(config.activePage) { mutableIntStateOf(config.activePage) }
     var editMode by remember { mutableStateOf(false) }
 
-    // Selected key for focus ring and bottom sheet customization
+    // Customization bottom sheet states
     var editingKey by remember { mutableStateOf<DeckKey?>(null) }
     var selectedKeyIndex by remember { mutableIntStateOf(0) }
     var editingInfobar by remember { mutableStateOf(false) }
 
+    // Transient action feedback message
+    var noticeMessage by remember { mutableStateOf("") }
+
     fun triggerClickHaptic() {
         if (!view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)) {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
 
@@ -222,12 +260,20 @@ fun DeckScreen(
 
     LaunchedEffect(Unit) {
         val timeFmt = SimpleDateFormat("h:mm a", Locale.US)
-        val dateFmt = SimpleDateFormat("EEEE d/M/yy", Locale.US)
+        val dateFmt = SimpleDateFormat("EEE, MMM d", Locale.US)
         while (true) {
             val now = Date()
-            clockTime = timeFmt.format(now).uppercase()
-            clockDate = dateFmt.format(now).uppercase()
+            clockTime = timeFmt.format(now).uppercase(Locale.US)
+            clockDate = dateFmt.format(now).uppercase(Locale.US)
             delay(1000)
+        }
+    }
+
+    // Clear notice after brief delay
+    LaunchedEffect(noticeMessage) {
+        if (noticeMessage.isNotEmpty()) {
+            delay(2200)
+            noticeMessage = ""
         }
     }
 
@@ -235,7 +281,7 @@ fun DeckScreen(
     val safePageIndex = activePageIdx.coerceIn(0, pages.size - 1)
     val currentPage = pages[safePageIndex]
 
-    // Complete 8 keys
+    // Complete 8 keys for 2x4 layout
     val keys = remember(currentPage) {
         List(8) { i ->
             currentPage.keys.find { it.index == i } ?: DeckKey(
@@ -247,251 +293,347 @@ fun DeckScreen(
         }
     }
 
-    val handlePrevPage = {
+    val handlePrevPage: () -> Unit = {
         triggerClickHaptic()
         if (pages.size > 1) {
-            activePageIdx = (safePageIndex - 1 + pages.size) % pages.size
-            onSaveConfig(config.copy(activePage = activePageIdx))
+            val nextIdx = (safePageIndex - 1 + pages.size) % pages.size
+            activePageIdx = nextIdx
+            onSaveConfig(config.copy(activePage = nextIdx))
         }
     }
 
-    val handleNextPage = {
+    val handleNextPage: () -> Unit = {
         triggerClickHaptic()
         if (pages.size > 1) {
-            activePageIdx = (safePageIndex + 1) % pages.size
-            onSaveConfig(config.copy(activePage = activePageIdx))
+            val nextIdx = (safePageIndex + 1) % pages.size
+            activePageIdx = nextIdx
+            onSaveConfig(config.copy(activePage = nextIdx))
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-        contentAlignment = Alignment.Center
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
+        val isLandscape = maxWidth > maxHeight
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = if (isLandscape) 14.dp else 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // TOP HEADER: Full Width with Back button, Title, Hardware Mirror badge, Page Tabs, Add/Delete, Edit
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // TOP HEADER & NAVIGATION
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Left: Back button + "Switchboard Deck" + "Hardware Mirror" badge
+                // Header Bar
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = {
-                            triggerClickHaptic()
-                            onBack()
-                        },
-                        modifier = Modifier.size(32.dp)
+                    // Left: Back button + Title & Status
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Exit Deck",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "Switchboard Deck",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Text(
-                            text = "Hardware Mirror",
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                // Right: Page Switcher Tabs, Add, Delete, Edit buttons
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Page tabs
-                    pages.forEachIndexed { idx, p ->
-                        val isActive = idx == safePageIndex
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (isActive) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                            border = if (isActive) BorderStroke(1.dp, MaterialTheme.colorScheme.secondary) else null,
-                            modifier = Modifier
-                                .height(26.dp)
-                                .clickable {
-                                    triggerClickHaptic()
-                                    activePageIdx = idx
-                                    onSaveConfig(config.copy(activePage = idx))
-                                }
+                        IconButton(
+                            onClick = {
+                                triggerClickHaptic()
+                                onBack()
+                            },
+                            modifier = Modifier.size(36.dp)
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 8.dp)
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = p.name.ifEmpty { "P${idx + 1}" },
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = "Switchboard Deck",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
+
+                                // Status Pill
+                                val isConnected = state.status == ConnectionStatus.Connected
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isConnected) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    },
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isConnected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                        else MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isConnected) Color(0xFF34D399)
+                                                    else MaterialTheme.colorScheme.outline
+                                                )
+                                        )
+                                        Text(
+                                            text = if (isConnected) "Connected" else "Macro Console",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isConnected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // Add Page button
-                    IconButton(
+                    // Right: Edit Mode Toggle
+                    FilterChip(
+                        selected = editMode,
                         onClick = {
                             triggerClickHaptic()
-                            val newPages = config.pages + DeckPage(
-                                id = "page-${System.currentTimeMillis()}",
-                                name = "Page ${config.pages.size + 1}"
-                            )
-                            onSaveConfig(config.copy(pages = newPages))
+                            editMode = !editMode
                         },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = "Add Page",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                        label = {
+                            Text(
+                                text = if (editMode) "Editing" else "Edit Mode",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            iconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = editMode,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                            selectedBorderColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.height(32.dp)
+                    )
+                }
 
-                    // Delete Page button (if > 1 page)
-                    if (config.pages.size > 1) {
+                // Page Tabs Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Scrollable Page Pill Tabs
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        pages.forEachIndexed { idx, p ->
+                            val isActive = idx == safePageIndex
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isActive) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isActive) MaterialTheme.colorScheme.secondary
+                                    else MaterialTheme.colorScheme.outlineVariant
+                                ),
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .clickable {
+                                        triggerClickHaptic()
+                                        activePageIdx = idx
+                                        onSaveConfig(config.copy(activePage = idx))
+                                    }
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 10.dp)
+                                ) {
+                                    Text(
+                                        text = p.name.ifEmpty { "Page ${idx + 1}" },
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        // Add Page button (+)
                         IconButton(
                             onClick = {
                                 triggerClickHaptic()
-                                val newPages = config.pages.filterIndexed { idx, _ -> idx != safePageIndex }
-                                val newActive = (safePageIndex - 1).coerceAtLeast(0)
+                                val newPageNum = config.pages.size + 1
+                                val newPages = config.pages + DeckPage(
+                                    id = "page-${System.currentTimeMillis()}",
+                                    name = "Page $newPageNum"
+                                )
+                                val newActive = newPages.size - 1
                                 activePageIdx = newActive
                                 onSaveConfig(config.copy(pages = newPages, activePage = newActive))
                             },
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = "Delete Page",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(15.dp)
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Add Page",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+
+                        // Delete Page button (if > 1 page)
+                        if (pages.size > 1) {
+                            IconButton(
+                                onClick = {
+                                    triggerClickHaptic()
+                                    val newPages = config.pages.filterIndexed { idx, _ -> idx != safePageIndex }
+                                    val newActive = (safePageIndex - 1).coerceAtLeast(0)
+                                    activePageIdx = newActive
+                                    onSaveConfig(config.copy(pages = newPages, activePage = newActive))
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Delete Page",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Subtitle / Feedback helper banner
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AnimatedContent(
+                        targetState = noticeMessage,
+                        transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
+                        label = "deckNotice"
+                    ) { notice ->
+                        if (notice.isNotEmpty()) {
+                            Text(
+                                text = notice,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
+                            Text(
+                                text = if (editMode) "Edit Mode: Tap key to customize • Tap infobar for modes"
+                                else "Tap key to execute • Long-press to customize",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         }
                     }
 
-                    // Edit / Customize mode button
-                    IconButton(
-                        onClick = {
-                            triggerClickHaptic()
-                            editMode = !editMode
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Customize Mode",
-                            tint = if (editMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
+                    Text(
+                        text = "${currentPage.name} • ${safePageIndex + 1}/${pages.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp
+                    )
                 }
             }
 
-            // HARDWARE CASING: Spans FULL WIDTH of Android screen!
+            Spacer(Modifier.height(6.dp))
+
+            // 2x4 KEY COMMAND SURFACE
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .shadow(14.dp, RoundedCornerShape(24.dp)),
-                shape = RoundedCornerShape(24.dp),
+                    .weight(1f, fill = false),
+                shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .fillMaxWidth()
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Top Center Clock Dial Emblem
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Schedule,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
-
-                    // 8 Squircle LCD Keys Grid: 4 columns x 2 rows filling full width
                     AnimatedContent(
                         targetState = safePageIndex,
-                        transitionSpec = {
-                            fadeIn(tween(180)) togetherWith fadeOut(tween(180))
-                        },
-                        label = "pageKeysAnim",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(vertical = 4.dp)
+                        transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
+                        label = "deckKeysTransition"
                     ) { _ ->
                         Column(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Row 1: Keys 0..3
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 for (i in 0..3) {
                                     val key = keys[i]
-                                    NeoKeyButton(
+                                    ModernDeckKeyCard(
                                         key = key,
                                         isSelected = selectedKeyIndex == key.index,
                                         editMode = editMode,
                                         modifier = Modifier
                                             .weight(1f)
-                                            .fillMaxHeight(),
+                                            .aspectRatio(if (isLandscape) 1.25f else 1.05f),
                                         onClick = {
                                             triggerClickHaptic()
                                             selectedKeyIndex = key.index
                                             if (editMode) {
                                                 editingKey = key
                                             } else {
+                                                noticeMessage = "Executed ${key.title.ifEmpty { "Key ${key.index + 1}" }}"
                                                 onAction(key.index, key.action, currentPage.id)
                                             }
                                         },
@@ -506,26 +648,25 @@ fun DeckScreen(
 
                             // Row 2: Keys 4..7
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 for (i in 4..7) {
                                     val key = keys[i]
-                                    NeoKeyButton(
+                                    ModernDeckKeyCard(
                                         key = key,
                                         isSelected = selectedKeyIndex == key.index,
                                         editMode = editMode,
                                         modifier = Modifier
                                             .weight(1f)
-                                            .fillMaxHeight(),
+                                            .aspectRatio(if (isLandscape) 1.25f else 1.05f),
                                         onClick = {
                                             triggerClickHaptic()
                                             selectedKeyIndex = key.index
                                             if (editMode) {
                                                 editingKey = key
                                             } else {
+                                                noticeMessage = "Executed ${key.title.ifEmpty { "Key ${key.index + 1}" }}"
                                                 onAction(key.index, key.action, currentPage.id)
                                             }
                                         },
@@ -539,123 +680,180 @@ fun DeckScreen(
                             }
                         }
                     }
-
-                    // Bottom Row: Left Touch Point + Centered Infobar + Right Touch Point
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(34.dp)
-                            .padding(horizontal = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Left Touch Point (Prev Page)
-                        TouchPointButton(onClick = handlePrevPage)
-
-                        // Central Infobar
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(32.dp)
-                                .padding(horizontal = 12.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                .combinedClickable(
-                                    onClick = {
-                                        triggerClickHaptic()
-                                        if (editMode) editingInfobar = true
-                                    },
-                                    onLongClick = {
-                                        triggerLongPressHaptic()
-                                        editingInfobar = true
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            val mode = config.infobar.mode
-                            when {
-                                mode == "media" && state.host.media.active && state.host.media.title.isNotEmpty() -> {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center,
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.MusicNote,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(
-                                            text = "${state.host.media.title} — ${state.host.media.artist}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                                mode == "page" -> {
-                                    Text(
-                                        text = "${currentPage.name} • Page ${safePageIndex + 1} of ${pages.size}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                }
-                                mode == "text" && config.infobar.customText.isNotEmpty() -> {
-                                    Text(
-                                        text = config.infobar.customText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                }
-                                else -> {
-                                    // Authentic Infobar Clock & Date format
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 14.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = clockDate,
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = clockTime,
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Right Touch Point (Next Page)
-                        TouchPointButton(onClick = handleNextPage)
-                    }
                 }
             }
 
-            // FOOTER SUBTITLE
-            Text(
-                text = if (editMode) "Tap any key to configure • Long-press to edit • Touch points cycle pages"
-                       else "Double-tap or tap any key to execute • Long-press to edit • Touch points cycle pages",
-                fontSize = 9.5.sp,
-                color = Color.White.copy(alpha = 0.45f),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 2.dp)
-            )
+            Spacer(Modifier.height(8.dp))
+
+            // DYNAMIC INFOBAR ROW
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Prev Page Button
+                IconButton(
+                    onClick = handlePrevPage,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Previous Page",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Infobar Central Pill
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .combinedClickable(
+                            onClick = {
+                                triggerClickHaptic()
+                                if (editMode) {
+                                    editingInfobar = true
+                                } else {
+                                    // Cycle to next page on tap or show edit hint
+                                    handleNextPage()
+                                }
+                            },
+                            onLongClick = {
+                                triggerLongPressHaptic()
+                                editingInfobar = true
+                            }
+                        )
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        val mode = config.infobar.mode
+                        when {
+                            mode == "media" && state.host.media.active && state.host.media.title.isNotEmpty() -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MusicNote,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "${state.host.media.title} — ${state.host.media.artist}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            mode == "media" -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MusicNote,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "No media playing",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            mode == "page" -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "${currentPage.name}  •  Page ${safePageIndex + 1} of ${pages.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                            mode == "text" && config.infobar.customText.isNotEmpty() -> {
+                                Text(
+                                    text = config.infobar.customText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            else -> {
+                                // Default Clock Mode: Clean and modern date & time readout
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Schedule,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = clockDate,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        text = clockTime,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Next Page Button
+                IconButton(
+                    onClick = handleNextPage,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Next Page",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 
@@ -691,11 +889,10 @@ fun DeckScreen(
 }
 
 /**
- * Squircle LCD Key Button with glossy glass highlight, badge support, and haptics.
+ * Modern Squircle Key Card for the 2x4 command surface.
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun NeoKeyButton(
+private fun ModernDeckKeyCard(
     key: DeckKey,
     isSelected: Boolean,
     editMode: Boolean,
@@ -703,54 +900,73 @@ private fun NeoKeyButton(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val bgColor = parseHexColor(key.bgColor, Color(0xFF0D1117))
-    val iconColor = parseHexColor(key.iconColor, Color(0xFF60A5FA))
+    val defaultBg = MaterialTheme.colorScheme.surfaceContainerLowest
+    val defaultIconColor = MaterialTheme.colorScheme.secondary
+    val bgColor = parseHexColor(key.bgColor, defaultBg)
+    val iconColor = parseHexColor(key.iconColor, defaultIconColor)
     val iconVector = resolveIcon(key.icon)
 
     Box(
         modifier = modifier
-            .shadow(if (isSelected) 6.dp else 3.dp, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
+            .shadow(if (isSelected) 4.dp else 2.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(bgColor)
             .border(
-                if (isSelected) 2.dp else 1.dp,
-                if (isSelected) Color(0xFF3B82F6) else if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.10f),
-                RoundedCornerShape(16.dp)
+                width = if (isSelected) 2.dp else 1.dp,
+                color = when {
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    editMode -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                },
+                shape = RoundedCornerShape(14.dp)
             )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(6.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Glass glossy top reflection
+        // Subtle glass top sheen highlight
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.46f)
+                .fillMaxHeight(0.42f)
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.16f), Color.Transparent)
+                        listOf(Color.White.copy(alpha = 0.08f), Color.Transparent)
                     )
                 )
         )
 
-        // Notification badge dot (like folder badge in reference image)
+        // Notification badge indicator
         if (!key.badge.isNullOrEmpty()) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
                     .align(Alignment.TopEnd)
-                    .padding(1.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF34D399))
-                    .border(0.5.dp, Color.Black.copy(alpha = 0.5f), CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.background, CircleShape)
             )
         }
 
-        // Icon & Title
+        // Edit mode index badge
+        if (editMode) {
+            Text(
+                text = "${key.index + 1}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 2.dp, top = 2.dp)
+            )
+        }
+
+        // Main Icon & Title
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -760,62 +976,27 @@ private fun NeoKeyButton(
                 imageVector = iconVector,
                 contentDescription = key.title,
                 tint = iconColor,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(28.dp)
             )
-            if (key.title.isNotEmpty()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = key.title,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.92f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
-            }
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = key.title.ifEmpty { "Key ${key.index + 1}" },
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
 
 /**
- * Capacitive Touch Point Button with horizontal glowing LED indicator line and sensor dot.
- */
-@Composable
-private fun TouchPointButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        // Glowing white LED line
-        Box(
-            modifier = Modifier
-                .width(28.dp)
-                .height(3.5.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color.White)
-        )
-        Spacer(Modifier.height(3.dp))
-        // Subtle sensor dot
-        Box(
-            modifier = Modifier
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.35f))
-        )
-    }
-}
-
-/**
- * Mobile Key Customizer Modal Bottom Sheet.
+ * Key Customizer Modal Bottom Sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -831,118 +1012,110 @@ private fun KeyCustomizerSheet(
     var actionType by remember { mutableStateOf(key.action.type) }
     var actionValue by remember { mutableStateOf(key.action.value) }
     var hasBadge by remember { mutableStateOf(!key.badge.isNullOrEmpty()) }
-    var bgColorHex by remember { mutableStateOf(key.bgColor ?: "#1B1C2A") }
-    var iconColorHex by remember { mutableStateOf(key.iconColor ?: "#60A5FA") }
+    var bgColorHex by remember { mutableStateOf(key.bgColor ?: "#1A1B26") }
+    var iconColorHex by remember { mutableStateOf(key.iconColor ?: "#7AA2F7") }
     var appSearch by remember { mutableStateOf("") }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(horizontal = 20.dp, vertical = 10.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = "Customize Key #${key.index + 1}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            // Sheet Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Configure Key #${key.index + 1}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Customize action, appearance, and labels",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            // Label
+                // Reset Key Button
+                TextButton(
+                    onClick = {
+                        title = "Key ${key.index + 1}"
+                        selectedIcon = "code"
+                        actionType = "url"
+                        actionValue = "https://google.com"
+                        bgColorHex = "#1A1B26"
+                        iconColorHex = "#7AA2F7"
+                        hasBadge = false
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.RotateLeft,
+                        contentDescription = "Reset Key",
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Reset", fontSize = 12.sp)
+                }
+            }
+
+            // Key Label Input
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Label") },
+                label = { Text("Label / Title") },
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Icon Picker
-            Text(text = "Icon", style = MaterialTheme.typography.labelMedium)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(6),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(DECK_ICONS) { item ->
-                    val isSelected = selectedIcon == item.id
-                    Surface(
-                        onClick = { selectedIcon = item.id },
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(item.icon, contentDescription = item.label, modifier = Modifier.size(18.dp))
-                        }
+            // Action Type Filter Chips
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Action Type",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("app", "url", "hotkey", "media", "system").forEach { type ->
+                        val isSelected = actionType == type
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                actionType = type
+                                actionValue = when (type) {
+                                    "url" -> if (actionValue.startsWith("http")) actionValue else "https://google.com"
+                                    "hotkey" -> "win+d"
+                                    "media" -> "toggle"
+                                    "system" -> "lock"
+                                    else -> "notepad"
+                                }
+                            },
+                            label = { Text(type.uppercase(Locale.US), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
                     }
                 }
             }
 
-            // Action Type Chips
-            Text(text = "Action Type", style = MaterialTheme.typography.labelMedium)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                listOf("url", "hotkey", "media", "system", "app").forEach { type ->
-                    FilterChip(
-                        selected = actionType == type,
-                        onClick = {
-                            actionType = type
-                            actionValue = when (type) {
-                                "url" -> "https://google.com"
-                                "hotkey" -> "win+d"
-                                "media" -> "toggle"
-                                "system" -> "lock"
-                                else -> "notepad"
-                            }
-                        },
-                        label = { Text(type.uppercase(Locale.US), fontSize = 10.sp) }
-                    )
-                }
-            }
-
-            // Action Value Input / Presets
+            // Action Value Configuration
             when (actionType) {
-                "url" -> {
-                    OutlinedTextField(
-                        value = actionValue,
-                        onValueChange = { actionValue = it },
-                        label = { Text("Web URL") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                "hotkey" -> {
-                    OutlinedTextField(
-                        value = actionValue,
-                        onValueChange = { actionValue = it },
-                        label = { Text("Shortcut Chord (e.g. win+d, ctrl+c, alt+tab)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                "media" -> {
-                    OutlinedTextField(
-                        value = actionValue,
-                        onValueChange = { actionValue = it },
-                        label = { Text("Media (toggle, next, prev, vol_up, vol_down, mute)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                "system" -> {
-                    OutlinedTextField(
-                        value = actionValue,
-                        onValueChange = { actionValue = it },
-                        label = { Text("System Action (lock, screenshot, bright_up, bright_down)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
                 "app" -> {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
@@ -950,9 +1123,18 @@ private fun KeyCustomizerSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Installed Desktop Applications", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                text = "Installed Desktop Applications",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             IconButton(onClick = onRefreshApps, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Refresh Apps", modifier = Modifier.size(14.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = "Refresh Apps",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
 
@@ -973,16 +1155,17 @@ private fun KeyCustomizerSheet(
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(140.dp)
+                                .height(150.dp)
                         ) {
                             if (filteredApps.isNotEmpty()) {
-                                androidx.compose.foundation.lazy.LazyColumn(
+                                LazyColumn(
                                     modifier = Modifier.fillMaxSize(),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
+                                    contentPadding = PaddingValues(4.dp)
                                 ) {
                                     items(filteredApps.size) { idx ->
                                         val app = filteredApps[idx]
@@ -990,9 +1173,12 @@ private fun KeyCustomizerSheet(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (isChosen) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                                                .combinedClickable(onClick = {
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isChosen) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                                    else Color.Transparent
+                                                )
+                                                .clickable {
                                                     actionValue = app.path.ifEmpty { app.name }
                                                     if (title.startsWith("Key ") || title.isEmpty()) {
                                                         title = app.name
@@ -1000,7 +1186,7 @@ private fun KeyCustomizerSheet(
                                                     findBestMatchingDeckIcon(app.name)?.let {
                                                         selectedIcon = it
                                                     }
-                                                })
+                                                }
                                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
@@ -1016,7 +1202,7 @@ private fun KeyCustomizerSheet(
                                                         }
                                                     ),
                                                     contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    tint = MaterialTheme.colorScheme.secondary,
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                                 Spacer(Modifier.width(8.dp))
@@ -1044,7 +1230,8 @@ private fun KeyCustomizerSheet(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (installedApps.isEmpty()) "Loading apps from desktop..." else "No matching apps found",
+                                        text = if (installedApps.isEmpty()) "Click refresh above to scan desktop apps"
+                                        else "No matching apps found",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                     )
@@ -1055,17 +1242,282 @@ private fun KeyCustomizerSheet(
                         OutlinedTextField(
                             value = actionValue,
                             onValueChange = { actionValue = it },
-                            label = { Text("Command or File Path") },
+                            label = { Text("Command or Executable Path") },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
+                "url" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = actionValue,
+                            onValueChange = { actionValue = it },
+                            label = { Text("Web URL") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "Google" to "https://google.com",
+                                "YouTube" to "https://youtube.com",
+                                "GitHub" to "https://github.com",
+                                "Reddit" to "https://reddit.com",
+                                "Spotify" to "https://open.spotify.com"
+                            ).forEach { (label, url) ->
+                                OutlinedButton(
+                                    onClick = {
+                                        actionValue = url
+                                        if (title.startsWith("Key ") || title.isEmpty()) title = label
+                                        findBestMatchingDeckIcon(label)?.let { selectedIcon = it }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text(label, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+                "hotkey" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = actionValue,
+                            onValueChange = { actionValue = it },
+                            label = { Text("Shortcut Chord (e.g. win+d, ctrl+c, alt+tab)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("win+d", "ctrl+c", "ctrl+v", "alt+tab", "win+l", "ctrl+shift+esc").forEach { chord ->
+                                OutlinedButton(
+                                    onClick = { actionValue = chord },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text(chord, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+                    }
+                }
+                "media" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = actionValue,
+                            onValueChange = { actionValue = it },
+                            label = { Text("Media Command (toggle, next, prev, vol_up, vol_down, mute)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "Play/Pause" to "toggle",
+                                "Next" to "next",
+                                "Prev" to "prev",
+                                "Vol +" to "vol_up",
+                                "Vol -" to "vol_down",
+                                "Mute" to "mute"
+                            ).forEach { (label, cmd) ->
+                                OutlinedButton(
+                                    onClick = { actionValue = cmd },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text(label, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+                "system" -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = actionValue,
+                            onValueChange = { actionValue = it },
+                            label = { Text("System Command (lock, screenshot, bright_up, bright_down)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "Lock PC" to "lock",
+                                "Screenshot" to "screenshot",
+                                "Bright +" to "bright_up",
+                                "Bright -" to "bright_down",
+                                "Sleep" to "sleep"
+                            ).forEach { (label, cmd) ->
+                                OutlinedButton(
+                                    onClick = { actionValue = cmd },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text(label, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            // Save & Cancel Buttons
+            // Icon Picker
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Icon",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(6),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(DECK_ICONS) { item ->
+                        val isSelected = selectedIcon == item.id
+                        Surface(
+                            onClick = { selectedIcon = item.id },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = item.label,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Color Customization: Tile Color & Icon Color
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Tile Color
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Tile Background Color",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        TILE_COLOR_PRESETS.forEach { hex ->
+                            val color = parseHexColor(hex, Color.DarkGray)
+                            val isChosen = bgColorHex.equals(hex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (isChosen) 2.dp else 1.dp,
+                                        color = if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { bgColorHex = hex }
+                            )
+                        }
+                    }
+                }
+
+                // Icon Color
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Icon Tint Color",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ICON_COLOR_PRESETS.forEach { hex ->
+                            val color = parseHexColor(hex, Color.White)
+                            val isChosen = iconColorHex.equals(hex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (isChosen) 2.dp else 1.dp,
+                                        color = if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { iconColorHex = hex }
+                            )
+                        }
+                    }
+                }
+
+                // Hex input fields
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = bgColorHex,
+                        onValueChange = { bgColorHex = it },
+                        label = { Text("Tile Hex") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = iconColorHex,
+                        onValueChange = { iconColorHex = it },
+                        label = { Text("Icon Hex") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+            }
+
+            // Notification Badge Option
+            FilterChip(
+                selected = hasBadge,
+                onClick = { hasBadge = !hasBadge },
+                label = { Text("Notification Dot Badge") },
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            // Save and Cancel Buttons
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onDismiss) {
                     Text("Cancel")
@@ -1083,18 +1535,21 @@ private fun KeyCustomizerSheet(
                                 action = DeckAction(type = actionType, value = actionValue)
                             )
                         )
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Text("Save")
+                    Text("Save Changes")
                 }
             }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
 
 /**
- * Mobile Infobar Customizer Bottom Sheet.
+ * Infobar Customizer Modal Bottom Sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1108,29 +1563,47 @@ private fun InfobarCustomizerSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState()
+        sheetState = rememberModalBottomSheetState(),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
                 text = "Infobar Display Settings",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                text = "Choose what information is rendered in the central deck pill",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                listOf("clock", "media", "page", "text").forEach { m ->
+                listOf(
+                    "clock" to "Clock & Date",
+                    "media" to "Now Playing",
+                    "page" to "Page Info",
+                    "text" to "Custom Text"
+                ).forEach { (m, label) ->
+                    val isSelected = mode == m
                     FilterChip(
-                        selected = mode == m,
+                        selected = isSelected,
                         onClick = { mode = m },
-                        label = { Text(m.replaceFirstChar { it.uppercase() }) }
+                        label = { Text(label, fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                 }
             }
@@ -1140,21 +1613,29 @@ private fun InfobarCustomizerSheet(
                     value = customText,
                     onValueChange = { customText = it },
                     label = { Text("Custom Text") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.End
             ) {
                 TextButton(onClick = onDismiss) {
                     Text("Cancel")
                 }
+                Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = {
                         onSave(infobar.copy(mode = mode, customText = customText))
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Text("Apply")
                 }
