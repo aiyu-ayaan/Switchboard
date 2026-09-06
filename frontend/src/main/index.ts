@@ -575,10 +575,15 @@ async function bootstrap(): Promise<void> {
     queueSendPaths(coldSendPaths);
   }
 
-  // Unpackaged, `execPath` is electron.exe, which cannot launch the app on its
-  // own: registering it would leave a menu entry that opens a blank Electron.
-  if (process.platform === 'win32' && app.isPackaged) {
-    void installExplorerVerb(process.execPath);
+  // Unpackaged, `execPath` is electron.exe and needs the app directory handed
+  // to it, or the menu entry opens a blank Electron. Registering in both modes
+  // is what makes the verb testable without packaging first.
+  if (process.platform === 'win32') {
+    void installExplorerVerb(
+      process.execPath,
+      app.isPackaged ? null : app.getAppPath(),
+      appIconPath()
+    );
   }
 
   app.on('activate', () => {

@@ -5,6 +5,7 @@
 // right-clicking a file is a two-second action, and raising a 1120x720 shell
 // over whatever the user was doing to complete it is not.
 import { BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { statSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { PairedDevice } from '../shared/types';
 
@@ -86,13 +87,31 @@ function openPicker(): void {
     pushFiles();
   });
 
-  // Dismiss-on-blur, the way a shell menu behaves. Anything the user clicks
-  // outside it is what they meant to do instead.
-  picker.on('blur', () => picker?.close());
+  // Deliberately not dismiss-on-blur. A shell menu behaves that way, but this
+  // window is opened by a process the shell has just launched, and focus does
+  // not reliably settle on it — it lands back on Explorer often enough that the
+  // picker closed itself before it could be clicked. Escape and the close
+  // button dismiss it; sending closes it.
   picker.on('closed', () => {
     picker = null;
     pending = [];
   });
+}
+
+/**
+ * Whether a command-line argument is actually a file we can offer to send.
+ *
+ * A launch's arguments are not only the shell's: unpackaged, electron.exe is
+ * handed the app directory too, and it would otherwise be listed as a file to
+ * send. Directories are refused by the daemon regardless, so the picker should
+ * never show one — and anything unreadable is not worth offering either.
+ */
+function isSendableFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -102,8 +121,9 @@ function openPicker(): void {
  * legitimately repeat a path if Explorer retries.
  */
 export function queueSendPaths(paths: string[]): void {
-  if (paths.length === 0) return;
-  pending = [...new Set([...pending, ...paths])];
+  const files = paths.filter(isSendableFile);
+  if (files.length === 0) return;
+  pending = [...new Set([...pending, ...files])];
   if (batchTimer) clearTimeout(batchTimer);
   batchTimer = setTimeout(() => {
     batchTimer = null;
