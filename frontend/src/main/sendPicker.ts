@@ -17,6 +17,15 @@ interface PickerDeps {
   iconPath?: string;
   getDevices: () => Promise<PairedDevice[]>;
   sendFiles: (deviceId: string, paths: string[]) => Promise<unknown>;
+  /**
+   * The picker closed and this process has never sent anything.
+   *
+   * A launch that exists only to show the picker has nothing left to do once
+   * it is dismissed: its window is hidden, so nothing would ever bring the app
+   * back, and it would sit on the single-instance lock — swallowing every
+   * later right-click into a process the user cannot see.
+   */
+  onCancelled: () => void;
 }
 
 /**
@@ -34,6 +43,9 @@ let picker: BrowserWindow | null = null;
 let pending: string[] = [];
 let batchTimer: NodeJS.Timeout | null = null;
 let deps: PickerDeps | null = null;
+// Once anything has been sent the process has a transfer to look after, so a
+// later dismissal must never take it down.
+let everSent = false;
 
 /** What the window is allowed to know about the files: their names. */
 const names = () => pending.map((path) => basename(path));
@@ -95,6 +107,7 @@ function openPicker(): void {
   picker.on('closed', () => {
     picker = null;
     pending = [];
+    if (!everSent) deps?.onCancelled();
   });
 }
 
@@ -147,6 +160,7 @@ export function registerSendPicker(dependencies: PickerDeps): void {
     const paths = pending;
     if (paths.length === 0) return;
     await dependencies.sendFiles(deviceId, paths);
+    everSent = true;
     closePicker();
   });
 }

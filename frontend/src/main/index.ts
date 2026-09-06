@@ -45,9 +45,16 @@ let quitting = false;
 /** Resolves the compiled daemon binary shipped alongside the app. */
 function daemonPath(): string | null {
   const name = process.platform === 'win32' ? 'switchboard.exe' : 'switchboard';
-  const candidates = isDev
-    ? [resolve(app.getAppPath(), '..', 'bin', name)]
-    : [join(process.resourcesPath, 'bin', name), join(app.getAppPath(), 'bin', name)];
+  // Every location, rather than a branch on isDev. The Explorer verb launches
+  // the app without SWITCHBOARD_DEV set, so from a checkout this looked only
+  // in the packaged locations, found nothing, and opened the picker with no
+  // daemon behind it — every device call refused the connection. existsSync is
+  // what decides; whichever one is present is the right one.
+  const candidates = [
+    join(process.resourcesPath, 'bin', name),
+    join(app.getAppPath(), 'bin', name),
+    resolve(app.getAppPath(), '..', 'bin', name)
+  ];
   return candidates.find(existsSync) ?? null;
 }
 
@@ -564,7 +571,15 @@ async function bootstrap(): Promise<void> {
     preload: join(__dirname, '..', 'preload', 'index.js'),
     iconPath: appIconPath(),
     getDevices: async () => (await daemonFetch<LocalState>('/state')).devices,
-    sendFiles: (deviceId, paths) => daemonFetch('/files/send', { deviceId, paths })
+    sendFiles: (deviceId, paths) => daemonFetch('/files/send', { deviceId, paths }),
+    onCancelled: () => {
+      // Only a launch the verb made, and only while the shell is still hidden:
+      // a running app whose window the user can see stays running.
+      if (coldSendPaths.length > 0 && !mainWindow?.isVisible()) {
+        quitting = true;
+        app.quit();
+      }
+    }
   });
   await startDaemon();
 
