@@ -27,6 +27,7 @@ Switchboard provides an ultra-low-latency, zero-password encrypted bridge betwee
 - [**Displays & DDC/CI Hardware Controls**](./displays-ddcci.md): VESA MCCS monitor communication via `dxva2.dll`, multi-monitor detection, and WMI laptop display control.
 - [**Audio Mixer, Output Routing & SMTC Media Transport**](./audio-mixer.md): Windows Core Audio (WASAPI), per-process audio session control, default output endpoint switching via `IPolicyConfig`, and System Media Transport Controls (SMTC) integration.
 - [**Air Mouse (Remote Touchpad)**](./air-mouse.md): Phone-side gesture recognition, pointer acceleration and sub-pixel motion, the four `input.*` actions, and `SendInput` injection on Windows.
+- [**Elgato Stream Deck Neo**](./stream-deck-neo.md): 8-key hardware console replication, dynamic central Infobar, touch points, bidirectional customisation, and landscape mode workflow.
 - [**Encrypted File Transfer Subsystem**](./file-transfer.md): Chunked P2P encrypted file streaming, SHA-256 integrity validation, and Android Storage Access Framework (SAF).
 
 ### 4. Operations & Support

@@ -232,6 +232,72 @@ Initiates a peer-to-peer file transfer.
 }
 ```
 
+#### 12. `deck.get`
+Requests the current Stream Deck Neo configuration including pages, keys, and infobar settings. Guarded by the `deck` capability.
+
+```json
+{
+  "type": "deck.get",
+  "id": "req-010"
+}
+```
+
+#### 13. `deck.set`
+Saves and atomically broadcasts an updated Stream Deck Neo configuration across all connected clients.
+
+```json
+{
+  "type": "deck.set",
+  "id": "req-011",
+  "payload": {
+    "activePage": 0,
+    "pages": [
+      {
+        "id": "page-1",
+        "name": "Productivity",
+        "keys": [
+          {
+            "index": 0,
+            "title": "Browser",
+            "icon": "google",
+            "backgroundColor": "#1a1a2e",
+            "textColor": "#ffffff",
+            "action": {
+              "type": "url",
+              "value": "https://google.com"
+            }
+          }
+        ]
+      }
+    ],
+    "infobar": {
+      "showClock": true,
+      "showDate": true,
+      "textColor": "#000000",
+      "fontSize": 14
+    }
+  }
+}
+```
+
+#### 14. `deck.action`
+Triggers immediate execution of a Stream Deck Neo key action on the host machine.
+
+```json
+{
+  "type": "deck.action",
+  "id": "req-012",
+  "payload": {
+    "keyIndex": 0,
+    "action": {
+      "type": "hotkey",
+      "value": "ctrl+c"
+    },
+    "pageId": "page-1"
+  }
+}
+```
+
 ---
 
 ### Host Broadcasts & Events (Desktop ➔ Phone)
@@ -330,6 +396,25 @@ Real-time progress update during active file transfers.
 }
 ```
 
+#### 4. `deck.state`
+Emitted asynchronously when Stream Deck Neo configuration is saved or modified from any client.
+
+```json
+{
+  "type": "deck.state",
+  "payload": {
+    "activePage": 0,
+    "pages": [ ... ],
+    "infobar": {
+      "showClock": true,
+      "showDate": true,
+      "textColor": "#000000",
+      "fontSize": 14
+    }
+  }
+}
+```
+
 ---
 
 ## 🖥️ 2. Local Loopback REST API (`/local/*`)
@@ -354,3 +439,6 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `GET` | `/local/settings` | Retrieve host preferences. | None |
 | `POST` | `/local/settings` | Update host preferences. | `{"downloadDir": "...", "runInBackground": true}` |
 | `POST` | `/local/system/lock` | Lock the host workstation session. | `{}` |
+| `GET` | `/local/deck` | Get current Stream Deck Neo configuration. | None |
+| `POST` | `/local/deck` | Save and broadcast updated Stream Deck Neo configuration. | `DeckConfig` JSON object |
+| `POST` | `/local/deck/action` | Execute Stream Deck Neo key action immediately. | `DeckActionRequest` JSON object |
