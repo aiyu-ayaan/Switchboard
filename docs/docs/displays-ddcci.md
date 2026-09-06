@@ -53,6 +53,8 @@ For internal displays, Switchboard detects `internal: true` and routes commands 
 - **Class**: `WmiMonitorBrightness` (for reading current levels)
 - **Method**: `WmiMonitorBrightnessMethods.WmiSetBrightness(Timeout, Target)`
 
+WMI is reached through its COM automation objects from inside the daemon, not by running a PowerShell command and parsing the output. Both are the same WMI call underneath, but starting a shell costs roughly half a second, and it is the whole reason the built-in slider used to feel slower than the external ones.
+
 Internal displays do not expose hardware contrast controls; Switchboard automatically flags `hasContrast: false` so that the mobile and desktop user interfaces cleanly omit redundant sliders.
 
 ---
