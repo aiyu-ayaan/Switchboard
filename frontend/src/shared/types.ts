@@ -314,6 +314,8 @@ export interface SwitchboardBridge {
     set(config: DeckConfig): Promise<DeckConfig>;
     action(req: DeckActionRequest): Promise<{ status: string }>;
     apps(): Promise<InstalledApp[]>;
+    /** Resolves a platform-native icon for an application returned by apps(). */
+    appIcon(path: string): Promise<string>;
   };
   window: {
     minimize(): Promise<void>;

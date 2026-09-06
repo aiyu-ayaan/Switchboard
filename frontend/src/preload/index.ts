@@ -112,7 +112,8 @@ const bridge: SwitchboardBridge = {
     get: () => call<DeckConfig>('/deck'),
     set: (config: DeckConfig) => call<DeckConfig>('/deck', config),
     action: (req: DeckActionRequest) => call<{ status: string }>('/deck/action', req),
-    apps: () => call<InstalledApp[]>('/system/apps')
+    apps: () => call<InstalledApp[]>('/system/apps'),
+    appIcon: (path: string) => ipcRenderer.invoke('deck:appIcon', path) as Promise<string>
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

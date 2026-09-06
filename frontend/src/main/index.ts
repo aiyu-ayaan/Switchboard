@@ -564,6 +564,17 @@ function registerFileBridge(): void {
     // the user somewhere useful rather than doing nothing.
     await shell.openPath(state.settings.downloadDir);
   });
+
+  // Keep host filesystem access in the main process while allowing the deck
+  // picker to show the actual Windows shell icon for each discovered shortcut.
+  ipcMain.handle('deck:appIcon', async (_event, path: string) => {
+    if (typeof path !== 'string' || path.length === 0 || path.length > 32_768) return '';
+    try {
+      return (await app.getFileIcon(path, { size: 'small' })).toDataURL();
+    } catch {
+      return '';
+    }
+  });
 }
 
 async function bootstrap(): Promise<void> {
