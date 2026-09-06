@@ -263,56 +263,30 @@ fun DeckScreen(
         }
     }
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF0F111A))
             .windowInsetsPadding(WindowInsets.safeDrawing),
         contentAlignment = Alignment.Center
     ) {
-        val totalWidth = maxWidth
-        val totalHeight = maxHeight
-
-        // Dynamic responsive sizing calculations
-        val headerHeight = 34.dp
-        val footerHeight = 18.dp
-        val verticalSpacing = 6.dp
-        val casingPaddingV = 16.dp
-        val logoHeight = 22.dp
-        val logoGap = 6.dp
-        val infobarHeight = 32.dp
-        val infobarGap = 8.dp
-        val rowGap = 8.dp
-        val colGap = 8.dp
-
-        val casingMaxHeight = totalHeight - headerHeight - footerHeight - (verticalSpacing * 2)
-        val availableHeightForKeys = casingMaxHeight - casingPaddingV - logoHeight - logoGap - infobarHeight - infobarGap
-        val maxKeyH = (availableHeightForKeys - rowGap) / 2
-
-        val casingPaddingH = 24.dp
-        val availableWidthForKeys = totalWidth - 32.dp - casingPaddingH - (colGap * 3)
-        val maxKeyW = availableWidthForKeys / 4
-
-        val keySize = minOf(maxKeyH, maxKeyW, 88.dp).coerceIn(44.dp, 88.dp)
-        val casingWidth = (keySize * 4 + colGap * 3 + casingPaddingH).coerceIn(280.dp, totalWidth - 16.dp)
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // TOP HEADER: Title, Hardware Mirror badge, Page Tabs, Add/Delete Page, Edit Mode
+            // TOP HEADER: Full Width with Back button, Title, Hardware Mirror badge, Page Tabs, Add/Delete, Edit
             Row(
                 modifier = Modifier
-                    .width(casingWidth.coerceAtLeast(totalWidth.coerceAtMost(600.dp)))
-                    .height(headerHeight)
+                    .fillMaxWidth()
+                    .height(34.dp)
                     .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Back button + "Elgato Stream Deck Neo" + "Hardware Mirror" badge
+                // Left: Back button + "Switchboard Deck" + "Hardware Mirror" badge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -333,7 +307,7 @@ fun DeckScreen(
                     }
 
                     Text(
-                        text = "Elgato Stream Deck Neo",
+                        text = "Switchboard Deck",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -446,27 +420,29 @@ fun DeckScreen(
                 }
             }
 
-            // HARDWARE CASING: The authentic Stream Deck Neo light casing frame
+            // HARDWARE CASING: Spans FULL WIDTH of Android screen!
             Surface(
                 modifier = Modifier
-                    .width(casingWidth)
-                    .shadow(16.dp, RoundedCornerShape(32.dp)),
-                shape = RoundedCornerShape(32.dp),
-                color = Color(0xFFEEF1F5), // Authentic Elgato Neo White casing
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .shadow(14.dp, RoundedCornerShape(24.dp)),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFFEEF1F5), // Authentic Light Hardware Chassis
                 border = BorderStroke(1.dp, Color(0xFFD8DEE9))
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Top Center Clock Emblem
+                    // Top Center Clock Dial Emblem
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.85f))
+                            .background(Color.White.copy(alpha = 0.9f))
                             .border(1.dp, Color(0xFFCBD5E1), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -474,27 +450,32 @@ fun DeckScreen(
                             imageVector = Icons.Filled.Schedule,
                             contentDescription = null,
                             tint = Color(0xFF64748B),
-                            modifier = Modifier.size(13.dp)
+                            modifier = Modifier.size(12.dp)
                         )
                     }
 
-                    Spacer(Modifier.height(5.dp))
-
-                    // 8 Squircle LCD Keys Grid (2 rows x 4 columns)
+                    // 8 Squircle LCD Keys Grid: 4 columns x 2 rows filling full width
                     AnimatedContent(
                         targetState = safePageIndex,
                         transitionSpec = {
                             fadeIn(tween(180)) togetherWith fadeOut(tween(180))
                         },
-                        label = "pageKeysAnim"
+                        label = "pageKeysAnim",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(vertical = 4.dp)
                     ) { _ ->
                         Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(rowGap)
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Row 1: Keys 0..3
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(colGap)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 for (i in 0..3) {
                                     val key = keys[i]
@@ -502,7 +483,9 @@ fun DeckScreen(
                                         key = key,
                                         isSelected = selectedKeyIndex == key.index,
                                         editMode = editMode,
-                                        keySize = keySize,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         onClick = {
                                             triggerClickHaptic()
                                             selectedKeyIndex = key.index
@@ -523,7 +506,10 @@ fun DeckScreen(
 
                             // Row 2: Keys 4..7
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(colGap)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 for (i in 4..7) {
                                     val key = keys[i]
@@ -531,7 +517,9 @@ fun DeckScreen(
                                         key = key,
                                         isSelected = selectedKeyIndex == key.index,
                                         editMode = editMode,
-                                        keySize = keySize,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         onClick = {
                                             triggerClickHaptic()
                                             selectedKeyIndex = key.index
@@ -552,12 +540,11 @@ fun DeckScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(7.dp))
-
                     // Bottom Row: Left Touch Point + Centered Infobar + Right Touch Point
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(34.dp)
                             .padding(horizontal = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -569,8 +556,8 @@ fun DeckScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height((keySize.value * 0.42f).coerceIn(28f, 36f).dp)
-                                .padding(horizontal = 10.dp)
+                                .height(32.dp)
+                                .padding(horizontal = 12.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF0A0A0F))
                                 .border(1.dp, Color(0xFF232733), CircleShape)
@@ -627,11 +614,11 @@ fun DeckScreen(
                                     )
                                 }
                                 else -> {
-                                    // Authentic Stream Deck Neo Infobar Clock & Date format
+                                    // Authentic Infobar Clock & Date format
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 12.dp),
+                                            .padding(horizontal = 14.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -663,8 +650,8 @@ fun DeckScreen(
             // FOOTER SUBTITLE
             Text(
                 text = if (editMode) "Tap any key to configure • Long-press to edit • Touch points cycle pages"
-                       else "Tap any key to execute • Long-press to edit • Touch points cycle pages",
-                fontSize = 10.sp,
+                       else "Double-tap or tap any key to execute • Long-press to edit • Touch points cycle pages",
+                fontSize = 9.5.sp,
                 color = Color.White.copy(alpha = 0.45f),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 2.dp)
@@ -712,7 +699,6 @@ private fun NeoKeyButton(
     key: DeckKey,
     isSelected: Boolean,
     editMode: Boolean,
-    keySize: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit
@@ -720,31 +706,29 @@ private fun NeoKeyButton(
     val bgColor = parseHexColor(key.bgColor, Color(0xFF0D1117))
     val iconColor = parseHexColor(key.iconColor, Color(0xFF60A5FA))
     val iconVector = resolveIcon(key.icon)
-    val cornerRadius = (keySize * 0.22f).coerceIn(12.dp, 20.dp)
 
     Box(
         modifier = modifier
-            .size(keySize)
-            .shadow(if (isSelected) 8.dp else 4.dp, RoundedCornerShape(cornerRadius))
-            .clip(RoundedCornerShape(cornerRadius))
+            .shadow(if (isSelected) 6.dp else 3.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(bgColor)
             .border(
                 if (isSelected) 2.dp else 1.dp,
                 if (isSelected) Color(0xFF3B82F6) else if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.10f),
-                RoundedCornerShape(cornerRadius)
+                RoundedCornerShape(16.dp)
             )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         // Glass glossy top reflection
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.5f)
+                .fillMaxHeight(0.46f)
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
@@ -757,7 +741,7 @@ private fun NeoKeyButton(
         if (!key.badge.isNullOrEmpty()) {
             Box(
                 modifier = Modifier
-                    .size((keySize * 0.12f).coerceIn(7.dp, 10.dp))
+                    .size(8.dp)
                     .align(Alignment.TopEnd)
                     .padding(1.dp)
                     .clip(CircleShape)
@@ -776,14 +760,14 @@ private fun NeoKeyButton(
                 imageVector = iconVector,
                 contentDescription = key.title,
                 tint = iconColor,
-                modifier = Modifier.size((keySize * 0.38f).coerceIn(18.dp, 30.dp))
+                modifier = Modifier.size(26.dp)
             )
             if (key.title.isNotEmpty()) {
-                Spacer(Modifier.height((keySize * 0.04f).coerceIn(2.dp, 4.dp)))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = key.title,
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = (keySize.value * 0.12f).coerceIn(8f, 10.5f).sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.92f),
                     maxLines = 1,

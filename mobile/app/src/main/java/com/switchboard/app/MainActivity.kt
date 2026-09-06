@@ -608,14 +608,14 @@ fun SwitchboardApp(
             },
             title = {
                 Text(
-                    text = "Elgato Stream Deck Neo",
+                    text = "Switchboard Deck",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = "Elgato Stream Deck Neo is designed for horizontal operation to deliver an authentic 8-key hardware experience. Switchboard will rotate your screen into landscape mode.",
+                    text = "Switchboard Deck is designed for horizontal operation to deliver an authentic 8-key hardware console experience. Switchboard will rotate your screen into landscape mode.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

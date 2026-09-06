@@ -385,7 +385,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
         {/* Header Title & Page selector */}
         <div className="mb-4 flex w-full max-w-[540px] items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold tracking-wide text-ink">Elgato Stream Deck Neo</h2>
+            <h2 className="text-sm font-semibold tracking-wide text-ink">Switchboard Deck</h2>
             <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">
               Hardware Mirror
             </span>

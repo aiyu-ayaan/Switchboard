@@ -97,7 +97,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Displays("Displays", Icons.Filled.Monitor),
     Audio("Audio & Media", Icons.AutoMirrored.Filled.VolumeUp),
     Media("Media", Icons.Filled.MusicNote),
-    Deck("Elgato Stream Deck Neo", Icons.Filled.GridView),
+    Deck("Switchboard Deck", Icons.Filled.GridView),
     Touchpad("Touchpad", Icons.Filled.Mouse),
     Camera("Camera", Icons.Filled.PhotoCamera),
     Files("Files", Icons.Filled.Folder);
@@ -977,7 +977,7 @@ private fun StreamDeckNeoTile(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Elgato Stream Deck Neo",
+                            text = "Switchboard Deck",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1007,7 +1007,7 @@ private fun StreamDeckNeoTile(
                 }
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Open Elgato Stream Deck Neo",
+                    contentDescription = "Open Switchboard Deck",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
@@ -1305,8 +1305,8 @@ private fun SectionBody(
             )
 
             Section.Deck -> EmptyCard(
-                title = "Elgato Stream Deck Neo",
-                body = "Open the Elgato Stream Deck Neo section for the 8-key macro surface, dynamic infobar and paging controls."
+                title = "Switchboard Deck",
+                body = "Open the Switchboard Deck section for the 8-key macro surface, dynamic infobar and paging controls."
             )
 
             Section.Camera -> CameraScreen()
