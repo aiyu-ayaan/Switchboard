@@ -4,13 +4,12 @@ package system
 
 import (
 	"fmt"
-	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"unsafe"
 
+	"github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole/oleutil"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
@@ -366,57 +365,72 @@ func edidMonitorName(edid []byte) string {
 // scale defined by the driver's supported-levels table.
 //
 // ponytail: shells out to PowerShell rather than binding WMI through COM.
-// Internal panels are queried on enumeration and written only when the built-in
-// display slider moves, so the ~200ms process spawn never sits in the DDC/CI
-// drag path. Swap in a COM binding if that stops being true.
+// Internal panels are read on enumeration and written when the built-in
+// display slider moves. Both go through WMI's COM automation objects directly;
+// the brightness range stays 0-100 rather than the panel's own Level[] array,
+// which is what the WMI class reports and what the sliders have always shown.
 func internalPanels() []*panel {
-	out, err := powershell(
-		`Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness |` +
-			` ForEach-Object { "$($_.InstanceName)|$($_.CurrentBrightness)" }`)
+	var panels []*panel
+	err := withWMI(`root\wmi`, func(service *ole.IDispatch) error {
+		return wmiQuery(service,
+			"SELECT InstanceName, CurrentBrightness FROM WmiMonitorBrightness",
+			func(instance *ole.IDispatch) error {
+				name := wmiString(instance, "InstanceName")
+				level, ok := wmiInt(instance, "CurrentBrightness")
+				if name == "" || !ok {
+					return nil
+				}
+				panels = append(panels, &panel{
+					wmiInstance: name,
+					info: protocol.Display{
+						Name:       "Built-in display",
+						Internal:   true,
+						Brightness: level,
+						MinBright:  0,
+						MaxBright:  100,
+					},
+				})
+				return nil
+			})
+	})
 	if err != nil {
 		return nil
-	}
-	var panels []*panel
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		fields := strings.Split(strings.TrimSpace(line), "|")
-		if len(fields) != 2 {
-			continue
-		}
-		level, err := strconv.Atoi(strings.TrimSpace(fields[1]))
-		if err != nil {
-			continue
-		}
-		panels = append(panels, &panel{
-			wmiInstance: fields[0],
-			info: protocol.Display{
-				Name:       "Built-in display",
-				Internal:   true,
-				Brightness: level,
-				MinBright:  0,
-				MaxBright:  100,
-			},
-		})
 	}
 	return panels
 }
 
 func setInternalBrightness(instance string, value int) error {
-	// WmiSetBrightness(Timeout, Brightness); timeout 0 applies immediately.
-	_, err := powershell(fmt.Sprintf(
-		`$m = Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods |`+
-			` Where-Object { $_.InstanceName -eq '%s' };`+
-			` Invoke-CimMethod -InputObject $m -MethodName WmiSetBrightness`+
-			` -Arguments @{Timeout=0; Brightness=%d} | Out-Null`,
-		strings.ReplaceAll(instance, "'", "''"), value))
-	return err
-}
-
-func powershell(script string) (string, error) {
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("wmi query failed: %w", err)
-	}
-	return string(out), nil
+	return withWMI(`root\wmi`, func(service *ole.IDispatch) error {
+		found := false
+		// The instance is matched here rather than in a WHERE clause: WQL
+		// treats backslash as an escape character and an InstanceName is full
+		// of them, so the filter would have to be escaped correctly to be
+		// safe. A machine has one or two internal panels, so the scan is free.
+		err := wmiQuery(service, "SELECT * FROM WmiMonitorBrightnessMethods",
+			func(obj *ole.IDispatch) error {
+				if wmiString(obj, "InstanceName") != instance {
+					return nil
+				}
+				found = true
+				// WmiSetBrightness(uint64 Timeout, uint8 Brightness); a
+				// timeout of 0 applies immediately. Both arguments are passed
+				// as Go ints so go-ole marshals them VT_I4 and automation
+				// coerces to the declared widths — go-ole v1.2.6 marshals a
+				// Go uint8 as the signed VT_I1, which is not what this method
+				// declares.
+				raw, err := oleutil.CallMethod(obj, "WmiSetBrightness", 0, value)
+				if err != nil {
+					return fmt.Errorf("wmi: WmiSetBrightness(%d): %w", value, err)
+				}
+				raw.Clear()
+				return nil
+			})
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("wmi: no brightness method for instance %q", instance)
+		}
+		return nil
+	})
 }

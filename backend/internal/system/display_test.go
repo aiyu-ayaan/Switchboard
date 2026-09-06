@@ -3,6 +3,8 @@ package system
 import (
 	"errors"
 	"testing"
+
+	"switchboard/backend/internal/protocol"
 )
 
 // TestEnumerateDisplays exercises the real OS backend. It asserts the
@@ -75,5 +77,68 @@ func TestSetBrightnessClampsToPanelRange(t *testing.T) {
 	}
 	if got.Brightness != target.MinBright {
 		t.Errorf("under-range write clamped to %d, want %d", got.Brightness, target.MinBright)
+	}
+}
+
+// internalPanel returns the built-in display from a fresh enumeration. It is
+// looked up by the Internal flag rather than by ID because the ID is not
+// stable: enumeratePanels pairs a monitor that failed DDC/CI with the next
+// unclaimed WMI panel by position, so a transient DDC/CI failure on an
+// external monitor hands the built-in panel that monitor's ID.
+func internalPanel(t *testing.T, c *Controller) (protocol.Display, bool) {
+	t.Helper()
+	displays, err := c.Displays()
+	if err != nil {
+		return protocol.Display{}, false
+	}
+	for _, d := range displays {
+		if d.Internal {
+			return d, true
+		}
+	}
+	return protocol.Display{}, false
+}
+
+// TestInternalPanelBrightnessRoundTrips exercises the WMI path specifically:
+// the DDC/CI branch above cannot reach it, and the read and the write are
+// separate COM calls, so a write that lands nowhere and a read that reports a
+// stale value look identical from the caller. Writing a value and re-reading
+// it after a fresh enumeration is what tells them apart. Skips on any host
+// with no internal panel, which is every CI runner and most desktops.
+func TestInternalPanelBrightnessRoundTrips(t *testing.T) {
+	c := NewController()
+	defer c.Close()
+
+	start, ok := internalPanel(t, c)
+	if !ok {
+		t.Skip("no internal panel on this host")
+	}
+	original := start.Brightness
+	t.Cleanup(func() {
+		if d, ok := internalPanel(t, c); ok {
+			c.SetBrightness(d.ID, original)
+		}
+	})
+
+	// Two distinct values, so a backend that silently does nothing cannot pass
+	// by happening to already sit at the one we asked for.
+	for _, want := range []int{40, 70} {
+		before, ok := internalPanel(t, c)
+		if !ok {
+			t.Fatal("internal panel disappeared between enumerations")
+		}
+		if _, err := c.SetBrightness(before.ID, want); err != nil {
+			t.Fatalf("set internal brightness to %d: %v", want, err)
+		}
+		if err := c.RefreshDisplays(); err != nil {
+			t.Fatalf("refresh: %v", err)
+		}
+		after, ok := internalPanel(t, c)
+		if !ok {
+			t.Fatal("internal panel disappeared after refresh")
+		}
+		if after.Brightness != want {
+			t.Errorf("wrote %d, WMI read back %d", want, after.Brightness)
+		}
 	}
 }
