@@ -507,6 +507,14 @@ func (s *Server) WatchMedia(ctx context.Context) {
 			if s.clientCount() == 0 {
 				continue
 			}
+			// Lock is read first and on its own: a locked host runs a
+			// secure desktop where the media session is often unreadable,
+			// and folding it in behind the media read would leave the
+			// phone's lock badge stuck on whatever it last saw.
+			locked := s.control.IsLocked()
+			changed := locked != lastLocked
+			lastLocked = locked
+
 			current, err := s.control.MediaState()
 			if err != nil {
 				// A wedged media stack would otherwise log once a second.
@@ -514,13 +522,13 @@ func (s *Server) WatchMedia(ctx context.Context) {
 					lastErr = msg
 					log.Printf("media watch: %v", err)
 				}
-				continue
-			}
-			lastErr = ""
-			locked := s.control.IsLocked()
-			if current != last || locked != lastLocked {
+			} else {
+				lastErr = ""
+				changed = changed || current != last
 				last = current
-				lastLocked = locked
+			}
+
+			if changed {
 				s.Broadcast()
 			}
 		}
