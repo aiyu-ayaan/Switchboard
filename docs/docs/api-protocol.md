@@ -298,6 +298,16 @@ Triggers immediate execution of a Stream Deck Neo key action on the host machine
 }
 ```
 
+#### 15. `system.apps`
+Requests the list of applications installed on the host system (scanned from Windows Start Menu shortcuts and standard system tools).
+
+```json
+{
+  "type": "system.apps",
+  "id": "req-013"
+}
+```
+
 ---
 
 ### Host Broadcasts & Events (Desktop ➔ Phone)
@@ -442,3 +452,4 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `GET` | `/local/deck` | Get current Stream Deck Neo configuration. | None |
 | `POST` | `/local/deck` | Save and broadcast updated Stream Deck Neo configuration. | `DeckConfig` JSON object |
 | `POST` | `/local/deck/action` | Execute Stream Deck Neo key action immediately. | `DeckActionRequest` JSON object |
+| `GET` | `/local/system/apps` | Enumerate applications installed on the system. | None |

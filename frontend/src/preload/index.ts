@@ -14,6 +14,7 @@ import type {
   DeckConfig,
   FileTransfer,
   HostSettings,
+  InstalledApp,
   LocalState,
   MediaAction,
   MediaArtwork,
@@ -110,7 +111,8 @@ const bridge: SwitchboardBridge = {
   deck: {
     get: () => call<DeckConfig>('/deck'),
     set: (config: DeckConfig) => call<DeckConfig>('/deck', config),
-    action: (req: DeckActionRequest) => call<{ status: string }>('/deck/action', req)
+    action: (req: DeckActionRequest) => call<{ status: string }>('/deck/action', req),
+    apps: () => call<InstalledApp[]>('/system/apps')
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

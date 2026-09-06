@@ -277,13 +277,17 @@ fun SwitchboardApp(
                 showLockConfirmDialog = true
             },
             onDeckAction = viewModel::triggerDeckAction,
-            onSaveDeckConfig = viewModel::saveDeckConfig
+            onSaveDeckConfig = viewModel::saveDeckConfig,
+            onRefreshApps = viewModel::refreshInstalledApps
         )
     }
 
+    val isDeckScreen = currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck
+
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (!isDeckScreen) {
+                TopAppBar(
                 navigationIcon = {
                     if (currentScreen !is AppScreen.Main) {
                         IconButton(
@@ -412,6 +416,7 @@ fun SwitchboardApp(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             )
+            }
         }
     ) { padding ->
         Box(
@@ -451,7 +456,13 @@ fun SwitchboardApp(
                         SectionScreen(
                             section = targetScreen.section,
                             state = state,
-                            actions = actions
+                            actions = actions,
+                            onBack = {
+                                if (targetScreen.section == Section.Deck) {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                }
+                                currentScreen = AppScreen.Main
+                            }
                         )
                     }
                     is AppScreen.Main -> {

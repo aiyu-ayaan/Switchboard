@@ -67,7 +67,8 @@ data class UiState(
     val discovered: List<DiscoveredHost> = emptyList(),
     /** The session is held open past the UI, and redialled when it drops. */
     val alwaysOn: Boolean = false,
-    val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig()
+    val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig(),
+    val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList()
 ) {
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
@@ -129,7 +130,8 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                         artwork = live.artwork,
                         error = live.error,
                         alwaysOn = live.alwaysOn,
-                        deckConfig = live.deckConfig
+                        deckConfig = live.deckConfig,
+                        installedApps = live.installedApps
                     )
                 }
             }
@@ -476,5 +478,9 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     fun saveDeckConfig(config: com.switchboard.app.net.DeckConfig) {
         connection.saveDeckConfig(config)
+    }
+
+    fun refreshInstalledApps() {
+        connection.refreshInstalledApps()
     }
 }

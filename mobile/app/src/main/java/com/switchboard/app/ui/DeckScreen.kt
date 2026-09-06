@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Work
@@ -89,6 +90,7 @@ import com.switchboard.app.net.DeckConfig
 import com.switchboard.app.net.DeckInfobar
 import com.switchboard.app.net.DeckKey
 import com.switchboard.app.net.DeckPage
+import com.switchboard.app.net.InstalledApp
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -121,6 +123,22 @@ private fun resolveIcon(iconId: String): ImageVector {
     return DECK_ICONS.find { it.id == iconId }?.icon ?: Icons.Filled.Code
 }
 
+private fun findBestMatchingDeckIcon(name: String): String? {
+    val lower = name.lowercase(Locale.ROOT)
+    return when {
+        lower.contains("code") || lower.contains("visual studio") || lower.contains("git") -> "code"
+        lower.contains("term") || lower.contains("cmd") || lower.contains("powershell") -> "terminal"
+        lower.contains("chrome") || lower.contains("edge") || lower.contains("firefox") || lower.contains("browser") -> "google"
+        lower.contains("spotify") || lower.contains("music") -> "spotify"
+        lower.contains("note") || lower.contains("word") || lower.contains("doc") -> "notes"
+        lower.contains("file") || lower.contains("explorer") -> "folder"
+        lower.contains("snip") || lower.contains("camera") || lower.contains("screen") -> "camera"
+        lower.contains("setting") || lower.contains("control") || lower.contains("task") -> "settings"
+        lower.contains("calc") || lower.contains("calendar") -> "calendar"
+        else -> null
+    }
+}
+
 private fun parseHexColor(hex: String?, fallback: Color): Color {
     if (hex.isNullOrEmpty()) return fallback
     return runCatching {
@@ -145,6 +163,8 @@ fun DeckScreen(
     state: UiState,
     onAction: (keyIndex: Int, action: DeckAction, pageId: String?) -> Unit,
     onSaveConfig: (DeckConfig) -> Unit,
+    onRefreshApps: () -> Unit = {},
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val haptics = LocalHapticFeedback.current
@@ -206,58 +226,74 @@ fun DeckScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(Color(0xFF0B0C13)),
         contentAlignment = Alignment.Center
     ) {
-        // Main Stream Deck Neo hardware body
+        // Main Stream Deck Neo hardware body - Fullscreen dark console
         Surface(
             modifier = Modifier
-                .padding(12.dp)
-                .fillMaxHeight()
-                .aspectRatio(1.52f)
-                .shadow(24.dp, RoundedCornerShape(32.dp)),
-            shape = RoundedCornerShape(32.dp),
-            color = Color(0xFFF1F3F6), // Neo Off-White casing
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFD3D7E0))
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .shadow(20.dp, RoundedCornerShape(26.dp)),
+            shape = RoundedCornerShape(26.dp),
+            color = Color(0xFF13141F), // Dark matte console casing
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF26283A))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Top Header: Neo Emblem & Edit Mode Toggle
+                // Top Header: Integrated Back button, Page title, Central Emblem & Edit Mode Toggle
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Page indicator / name
-                    Text(
-                        text = "${currentPage.name} (${safePageIndex + 1}/${pages.size})",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.DarkGray,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Exit Deck",
+                                tint = Color.White.copy(alpha = 0.85f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // Page indicator / name
+                        Text(
+                            text = "${currentPage.name} (${safePageIndex + 1}/${pages.size})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
 
                     // Stream Deck Neo Central Emblem
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.8f))
-                            .border(1.dp, Color.Black.copy(alpha = 0.2f), CircleShape),
+                            .background(Color(0xFF1E2032))
+                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "G",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.Black.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -272,20 +308,20 @@ fun DeckScreen(
                                     )
                                     onSaveConfig(config.copy(pages = newPages))
                                 },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(30.dp)
                             ) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add Page", tint = Color.DarkGray, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Add, contentDescription = "Add Page", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(16.dp))
                             }
                         }
 
                         IconButton(
                             onClick = { editMode = !editMode },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Edit,
                                 contentDescription = "Customize Mode",
-                                tint = if (editMode) MaterialTheme.colorScheme.primary else Color.Gray,
+                                tint = if (editMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -386,8 +422,8 @@ fun DeckScreen(
                             .height(28.dp)
                             .padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF090A0F))
-                            .border(1.dp, Color(0xFF232733), RoundedCornerShape(14.dp))
+                            .background(Color(0xFF08090E))
+                            .border(1.dp, Color(0xFF222538), RoundedCornerShape(14.dp))
                             .combinedClickable(
                                 onClick = {
                                     if (editMode) editingInfobar = true
@@ -452,14 +488,14 @@ fun DeckScreen(
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
-                                        color = Color.White.copy(alpha = 0.7f)
+                                        color = Color.White.copy(alpha = 0.65f)
                                     )
                                     Text(
                                         text = clockTime,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
-                                        color = Color.White
+                                        color = Color(0xFF67E8F9)
                                     )
                                 }
                             }
@@ -477,6 +513,8 @@ fun DeckScreen(
     editingKey?.let { targetKey ->
         KeyCustomizerSheet(
             key = targetKey,
+            installedApps = state.installedApps,
+            onRefreshApps = onRefreshApps,
             onDismiss = { editingKey = null },
             onSave = { updatedKey ->
                 val updatedKeys = currentPage.keys.filter { it.index != updatedKey.index } + updatedKey
@@ -514,7 +552,7 @@ private fun NeoKeyButton(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val bgColor = parseHexColor(key.bgColor, Color(0xFF0C0E14))
+    val bgColor = parseHexColor(key.bgColor, Color(0xFF1B1C2A))
     val iconColor = parseHexColor(key.iconColor, Color(0xFF60A5FA))
     val iconVector = resolveIcon(key.icon)
 
@@ -603,13 +641,13 @@ private fun TouchPointButton(onClick: () -> Unit) {
             .combinedClickable(onClick = onClick)
             .padding(4.dp)
     ) {
-        // Glowing white LED line
+        // Glowing cyan/white LED line
         Box(
             modifier = Modifier
                 .width(28.dp)
                 .height(3.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(Color.White)
+                .background(Color(0xFF67E8F9))
                 .shadow(4.dp, RoundedCornerShape(2.dp))
         )
         Spacer(Modifier.height(3.dp))
@@ -618,7 +656,7 @@ private fun TouchPointButton(onClick: () -> Unit) {
             modifier = Modifier
                 .size(4.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.25f))
+                .background(Color.White.copy(alpha = 0.25f))
         )
     }
 }
@@ -630,6 +668,8 @@ private fun TouchPointButton(onClick: () -> Unit) {
 @Composable
 private fun KeyCustomizerSheet(
     key: DeckKey,
+    installedApps: List<InstalledApp> = emptyList(),
+    onRefreshApps: () -> Unit = {},
     onDismiss: () -> Unit,
     onSave: (DeckKey) -> Unit
 ) {
@@ -638,8 +678,9 @@ private fun KeyCustomizerSheet(
     var actionType by remember { mutableStateOf(key.action.type) }
     var actionValue by remember { mutableStateOf(key.action.value) }
     var hasBadge by remember { mutableStateOf(!key.badge.isNullOrEmpty()) }
-    var bgColorHex by remember { mutableStateOf(key.bgColor ?: "#0C0E14") }
+    var bgColorHex by remember { mutableStateOf(key.bgColor ?: "#1B1C2A") }
     var iconColorHex by remember { mutableStateOf(key.iconColor ?: "#60A5FA") }
+    var appSearch by remember { mutableStateOf("") }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -750,12 +791,117 @@ private fun KeyCustomizerSheet(
                     )
                 }
                 "app" -> {
-                    OutlinedTextField(
-                        value = actionValue,
-                        onValueChange = { actionValue = it },
-                        label = { Text("App Command (e.g. notepad, calc, explorer)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Installed Desktop Applications", style = MaterialTheme.typography.labelMedium)
+                            IconButton(onClick = onRefreshApps, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Refresh Apps", modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = appSearch,
+                            onValueChange = { appSearch = it },
+                            label = { Text("Search desktop applications...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        val filteredApps = remember(installedApps, appSearch) {
+                            if (appSearch.isEmpty()) installedApps
+                            else installedApps.filter {
+                                it.name.contains(appSearch, ignoreCase = true) ||
+                                it.path.contains(appSearch, ignoreCase = true)
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                        ) {
+                            if (filteredApps.isNotEmpty()) {
+                                androidx.compose.foundation.lazy.LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
+                                ) {
+                                    items(filteredApps.size) { idx ->
+                                        val app = filteredApps[idx]
+                                        val isChosen = actionValue == app.path || actionValue == app.name
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isChosen) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                                                .combinedClickable(onClick = {
+                                                    actionValue = app.path.ifEmpty { app.name }
+                                                    if (title.startsWith("Key ") || title.isEmpty()) {
+                                                        title = app.name
+                                                    }
+                                                    findBestMatchingDeckIcon(app.name)?.let {
+                                                        selectedIcon = it
+                                                    }
+                                                })
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Terminal,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    text = app.name,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Text(
+                                                text = app.path.substringAfterLast('\\').substringAfterLast('/'),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 9.sp,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (installedApps.isEmpty()) "Loading apps from desktop..." else "No matching apps found",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = actionValue,
+                            onValueChange = { actionValue = it },
+                            label = { Text("Command or File Path") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
 

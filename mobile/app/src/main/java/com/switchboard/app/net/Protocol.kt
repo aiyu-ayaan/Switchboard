@@ -51,6 +51,7 @@ object Actions {
     const val DECK_SET = "deck.set"
     const val DECK_ACTION = "deck.action"
     const val DECK_STATE = "deck.state"
+    const val SYSTEM_APPS = "system.apps"
 }
 
 /**
@@ -579,4 +580,16 @@ data class DeckActionRequest(
     val keyIndex: Int = 0,
     val action: DeckAction = DeckAction()
 ) : WirePayload
+
+@Serializable
+data class InstalledApp(
+    val name: String = "",
+    val path: String = "",
+    val icon: String = ""
+)
+
+@Serializable
+data class InstalledAppsPayload(
+    val apps: List<InstalledApp> = emptyList()
+)
 

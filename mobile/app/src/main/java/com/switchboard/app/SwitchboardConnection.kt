@@ -44,7 +44,8 @@ data class ConnectionState(
     val error: String? = null,
     /** The session is held open past the UI, and redialled when it drops. */
     val alwaysOn: Boolean = false,
-    val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig()
+    val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig(),
+    val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList()
 )
 
 /**
@@ -302,6 +303,7 @@ class SwitchboardConnection private constructor(context: Context) {
                 store.save(saved)
                 store.lastHostId = saved.daemonId
                 client.send(Actions.DECK_GET)
+                client.send(Actions.SYSTEM_APPS)
                 _state.update {
                     it.copy(
                         status = ConnectionStatus.Connected,
@@ -320,6 +322,10 @@ class SwitchboardConnection private constructor(context: Context) {
 
             is ConnectionEvent.DeckState -> {
                 _state.update { it.copy(deckConfig = event.config) }
+            }
+
+            is ConnectionEvent.InstalledApps -> {
+                _state.update { it.copy(installedApps = event.apps) }
             }
 
             is ConnectionEvent.Artwork -> {
@@ -414,6 +420,10 @@ class SwitchboardConnection private constructor(context: Context) {
     fun saveDeckConfig(config: com.switchboard.app.net.DeckConfig) {
         _state.update { it.copy(deckConfig = config) }
         send(Actions.DECK_SET, config)
+    }
+
+    fun refreshInstalledApps() {
+        send(Actions.SYSTEM_APPS)
     }
 
     /** Applies a value locally so the control tracks the finger; the host's next broadcast reconciles it. */

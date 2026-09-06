@@ -313,12 +313,19 @@ export interface SwitchboardBridge {
     get(): Promise<DeckConfig>;
     set(config: DeckConfig): Promise<DeckConfig>;
     action(req: DeckActionRequest): Promise<{ status: string }>;
+    apps(): Promise<InstalledApp[]>;
   };
   window: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<void>;
   };
+}
+
+export interface InstalledApp {
+  name: string;
+  path: string;
+  icon?: string;
 }
 
 // ---- Stream Deck Neo Types ----

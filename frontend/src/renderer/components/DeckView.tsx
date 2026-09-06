@@ -30,7 +30,7 @@ import {
   Youtube
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { DeckConfig, DeckKey, DeckPage, LocalState } from '../../shared/types';
+import type { DeckConfig, DeckKey, DeckPage, InstalledApp, LocalState } from '../../shared/types';
 
 interface DeckViewProps {
   state: LocalState;
@@ -108,6 +108,20 @@ const PRESET_HOTKEYS = [
   { label: 'Refresh Page', chord: 'f5' }
 ];
 
+function findBestMatchingIcon(name: string): string | undefined {
+  const lower = name.toLowerCase();
+  if (lower.includes('code') || lower.includes('visual studio') || lower.includes('sublime') || lower.includes('git')) return 'code';
+  if (lower.includes('term') || lower.includes('cmd') || lower.includes('powershell') || lower.includes('bash')) return 'terminal';
+  if (lower.includes('chrome') || lower.includes('edge') || lower.includes('firefox') || lower.includes('brave') || lower.includes('browser')) return 'globe';
+  if (lower.includes('music') || lower.includes('spotify') || lower.includes('sound')) return 'spotify';
+  if (lower.includes('note') || lower.includes('word') || lower.includes('document')) return 'notes';
+  if (lower.includes('file') || lower.includes('explorer')) return 'folder';
+  if (lower.includes('camera') || lower.includes('snip') || lower.includes('screen')) return 'camera';
+  if (lower.includes('setting') || lower.includes('control') || lower.includes('task')) return 'settings';
+  if (lower.includes('calc')) return 'calendar';
+  return undefined;
+}
+
 export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
   const [config, setConfig] = useState<DeckConfig | null>(null);
   const [activePageIndex, setActivePageIndex] = useState(0);
@@ -116,6 +130,8 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [timeStr, setTimeStr] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
+  const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
+  const [appSearch, setAppSearch] = useState('');
 
   // Clock ticker for Infobar
   useEffect(() => {
@@ -153,9 +169,40 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
     }
   }, []);
 
+  // Fetch installed applications on the host system
+  useEffect(() => {
+    window.switchboard.deck
+      .apps()
+      .then((apps) => {
+        if (Array.isArray(apps)) {
+          setInstalledApps(apps);
+        }
+      })
+      .catch((err) => console.error('Failed to load installed apps:', err));
+  }, []);
+
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
+
+  // Periodic sync of DeckConfig from daemon to reflect changes made from mobile
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const latest = await window.switchboard.deck.get();
+        setConfig((prev) => {
+          if (!prev) return latest;
+          if (JSON.stringify(prev) !== JSON.stringify(latest)) {
+            return latest;
+          }
+          return prev;
+        });
+      } catch (err) {
+        // ignore poll errors
+      }
+    }, 2500);
+    return () => clearInterval(pollInterval);
+  }, []);
 
   // Save changes to backend and broadcast
   const saveConfig = useCallback(async (newConfig: DeckConfig) => {
@@ -176,6 +223,14 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
     if (!currentPage || selectedKeyIndex === null) return undefined;
     return currentPage.keys.find((k) => k.index === selectedKeyIndex);
   }, [currentPage, selectedKeyIndex]);
+
+  const filteredApps = useMemo(() => {
+    if (!appSearch.trim()) return installedApps;
+    const q = appSearch.toLowerCase();
+    return installedApps.filter(
+      (a) => a.name.toLowerCase().includes(q) || a.path.toLowerCase().includes(q)
+    );
+  }, [installedApps, appSearch]);
 
   // Page switching via Touch Points
   const handlePrevPage = () => {
@@ -750,19 +805,70 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
             )}
 
             {selectedKey.action.type === 'app' && (
-              <div>
-                <label className="block text-tiny font-medium text-ink-dim">Application Command</label>
-                <input
-                  type="text"
-                  value={selectedKey.action.value}
-                  onChange={(e) =>
-                    handleUpdateKey({
-                      action: { type: 'app', value: e.target.value }
+              <div className="space-y-2">
+                <label className="block text-tiny font-medium text-ink-dim">Installed Applications</label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-ink-faint" />
+                  <input
+                    type="text"
+                    value={appSearch}
+                    onChange={(e) => setAppSearch(e.target.value)}
+                    placeholder="Search installed applications..."
+                    className="w-full rounded-lg border border-edge bg-canvas pl-8 pr-3 py-1.5 text-tiny text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                  />
+                </div>
+
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-edge bg-canvas divide-y divide-edge/40">
+                  {filteredApps.length > 0 ? (
+                    filteredApps.map((app) => {
+                      const isSelected = selectedKey.action.value === (app.path || app.name);
+                      return (
+                        <button
+                          key={app.path || app.name}
+                          type="button"
+                          onClick={() => {
+                            const matchingIcon = findBestMatchingIcon(app.name);
+                            handleUpdateKey({
+                              title: selectedKey.title.startsWith('Key ') || selectedKey.title === '' ? app.name : selectedKey.title,
+                              icon: matchingIcon || selectedKey.icon,
+                              action: { type: 'app', value: app.path || app.name }
+                            });
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-tiny transition-colors hover:bg-raised ${
+                            isSelected ? 'bg-raised text-accent font-medium' : 'text-ink'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Terminal className="h-3.5 w-3.5 shrink-0 text-accent/80" />
+                            <span className="truncate">{app.name}</span>
+                          </div>
+                          <span className="text-[10px] text-ink-faint font-mono ml-2 shrink-0 max-w-[120px] truncate">
+                            {app.path.split(/[\\/]/).pop()}
+                          </span>
+                        </button>
+                      );
                     })
-                  }
-                  placeholder="e.g. notepad, calc, explorer, wt"
-                  className="mt-1 w-full rounded-lg border border-edge bg-canvas px-3 py-1.5 font-mono text-tiny text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
-                />
+                  ) : (
+                    <div className="p-3 text-center text-tiny text-ink-faint">
+                      {installedApps.length === 0 ? 'Scanning installed apps...' : 'No matching apps found'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-ink-dim">Manual Path or Command</label>
+                  <input
+                    type="text"
+                    value={selectedKey.action.value}
+                    onChange={(e) =>
+                      handleUpdateKey({
+                        action: { type: 'app', value: e.target.value }
+                      })
+                    }
+                    placeholder="e.g. notepad, calc, explorer, wt, or full .exe path"
+                    className="mt-1 w-full rounded-lg border border-edge bg-canvas px-3 py-1.5 font-mono text-tiny text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                  />
+                </div>
               </div>
             )}
 

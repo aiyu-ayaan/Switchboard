@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import okhttp3.OkHttpClient
@@ -34,6 +35,7 @@ sealed interface ConnectionEvent {
     data class State(val state: HostState) : ConnectionEvent
     data class Artwork(val artwork: MediaArtwork) : ConnectionEvent
     data class DeckState(val config: DeckConfig) : ConnectionEvent
+    data class InstalledApps(val apps: List<InstalledApp>) : ConnectionEvent
 
     /**
      * Any `file.*` frame, handed over undecoded. Transfers are stateful and
@@ -288,7 +290,7 @@ class SwitchboardClient(
                             )
                         )
 
-                        envelope.action == Actions.DECK_STATE && payload != null -> trySend(
+                        (envelope.action == Actions.DECK_STATE || envelope.action == Actions.DECK_GET) && payload != null -> trySend(
                             ConnectionEvent.DeckState(
                                 SwitchboardJson.decodeFromJsonElement(
                                     DeckConfig.serializer(),
@@ -296,6 +298,23 @@ class SwitchboardClient(
                                 )
                             )
                         )
+
+                        envelope.action == Actions.SYSTEM_APPS && payload != null -> {
+                            val appsList = runCatching {
+                                SwitchboardJson.decodeFromJsonElement(
+                                    ListSerializer(InstalledApp.serializer()),
+                                    payload
+                                )
+                            }.getOrElse {
+                                runCatching {
+                                    SwitchboardJson.decodeFromJsonElement(
+                                        InstalledAppsPayload.serializer(),
+                                        payload
+                                    ).apps
+                                }.getOrDefault(emptyList())
+                            }
+                            trySend(ConnectionEvent.InstalledApps(appsList))
+                        }
 
                         envelope.action.startsWith("camera.") ->
                             trySend(ConnectionEvent.CameraCommand(envelope.action, payload))

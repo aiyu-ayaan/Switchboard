@@ -156,7 +156,8 @@ class SectionActions(
     val rateUnit: RateUnit,
     val onLockSystem: () -> Unit = {},
     val onDeckAction: (Int, com.switchboard.app.net.DeckAction, String?) -> Unit = { _, _, _ -> },
-    val onSaveDeckConfig: (com.switchboard.app.net.DeckConfig) -> Unit = {}
+    val onSaveDeckConfig: (com.switchboard.app.net.DeckConfig) -> Unit = {},
+    val onRefreshApps: () -> Unit = {}
 )
 
 /**
@@ -1173,6 +1174,7 @@ fun SectionScreen(
     section: Section,
     state: UiState,
     actions: SectionActions,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // The touchpad fills the screen and must not scroll under the finger, so
@@ -1182,7 +1184,14 @@ fun SectionScreen(
         return
     }
     if (section == Section.Deck) {
-        DeckScreen(state, actions.onDeckAction, actions.onSaveDeckConfig, modifier)
+        DeckScreen(
+            state = state,
+            onAction = actions.onDeckAction,
+            onSaveConfig = actions.onSaveDeckConfig,
+            onRefreshApps = actions.onRefreshApps,
+            onBack = onBack,
+            modifier = modifier
+        )
         return
     }
     LazyColumn(

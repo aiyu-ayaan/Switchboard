@@ -56,6 +56,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("GET /local/deck", s.localGetDeck)
 	handle("POST /local/deck", s.localSetDeck)
 	handle("POST /local/deck/action", s.localDeckAction)
+	handle("GET /local/system/apps", s.localSystemApps)
 }
 
 // loopbackOnly rejects any request that did not originate on this machine.
@@ -494,5 +495,10 @@ func (s *Server) localDeckAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) localSystemApps(w http.ResponseWriter, r *http.Request) {
+	apps := s.control.ListInstalledApps()
+	writeJSON(w, apps)
 }
 

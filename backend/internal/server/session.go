@@ -134,6 +134,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if env, err := protocol.New(protocol.TypeEvent, protocol.ActionHostState, s.hostState()); err == nil {
 		c.send(env)
 	}
+	if deckCfg, err := s.store.DeckConfig(); err == nil {
+		if env, err := protocol.New(protocol.TypeEvent, protocol.ActionDeckState, deckCfg); err == nil {
+			c.send(env)
+		}
+	}
 
 	s.readLoop(c)
 }

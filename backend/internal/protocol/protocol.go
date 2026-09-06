@@ -86,6 +86,8 @@ const (
 	ActionDeckSet    = "deck.set"    // client -> host: update deck configuration
 	ActionDeckAction = "deck.action" // client -> host: trigger a deck button action
 	ActionDeckState  = "deck.state"  // host -> client: broadcast deck configuration
+
+	ActionSystemApps = "system.apps" // client -> host: query installed desktop applications
 )
 
 // ChunkSize is the payload slice carried by one file.chunk frame.
@@ -723,5 +725,12 @@ func DefaultDeckConfig() DeckConfig {
 			},
 		},
 	}
+}
+
+// InstalledApp represents an application discovered on the host system.
+type InstalledApp struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Icon string `json:"icon,omitempty"`
 }
 

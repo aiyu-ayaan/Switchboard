@@ -316,6 +316,9 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 			return
 		}
 		s.reply(c, env, config)
+		if eventEnv, err := protocol.New(protocol.TypeEvent, protocol.ActionDeckState, config); err == nil {
+			c.send(eventEnv)
+		}
 
 	case protocol.ActionDeckSet:
 		var req protocol.DeckConfig
@@ -341,6 +344,10 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 			return
 		}
 		s.reply(c, env, map[string]string{"status": "ok"})
+
+	case protocol.ActionSystemApps:
+		apps := s.control.ListInstalledApps()
+		s.reply(c, env, apps)
 
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
