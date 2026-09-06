@@ -325,9 +325,6 @@ class SwitchboardConnection private constructor(context: Context) {
                 }
             }
 
-            is ConnectionEvent.UnlockChallengeIssued ->
-                unlockChallenges.emit(event.challenge)
-
             is ConnectionEvent.FileFrame ->
                 transfers.onFrame(event.action, event.payload, event.blob)
 
@@ -403,17 +400,6 @@ class SwitchboardConnection private constructor(context: Context) {
     fun hosts(): List<KnownHost> = store.hosts()
 
     fun send(action: String, payload: WirePayload? = null) = client.send(action, payload)
-
-    /**
-     * Unlock nonces as the host issues them.
-     *
-     * Extra buffering rather than a reply channel: the request and its answer
-     * are separated by a fingerprint prompt that can take as long as the user
-     * takes, and a nonce that arrived while nobody was collecting would strand
-     * the attempt. Replay is not a concern here — the host spends each nonce
-     * on first use whatever the outcome.
-     */
-    val unlockChallenges = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     /** Applies a value locally so the control tracks the finger; the host's next broadcast reconciles it. */
     fun patchHost(transform: (HostState) -> HostState) =

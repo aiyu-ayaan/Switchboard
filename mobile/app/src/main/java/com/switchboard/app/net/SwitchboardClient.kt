@@ -34,9 +34,6 @@ sealed interface ConnectionEvent {
     data class State(val state: HostState) : ConnectionEvent
     data class Artwork(val artwork: MediaArtwork) : ConnectionEvent
 
-    /** The host's reply to an unlock challenge request, base64. */
-    data class UnlockChallengeIssued(val challenge: String) : ConnectionEvent
-
     /**
      * Any `file.*` frame, handed over undecoded. Transfers are stateful and
      * ordered, so the engine that owns that state decodes them; routing six
@@ -290,15 +287,6 @@ class SwitchboardClient(
                             )
                         )
 
-                        envelope.action == Actions.UNLOCK_CHALLENGE && payload != null -> trySend(
-                            ConnectionEvent.UnlockChallengeIssued(
-                                SwitchboardJson.decodeFromJsonElement(
-                                    UnlockChallenge.serializer(),
-                                    payload
-                                ).challenge
-                            )
-                        )
-
                         envelope.action.startsWith("camera.") ->
                             trySend(ConnectionEvent.CameraCommand(envelope.action, payload))
 
@@ -396,9 +384,6 @@ class SwitchboardClient(
         is CameraSettings -> SwitchboardJson.encodeToJsonElement(CameraSettings.serializer(), payload)
         is CameraState -> SwitchboardJson.encodeToJsonElement(CameraState.serializer(), payload)
         is CameraFrame -> SwitchboardJson.encodeToJsonElement(CameraFrame.serializer(), payload)
-        is UnlockEnroll -> SwitchboardJson.encodeToJsonElement(UnlockEnroll.serializer(), payload)
-        is UnlockChallenge -> SwitchboardJson.encodeToJsonElement(UnlockChallenge.serializer(), payload)
-        is UnlockProof -> SwitchboardJson.encodeToJsonElement(UnlockProof.serializer(), payload)
     }
 
     fun disconnect() {

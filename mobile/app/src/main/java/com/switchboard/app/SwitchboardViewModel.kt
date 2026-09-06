@@ -2,13 +2,11 @@ package com.switchboard.app
 
 import android.app.Application
 import android.net.Uri
-import android.util.Base64
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.switchboard.app.data.TransferPreferences
 import com.switchboard.app.data.KnownHost
-import com.switchboard.app.data.UnlockKey
 import com.switchboard.app.net.Actions
 import com.switchboard.app.net.DiscoveredHost
 import com.switchboard.app.net.Display
@@ -25,10 +23,7 @@ import com.switchboard.app.net.OutputSet
 import com.switchboard.app.net.Playback
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.FileProgress
-import com.switchboard.app.net.UnlockEnroll
-import com.switchboard.app.net.UnlockProof
 import com.switchboard.app.net.Volume
-import com.switchboard.app.net.unlockMessage
 import com.switchboard.app.transfer.TransferEngine
 import java.net.HttpURLConnection
 import java.net.URL
@@ -70,11 +65,6 @@ data class UiState(
     val transfers: List<FileProgress> = emptyList(),
     /** Desktops seen over mDNS, so pairing does not need a typed IP address. */
     val discovered: List<DiscoveredHost> = emptyList(),
-    /** This phone has a fingerprint sensor a keystore key can be gated on. */
-    val unlockAvailableOnPhone: Boolean = false,
-    /** This phone holds such a key. Kept in state so the top bar does not
-     *  hit the keystore on every recomposition. */
-    val unlockEnrolled: Boolean = false,
     /** The session is held open past the UI, and redialled when it drops. */
     val alwaysOn: Boolean = false
 ) {
@@ -85,20 +75,6 @@ data class UiState(
     val canRouteOutput: Boolean get() = host.capabilities.contains("outputs")
     val canDriveInput: Boolean get() = host.capabilities.contains("input")
     val canLockSystem: Boolean get() = host.capabilities.contains("lock")
-
-    /**
-     * Whether the desktop will accept a fingerprint unlock. The host only
-     * advertises this once a password has been enrolled on it; whether *this*
-     * phone can take part is a separate question the device answers, so both
-     * are checked before the control appears.
-     */
-    val hostAcceptsUnlock: Boolean get() = host.capabilities.contains("unlock")
-
-    /** Both ends are ready, so the lock button can open the desktop. */
-    val canUnlockSystem: Boolean get() = hostAcceptsUnlock && unlockEnrolled
-
-    /** The phone could enrol but has not; Settings offers it. */
-    val canEnrolUnlock: Boolean get() = unlockAvailableOnPhone && !unlockEnrolled
 }
 
 /**
@@ -114,13 +90,6 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     companion object {
         const val DEFAULT_PORT = SwitchboardConnection.DEFAULT_PORT
-
-        /**
-         * How long to wait for the host's unlock nonce. Long enough for a
-         * congested Wi-Fi round trip, short enough that a desktop which will
-         * never answer does not leave the button feeling dead.
-         */
-        private const val CHALLENGE_TIMEOUT_MS = 5_000L
 
         /** One pointer frame per ~60 Hz tick, regardless of the panel's rate. */
         private const val POINTER_FLUSH_MS = 16L
@@ -146,7 +115,6 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         connection.retainUi()
-        refreshUnlockState()
 
         viewModelScope.launch {
             connection.state.collect { live ->
@@ -404,83 +372,6 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     fun lockSystem() {
         connection.patchHost { it.copy(locked = true) }
         connection.send(Actions.SYSTEM_LOCK)
-    }
-
-    // ---- Remote unlock ----
-    //
-    // Unlocking costs a round trip the other controls do not: the host issues
-    // a nonce, the phone signs it behind a fingerprint, and the signature goes
-    // back. The prompt sits in the middle of that, so the whole thing is one
-    // coroutine rather than a chain of callbacks.
-
-    /**
-     * Registers a fresh biometric-gated key with the desktop. The host refuses
-     * this while it is locked, which is what keeps a phone taken after pairing
-     * from granting itself the lock screen.
-     */
-    fun enrolUnlock() {
-        viewModelScope.launch {
-            val publicKey = runCatching { UnlockKey.enroll() }.getOrElse {
-                connection.reportError("Could not create an unlock key: ${it.message}")
-                return@launch
-            }
-            connection.send(Actions.UNLOCK_ENROLL, UnlockEnroll(publicKey))
-            _uiState.update { it.copy(unlockEnrolled = true) }
-        }
-    }
-
-    /** Drops this phone's unlock key. The desktop keeps its copy until the device is forgotten. */
-    fun forgetUnlockKey() {
-        UnlockKey.forget()
-        _uiState.update { it.copy(unlockEnrolled = false) }
-    }
-
-    /** Re-reads the keystore, which a new fingerprint enrolment can invalidate. */
-    private fun refreshUnlockState() {
-        val available = UnlockKey.isSupported(getApplication())
-        _uiState.update {
-            it.copy(
-                unlockAvailableOnPhone = available,
-                unlockEnrolled = available && UnlockKey.isEnrolled()
-            )
-        }
-    }
-
-    /**
-     * Asks the desktop to unlock, proving a fingerprint to it.
-     *
-     * [activity] is needed because the biometric prompt is attached to a
-     * window; the signing itself belongs to the keystore, not to this class.
-     */
-    fun unlockSystem(activity: androidx.fragment.app.FragmentActivity) {
-        val daemonId = _uiState.value.activeHost?.daemonId ?: return
-        viewModelScope.launch {
-            // The request goes out from onSubscription, not before it. The
-            // nonce flow replays nothing, so an answer that arrived while
-            // nothing was collecting would be dropped and this would sit here
-            // until the timeout — a race a fast desktop wins often enough.
-            val encoded = withTimeoutOrNull(CHALLENGE_TIMEOUT_MS) {
-                connection.unlockChallenges
-                    .onSubscription { connection.send(Actions.UNLOCK_CHALLENGE) }
-                    .first()
-            }
-            if (encoded == null) {
-                connection.reportError("The desktop did not answer the unlock request.")
-                return@launch
-            }
-
-            val challenge = Base64.decode(encoded, Base64.NO_WRAP)
-            val signature = UnlockKey.sign(activity, unlockMessage(daemonId, challenge))
-                .getOrElse { error ->
-                    // A cancelled prompt is the user changing their mind, not
-                    // a fault worth an error banner.
-                    if (error !is com.switchboard.app.data.UnlockCancelled) {
-                        connection.reportError("Fingerprint unlock failed: ${error.message}")
-                    }
-                    return@launch
-                }
-            connection.send(Actions.SYSTEM_UNLOCK, UnlockProof(encoded, signature))
-        }
     }
 
     // ---- Air mouse ----
