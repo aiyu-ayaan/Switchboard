@@ -288,7 +288,9 @@ const ALLOWED_ROUTES = new Set([
   '/camera/vcam/status',
   '/camera/start',
   '/camera/stop',
-  '/camera/control'
+  '/camera/control',
+  '/deck',
+  '/deck/action'
 ]);
 
 async function daemonFetch<T>(route: string, body?: unknown): Promise<T> {

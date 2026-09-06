@@ -1,9 +1,10 @@
-import { Camera, Monitor, Send, Settings, Smartphone, Volume2 } from 'lucide-react';
+import { Camera, LayoutGrid, Monitor, Send, Settings, Smartphone, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { ActivityBar, StatusBar, TitleBar } from './components/Shell';
 import type { ViewId } from './components/Shell';
 import { DisplaysView } from './components/DisplaysView';
 import { AudioView } from './components/AudioView';
+import { DeckView } from './components/DeckView';
 import { CameraView } from './components/CameraView';
 import { FilesView } from './components/FilesView';
 import { DevicesView } from './components/DevicesView';
@@ -13,6 +14,7 @@ import { useHostState } from './useHostState';
 const SECTIONS = [
   { id: 'displays' as const, label: 'Displays', icon: Monitor },
   { id: 'audio' as const, label: 'Audio and media', icon: Volume2 },
+  { id: 'deck' as const, label: 'Stream Deck Neo', icon: LayoutGrid },
   { id: 'camera' as const, label: 'Camera', icon: Camera },
   { id: 'files' as const, label: 'File transfers', icon: Send },
   { id: 'devices' as const, label: 'Paired devices', icon: Smartphone },
@@ -48,6 +50,7 @@ export const App = () => {
               <DisplaysView state={state} patch={patch} setPaused={setPaused} refresh={refresh} />
             )}
             {view === 'audio' && <AudioView state={state} patch={patch} setPaused={setPaused} />}
+            {view === 'deck' && <DeckView state={state} />}
             {view === 'camera' && <CameraView state={state} />}
             {view === 'files' && <FilesView state={state} refresh={refresh} />}
             {view === 'devices' && <DevicesView state={state} refresh={refresh} />}

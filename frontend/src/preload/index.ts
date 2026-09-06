@@ -10,6 +10,8 @@ import type {
   CameraState,
   AudioSession,
   Display,
+  DeckActionRequest,
+  DeckConfig,
   FileTransfer,
   HostSettings,
   LocalState,
@@ -104,6 +106,11 @@ const bridge: SwitchboardBridge = {
     // between them by which one is actually arriving.
     onFrame: (handler) => subscribe('camera:frame', handler),
     onVideo: (handler) => subscribe('camera:video', handler)
+  },
+  deck: {
+    get: () => call<DeckConfig>('/deck'),
+    set: (config: DeckConfig) => call<DeckConfig>('/deck', config),
+    action: (req: DeckActionRequest) => call<{ status: string }>('/deck/action', req)
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

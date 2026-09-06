@@ -2,7 +2,7 @@ import { Lock, LockOpen, Minus, Square, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-export type ViewId = 'displays' | 'audio' | 'camera' | 'files' | 'devices' | 'settings';
+export type ViewId = 'displays' | 'audio' | 'deck' | 'camera' | 'files' | 'devices' | 'settings';
 
 /** Frameless-window chrome. The bar itself is the OS drag handle. */
 export function TitleBar({ subtitle, locked }: { subtitle: string; locked?: boolean }) {

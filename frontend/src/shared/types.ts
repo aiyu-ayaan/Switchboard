@@ -309,9 +309,56 @@ export interface SwitchboardBridge {
     onFrame(handler: (jpeg: ArrayBuffer) => void): () => void;
     onVideo(handler: (unit: CameraVideoUnit) => void): () => void;
   };
+  deck: {
+    get(): Promise<DeckConfig>;
+    set(config: DeckConfig): Promise<DeckConfig>;
+    action(req: DeckActionRequest): Promise<{ status: string }>;
+  };
   window: {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<void>;
   };
 }
+
+// ---- Stream Deck Neo Types ----
+
+export interface DeckAction {
+  type: 'url' | 'hotkey' | 'media' | 'system' | 'app' | 'page';
+  value: string;
+}
+
+export interface DeckKey {
+  index: number;
+  title: string;
+  icon: string;
+  bgColor?: string;
+  iconColor?: string;
+  badge?: string;
+  action: DeckAction;
+}
+
+export interface DeckInfobar {
+  mode: 'clock' | 'media' | 'page' | 'text';
+  customText: string;
+  format?: string;
+}
+
+export interface DeckPage {
+  id: string;
+  name: string;
+  keys: DeckKey[];
+}
+
+export interface DeckConfig {
+  activePage: number;
+  infobar: DeckInfobar;
+  pages: DeckPage[];
+}
+
+export interface DeckActionRequest {
+  pageId?: string;
+  keyIndex: number;
+  action: DeckAction;
+}
+
