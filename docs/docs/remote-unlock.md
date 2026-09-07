@@ -26,10 +26,10 @@ That leaves exactly two mechanisms:
 
 | Mechanism | What it is | Why not / why |
 | :--- | :--- | :--- |
-| **Credential Provider** | A COM DLL registered in `HKLM` that LogonUI loads and asks for credentials | The supported route. A separate C++ project with an MSVC toolchain, CLSID registration and an admin installer — several times the size of everything else here |
-| **SYSTEM keystroke injection** | A privileged helper attaches to the Winlogon desktop and types the password | What Switchboard does. Small, no new toolchain, and honest about its limits |
+| **Credential Provider** | A COM DLL registered in `HKLM` that LogonUI loads and asks for credentials | What Switchboard does. The supported route, and the only one that works whatever you sign in with |
+| **SYSTEM keystroke injection** | A privileged helper attaches to the Winlogon desktop and types the password | Tried and dropped. It only reached a lock screen already showing the password field, so a PIN or Hello sign-in got the password typed into the wrong box |
 
-Switchboard takes the second. The limits that come with it are listed below
+Switchboard takes the first. The limits that come with it are listed below
 rather than buried.
 
 ---
@@ -39,19 +39,20 @@ rather than buried.
 Three parties, none of which trusts the next further than it has to.
 
 ```
-  Phone                        Daemon (you)                 Helper (SYSTEM)
-    |                              |                              |
-    |-- unlock.challenge --------->|                              |
-    |<------------- nonce ---------|                              |
-    |                              |                              |
-  [fingerprint prompt]             |                              |
-  keystore signs the nonce         |                              |
-    |                              |                              |
-    |-- system.unlock (proof) ---->|                              |
-    |                       verify signature                      |
-    |                              |------ one byte on a pipe --->|
-    |                              |                    spawn on Winlogon desktop
-    |                              |                    decrypt password, type, Enter
+  Phone                    Daemon (you)        switchboard_cp.dll (in LogonUI)
+    |                          |                              |
+    |-- unlock.challenge ----->|                              |
+    |<--------- nonce ---------|                              |
+    |                          |                              |
+  [fingerprint prompt]         |                              |
+  keystore signs the nonce     |                              |
+    |                          |                              |
+    |-- system.unlock (proof)->|                              |
+    |                   verify signature                      |
+    |                          |--------- SetEvent ---------->|
+    |                          |                     offer one tile, default,
+    |                          |                     auto-submit
+    |                          |                     decrypt password -> LSA
 ```
 
 ### The phone proves a fingerprint, it does not claim one
@@ -83,17 +84,22 @@ Three further properties fall out of that design:
 
 ### The daemon stays unprivileged
 
-It verifies the signature and writes **one byte** to a named pipe. It never
-reads the password, never touches the secure desktop, and gains no privilege it
-did not already have.
+It verifies the signature and sets **one event**. It never reads the password,
+never touches the secure desktop, and gains no privilege it did not already
+have.
 
-### The helper does the privileged part
+### The credential provider does the privileged part
 
-`server.exe unlock service` runs as `SYSTEM` from a scheduled task. On that
-byte it re-stamps a copy of its own token into the console session and starts
-`server.exe unlock type` directly on `WinSta0\Winlogon`, which decrypts the
-stored password, types it, and presses Enter. That child exits immediately, so
-the plaintext lives for a fraction of a second.
+`switchboard_cp.dll` is loaded by LogonUI, which runs as `SYSTEM` on the secure
+desktop. Until the event fires it shows **no tile at all**. When it fires it
+offers one tile, declares it the default, and asks LogonUI to submit it with no
+user interaction — so whichever tile you last signed in with is not the one
+receiving credentials. It then decrypts the stored password and hands LSA a
+`KERB_INTERACTIVE_UNLOCK_LOGON`. The plaintext exists for the length of that
+one call and is wiped on the way out.
+
+This is what makes your sign-in method irrelevant. Nothing is typed, so nothing
+can be typed into the wrong field.
 
 ---
 
@@ -101,16 +107,21 @@ the plaintext lives for a fraction of a second.
 
 Four steps, once. You need an **elevated** PowerShell or Command Prompt.
 
-### 1. Make the lock screen ask for your password
+### 1. Build the credential provider
 
-The helper types a password, so the lock screen has to be showing the password
-field. If your PC signs in with a PIN or Windows Hello, the field will be
-waiting for that instead and the typed password will be rejected.
+Needs the MSVC C++ toolchain, once:
 
-Sign out and sign back in **with your password** once. Windows remembers the
-last credential you used and offers it first from then on. To check, lock the
-machine and confirm the field says *Password* — if it does not, click
-**Sign-in options** and pick the password key.
+```
+winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Then:
+
+```
+pnpm build:credprovider
+```
+
+That writes `bin/switchboard_cp.dll`, which has to sit next to `server.exe`.
 
 ### 2. Store the password
 
@@ -130,20 +141,16 @@ which means anything that can *read* the file can decrypt it. So enrolment also
 writes a protected ACL admitting only `SYSTEM` and `Administrators`, and
 **refuses to leave the file behind** if that ACL cannot be applied.
 
-### 3. Register the helper to run at boot
+### 3. Register the provider
 
 ```powershell
-schtasks /create /tn "Switchboard-Unlock" /ru SYSTEM /rl highest /sc onstart ^
-         /tr "\"C:\Path\To\server.exe\" unlock service"
-schtasks /run /tn "Switchboard-Unlock"
+& "C:\Path\To\server.exe" unlock setup
 ```
 
-The second line starts it now so you do not have to reboot. Confirm it is
-alive:
-
-```powershell
-schtasks /query /tn "Switchboard-Unlock"
-```
+`setup` does step 2 and this one together, because either alone is a
+half-working install. It writes the CLSID under `HKLM\SOFTWARE\Classes\CLSID`
+and lists it in `HKLM\...\Authentication\Credential Providers`. No reboot
+needed — LogonUI loads providers afresh each time the session locks.
 
 ### 4. Enrol the phone
 
@@ -165,11 +172,11 @@ control.
 ### Turning it off
 
 ```powershell
-& "C:\Path\To\server.exe" unlock disable
-schtasks /delete /tn "Switchboard-Unlock" /f
+& "C:\Path\To\server.exe" unlock teardown
 ```
 
-`unlock disable` deletes the stored password, which withdraws the capability —
+`teardown` deletes the stored password and unregisters the provider, which
+withdraws the capability —
 the button disappears from every paired phone. On the phone, **Remove key**
 deletes its key. Forgetting a device on the desktop drops its unlock key too,
 so re-pairing never silently restores access you withdrew.
@@ -185,9 +192,9 @@ account cannot read it, but an administrator or anything running as `SYSTEM`
 can. If that is not acceptable on your machine, do not enable this feature —
 everything else in Switchboard works without it.
 
-**Anything running as you can trigger an unlock.** The pipe has to be reachable
-by the daemon, which runs as you, so it is reachable by anything else running
-as you. Malware already in your session could unlock the screen. It inherits
+**Anything running as you can trigger an unlock.** The event has to be settable
+by the daemon, which runs as you, so it is settable by anything else running as
+you. Malware already in your session could unlock the screen. It inherits
 your account's trust; it does not create a new way in from the network — a
 remote attacker still needs a paired device *and* your fingerprint.
 
@@ -195,8 +202,13 @@ remote attacker still needs a paired device *and* your fingerprint.
 running, which means you must already be signed in. After a reboot or a sign
 out, sign in at the keyboard.
 
-**PIN-first sign-in breaks it.** See step 1. If the lock screen is asking for a
-PIN, the password gets typed into the wrong field and rejected.
+**If the account password changes, re-enrol.** Nothing notices on its own. The
+lock screen shows the rejection and the phone is told the attempt failed.
+
+**A broken provider is recoverable.** If the DLL ever misbehaves and the lock
+screen will not come up properly, boot into Safe Mode and delete
+`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{599BA444-2560-4520-AB9E-A68E52826FEE}`.
+LogonUI falls back to the built-in providers.
 
 **No fingerprint sensor, no feature.** The phone must report a real fingerprint
 sensor of a class the keystore will bind a key to. Face and iris unlock do not
@@ -210,8 +222,8 @@ qualify, even where Android rates them strong.
 | :--- | :--- | :--- |
 | No unlock button on the phone | The desktop never enrolled a password, or the phone has no usable sensor | Run `unlock enroll`; check **Settings → Security** appears on the phone at all |
 | **Set up** is greyed out | The connected desktop does not advertise `unlock` | Run `unlock enroll` on that desktop and reconnect |
-| "unlock helper unreachable" | The scheduled task is not running | `schtasks /run /tn "Switchboard-Unlock"` |
-| Screen wakes, password rejected | The lock screen is asking for a PIN | Step 1 — sign in with your password once |
+| "unlock provider not listening" | The DLL is not registered, or the desktop is not actually locked | Re-run `unlock setup` elevated; check `bin/switchboard_cp.dll` sits next to `server.exe` |
+| Password rejected on the lock screen | The stored copy no longer matches the account | Run `unlock enroll` again |
 | "unlock the desktop before enrolling" | Enrolment while locked | Unlock at the keyboard first, then enrol |
 | Worked, then stopped | A new fingerprint was added to the phone, invalidating the key | **Remove key**, then **Set up** again |
 | Password changed in Windows | The stored copy is stale | Run `unlock enroll` again |

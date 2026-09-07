@@ -11,27 +11,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 
 	"golang.org/x/sys/windows"
 
 	"switchboard/backend/internal/system"
 )
 
-const unlockUsage = `usage: server unlock <setup|teardown|enroll|disable|service|type>
+const unlockUsage = `usage: server unlock <setup|teardown|enroll|disable>
 
-  setup     enroll the password and register the boot task (run elevated)
-  teardown  undo setup: delete the password and the task
+  setup     enroll the password and register the credential provider (run elevated)
+  teardown  undo setup: delete the password and unregister the provider
   enroll    store this account's Windows password only
   disable   delete the stored password and withdraw the capability
-  service   serve the unlock pipe; run as SYSTEM from the scheduled task
-  type      type the stored password on the lock screen; spawned by service
 `
-
-// unlockTask is the scheduled task that keeps the SYSTEM helper alive. A task
-// rather than a service: it needs no SCM plumbing and one schtasks line
-// registers it, which is the whole difference in setup cost.
-const unlockTask = "Switchboard-Unlock"
 
 // runUnlock dispatches "server unlock ...". It returns false when the command
 // line is not an unlock invocation, leaving the daemon to start normally.
@@ -46,12 +38,12 @@ func runUnlock(args []string) (bool, error) {
 	switch args[1] {
 	case "setup":
 		// Both halves in one command, because either alone is a half-working
-		// install: a password with no helper cannot be typed, and a helper
-		// with no password has nothing to type.
+		// install: a password with no provider cannot be submitted, and a
+		// provider with no password has nothing to submit.
 		if err := enroll(); err != nil {
 			return true, err
 		}
-		if err := registerTask(); err != nil {
+		if err := system.RegisterCredProvider(); err != nil {
 			return true, err
 		}
 		fmt.Println("\nRemote unlock is ready.")
@@ -63,9 +55,9 @@ func runUnlock(args []string) (bool, error) {
 		if err := system.DisableUnlock(); err != nil {
 			return true, err
 		}
-		// /f so removing a task that was never created is not an error; the
-		// point of teardown is to arrive at "gone" from any starting state.
-		_ = exec.Command("schtasks", "/delete", "/tn", unlockTask, "/f").Run()
+		if err := system.UnregisterCredProvider(); err != nil {
+			return true, err
+		}
 		fmt.Println("Remote unlock disabled.")
 		waitForEnter()
 		return true, nil
@@ -83,12 +75,6 @@ func runUnlock(args []string) (bool, error) {
 		}
 		fmt.Println("Remote unlock disabled.")
 		return true, nil
-
-	case "service":
-		return true, system.RunUnlockService()
-
-	case "type":
-		return true, system.RunUnlockType()
 	}
 	return true, fmt.Errorf("unknown unlock command %q\n\n%s", args[1], unlockUsage)
 }
@@ -107,25 +93,6 @@ func enroll() error {
 		}
 	}()
 	return system.EnrollUnlock(password)
-}
-
-// registerTask installs the SYSTEM helper as a boot task and starts it now, so
-// setup does not need a reboot to become true.
-func registerTask() error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	create := exec.Command("schtasks", "/create", "/tn", unlockTask,
-		"/ru", "SYSTEM", "/rl", "highest", "/sc", "onstart",
-		"/tr", `"`+exe+`" unlock service`, "/f")
-	if out, err := create.CombinedOutput(); err != nil {
-		return fmt.Errorf("registering %s: %w: %s", unlockTask, err, out)
-	}
-	if out, err := exec.Command("schtasks", "/run", "/tn", unlockTask).CombinedOutput(); err != nil {
-		return fmt.Errorf("starting %s: %w: %s", unlockTask, err, out)
-	}
-	return nil
 }
 
 // waitForEnter keeps the console up after a run launched from the desktop UI,

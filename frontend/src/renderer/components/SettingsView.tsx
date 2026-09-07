@@ -136,7 +136,7 @@ export function SettingsView({ state, patch }: SettingsViewProps) {
               <p className="text-micro text-ink-faint">
                 {unlock.enrolled
                   ? 'Your Windows password is stored on this PC, encrypted and readable only by SYSTEM and administrators. Turning this off deletes it.'
-                  : 'Opens an administrator window to store your Windows password and register the helper. Read the trade-offs first: this keeps your password on this PC.'}
+                  : 'Opens an administrator window to store your Windows password and register the credential provider. Read the trade-offs first: this keeps your password on this PC.'}
               </p>
             </Card>
           ) : null}

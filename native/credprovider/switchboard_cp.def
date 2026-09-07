@@ -1,0 +1,7 @@
+; Registration is done by "server unlock setup", which writes the registry
+; directly, so there is no DllRegisterServer to export.
+LIBRARY switchboard_cp
+
+EXPORTS
+    DllGetClassObject   PRIVATE
+    DllCanUnloadNow     PRIVATE
