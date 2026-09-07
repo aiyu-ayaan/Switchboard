@@ -1,0 +1,5 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Force Go files to always have LF line endings across all platforms (required for gofmt)
+*.go text eol=lf

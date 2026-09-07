@@ -25,9 +25,11 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: backend
         shell: bash
     steps:
+      - name: Disable Git autocrlf
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
@@ -36,6 +38,7 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Format
+        working-directory: backend
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "$unformatted" ]; then
@@ -45,13 +48,16 @@ jobs:
           fi
 
       - run: go build ./...
+        working-directory: backend
       - run: go vet ./...
+        working-directory: backend
 
       # Hardware-dependent tests (DDC/CI monitors, audio endpoints, the
       # DirectShow virtual camera) skip when the runner has none, which is
       # every runner. What is left is the crypto, protocol, transfer, server
       # and discovery coverage, which is the part CI can actually assert.
       - run: go test ./...
+        working-directory: backend
 
   android:
     name: Android
@@ -79,8 +85,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
