@@ -14,7 +14,7 @@ import { useHostState } from './useHostState';
 const SECTIONS = [
   { id: 'displays' as const, label: 'Displays', icon: Monitor },
   { id: 'audio' as const, label: 'Audio and media', icon: Volume2 },
-  { id: 'deck' as const, label: 'Switchboard Deck', icon: LayoutGrid },
+  { id: 'deck' as const, label: 'Switchboard Deck', icon: LayoutGrid, tag: 'ALPHA' },
   { id: 'camera' as const, label: 'Camera', icon: Camera },
   { id: 'files' as const, label: 'File transfers', icon: Send },
   { id: 'devices' as const, label: 'Paired devices', icon: Smartphone },

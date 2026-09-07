@@ -676,7 +676,12 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
               <Layers className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold text-ink">Deck</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-base font-semibold text-ink">Deck</h1>
+                <span className="rounded bg-accent/15 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-accent uppercase leading-none">
+                  ALPHA
+                </span>
+              </div>
               <p className="truncate text-micro text-ink-dim">
                 {editing
                   ? 'Pick a key, then set what it does'

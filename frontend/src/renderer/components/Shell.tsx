@@ -56,7 +56,7 @@ export function TitleBar({ subtitle, locked }: { subtitle: string; locked?: bool
 }
 
 interface ActivityBarProps {
-  items: Array<{ id: ViewId; label: string; icon: LucideIcon; badge?: number }>;
+  items: Array<{ id: ViewId; label: string; icon: LucideIcon; badge?: number; tag?: string }>;
   active: ViewId;
   onSelect: (id: ViewId) => void;
 }
@@ -65,7 +65,7 @@ interface ActivityBarProps {
 export function ActivityBar({ items, active, onSelect }: ActivityBarProps) {
   return (
     <nav aria-label="Sections" className="flex w-12 shrink-0 flex-col border-r border-edge bg-rail py-1">
-      {items.map(({ id, label, icon: Icon, badge }) => {
+      {items.map(({ id, label, icon: Icon, badge, tag }) => {
         const selected = id === active;
         return (
           <button
@@ -90,6 +90,10 @@ export function ActivityBar({ items, active, onSelect }: ActivityBarProps) {
             {badge ? (
               <span className="absolute right-2 top-3 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-mono text-[10px] font-semibold tabular-nums text-rail">
                 {badge}
+              </span>
+            ) : tag ? (
+              <span className="absolute right-1 top-2 flex items-center justify-center rounded bg-accent/20 px-1 font-mono text-[8px] font-bold uppercase tracking-wider text-accent leading-none py-0.5">
+                {tag}
               </span>
             ) : null}
           </button>
