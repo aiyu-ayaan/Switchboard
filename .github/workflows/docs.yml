@@ -10,8 +10,7 @@
 # marker, or after a Pages outage.
 #
 # gh-pages is created (or updated) by peaceiris/actions-gh-pages, the same
-# shape 
-pm run deploy in a Docusaurus project uses under the hood: one
+# shape `npm run deploy` in a Docusaurus project uses under the hood: one
 # force-pushed commit per run, containing only the built site, authored by
 # the Actions bot. It never carries history and is never merged - it exists
 # purely as what Pages serves from (Settings -> Pages -> Deploy from a
