@@ -16,6 +16,7 @@ const (
 	settingDownloadDir     = "downloadDir"
 	settingRateUnit        = "rateUnit"
 	settingRunInBackground = "runInBackground"
+	settingAutoStart       = "autoStart"
 )
 
 // Rate units the UIs may render transfer speeds in. The daemon reports raw
@@ -30,6 +31,7 @@ type Settings struct {
 	DownloadDir     string `json:"downloadDir"`
 	RateUnit        string `json:"rateUnit"`
 	RunInBackground bool   `json:"runInBackground"`
+	AutoStart       bool   `json:"autoStart"`
 }
 
 // defaultSettings puts incoming files in a Switchboard folder of their own
@@ -40,7 +42,7 @@ func defaultSettings() Settings {
 	if home, err := os.UserHomeDir(); err == nil {
 		dir = filepath.Join(home, "Downloads", "Switchboard")
 	}
-	return Settings{DownloadDir: dir, RateUnit: RateUnitMBps, RunInBackground: true}
+	return Settings{DownloadDir: dir, RateUnit: RateUnitMBps, RunInBackground: true, AutoStart: false}
 }
 
 // loadSettings layers whatever is stored over the defaults, so a key added in
@@ -59,6 +61,9 @@ func loadSettings(store *db.Database) (Settings, error) {
 	}
 	if v, err := strconv.ParseBool(stored[settingRunInBackground]); err == nil {
 		settings.RunInBackground = v
+	}
+	if v, err := strconv.ParseBool(stored[settingAutoStart]); err == nil {
+		settings.AutoStart = v
 	}
 	return settings, nil
 }
@@ -89,6 +94,7 @@ func (s *Server) UpdateSettings(next Settings) (Settings, error) {
 		settingDownloadDir:     next.DownloadDir,
 		settingRateUnit:        next.RateUnit,
 		settingRunInBackground: strconv.FormatBool(next.RunInBackground),
+		settingAutoStart:       strconv.FormatBool(next.AutoStart),
 	} {
 		if err := s.store.SetSetting(key, value); err != nil {
 			return Settings{}, err
