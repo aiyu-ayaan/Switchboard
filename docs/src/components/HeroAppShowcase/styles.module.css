@@ -1,0 +1,300 @@
+.showcaseRoot {
+  position: relative;
+  width: 100%;
+  max-width: 1080px;
+  margin: 1.5rem auto 2.5rem;
+  padding: 0 1rem;
+}
+
+.ambientGlow {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 85%;
+  height: 70%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(122, 162, 247, 0.25) 0%,
+    rgba(187, 154, 247, 0.1) 45%,
+    transparent 72%
+  );
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tabsHeader {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.tabList {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: rgba(22, 22, 30, 0.85);
+  border: 1px solid var(--switchboard-edge);
+  border-radius: 999px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tabButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tabButton:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tabButtonActive {
+  background: linear-gradient(135deg, rgba(122, 162, 247, 0.3) 0%, rgba(187, 154, 247, 0.2) 100%);
+  border-color: rgba(122, 162, 247, 0.5);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(122, 162, 247, 0.3);
+}
+
+.tabIcon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.tabDescription {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--ifm-color-emphasis-700);
+  max-width: 680px;
+  margin: 0 auto 1.25rem;
+  line-height: 1.5;
+}
+
+.tabLearnMore {
+  color: var(--switchboard-blue);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 0.25rem;
+}
+
+.mobileDeviceSwitcher {
+  display: none;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+  position: relative;
+  z-index: 2;
+}
+
+.mobileSwitchBtn {
+  background: var(--switchboard-surface-900);
+  border: 1px solid var(--switchboard-edge);
+  color: var(--ifm-color-emphasis-700);
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mobileSwitchBtnActive {
+  background: var(--switchboard-blue);
+  color: #fff;
+  border-color: var(--switchboard-blue);
+}
+
+.stageContainer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-height: 480px;
+}
+
+.desktopWindow {
+  position: relative;
+  width: 82%;
+  background: var(--switchboard-surface-950);
+  border: 1px solid var(--switchboard-edge);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.7);
+  transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.desktopWindowFocused {
+  border-color: rgba(122, 162, 247, 0.4);
+}
+
+.windowTitlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.9rem;
+  background: var(--switchboard-surface-900);
+  border-bottom: 1px solid var(--switchboard-edge);
+}
+
+.trafficLights {
+  display: flex;
+  gap: 6px;
+}
+
+.dotClose, .dotMinimize, .dotMaximize {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.dotClose { background: #f7768e; }
+.dotMinimize { background: #e0af68; }
+.dotMaximize { background: #9ece6a; }
+
+.windowTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.platformBadge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(122, 162, 247, 0.15);
+  color: var(--switchboard-blue);
+  font-weight: 600;
+}
+
+.desktopScreen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #000;
+}
+
+.desktopImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.desktopFloatingTag {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  background: rgba(22, 22, 30, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--ifm-color-emphasis-700);
+  border: 1px solid var(--switchboard-edge);
+}
+
+.phoneMockup {
+  position: absolute;
+  right: 0%;
+  bottom: -20px;
+  width: 255px;
+  background: #111217;
+  border: 4px solid #292e42;
+  border-radius: 32px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px -6px rgba(0, 0, 0, 0.85);
+  z-index: 5;
+  transition: transform 0.3s ease;
+}
+
+.phoneMockup:hover, .phoneMockupFocused {
+  transform: translateY(-6px);
+}
+
+.phoneHardwareTop {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 6px 0 4px;
+  background: #111217;
+}
+
+.phoneSpeaker {
+  width: 44px;
+  height: 4px;
+  background: #3b4261;
+  border-radius: 2px;
+}
+
+.phoneScreen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 9 / 19.5;
+  background: #000;
+  overflow: hidden;
+}
+
+.phoneImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.phoneHardwareBottom {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0 6px;
+  background: #111217;
+}
+
+.homeIndicator {
+  width: 72px;
+  height: 3px;
+  background: #3b4261;
+  border-radius: 2px;
+}
+
+@media screen and (max-width: 860px) {
+  .mobileDeviceSwitcher {
+    display: flex;
+  }
+  .stageContainer {
+    flex-direction: column;
+    align-items: center;
+  }
+  .desktopWindow {
+    width: 100%;
+  }
+  .phoneMockup {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    margin-top: 1.5rem;
+    width: 280px;
+  }
+  .hideOnMobile {
+    display: none !important;
+  }
+}

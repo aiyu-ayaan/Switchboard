@@ -31,7 +31,7 @@ Switchboard is designed around a **Zero-Password, Local-First Trust Model**:
 
 ### 1. Host Identity & Ephemeral Pairing Token
 When the desktop daemon initializes:
-1. It loads or generates a stable host identity key pair: $(sk_{host}, pk_{host})$.
+1. It loads or generates a stable host identity key pair: `(sk_host, pk_host)`.
 2. It generates an ephemeral pairing code `code` (e.g., `0XTC6D1B0F`) with a rolling 5-minute expiration window.
 3. It bundles the host connection coordinates and public key into a JSON QR payload:
 
@@ -49,7 +49,7 @@ When the desktop daemon initializes:
 
 ### 2. Client Key Generation & Handshake Request
 1. The Android client opens its camera scanner and reads the QR code (or receives the host IP and 10-character code via manual entry).
-2. The client generates its own ephemeral key pair: $(sk_{client\_eph}, pk_{client\_eph})$.
+2. The client generates its own ephemeral key pair: `(sk_client_eph, pk_client_eph)`.
 3. The client opens a WebSocket connection to `ws://{host}:{port}/ws`.
 4. The client initiates the cryptographic handshake by sending a `pair_request` envelope:
 
@@ -68,11 +68,17 @@ When the desktop daemon initializes:
 ### 3. Key Agreement & Shared Secret Derivation
 1. The host validates that `code` matches its currently active pairing code and has not expired.
 2. The host computes the raw shared ECDH secret:
-   $$Z = \text{X25519}(sk_{host}, pk_{client\_eph})$$
+   ```text
+   Z = X25519(sk_host, pk_client_eph)
+   ```
 3. The client independently computes the identical secret:
-   $$Z = \text{X25519}(sk_{client\_eph}, pk_{host})$$
+   ```text
+   Z = X25519(sk_client_eph, pk_host)
+   ```
 4. Both sides pass the shared secret through HKDF-SHA256 with contextual salt and application info (`"Switchboard-v1-Session"`):
-   $$K_{session} = \text{HKDF-Expand}(\text{HKDF-Extract}(\text{salt}, Z), \text{"Switchboard-v1-Session"}, 32)$$
+   ```text
+   K_session = HKDF-Expand(HKDF-Extract(salt, Z), "Switchboard-v1-Session", 32)
+   ```
 5. The host persists the client’s identity in SQLite, immediately rotates the pairing code (so the displayed QR code cannot be reused by another party), and returns an authenticated confirmation:
 
 ```json

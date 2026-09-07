@@ -1,0 +1,167 @@
+.heroBanner {
+  position: relative;
+  overflow: hidden;
+  padding: 6rem 1rem 5rem;
+  text-align: center;
+  background: radial-gradient(
+      60% 90% at 50% 0%,
+      var(--switchboard-glow) 0%,
+      rgba(122, 162, 247, 0) 70%
+    ),
+    var(--ifm-background-color);
+  border-bottom: 1px solid var(--switchboard-edge);
+}
+
+.heroBanner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--ifm-font-color-base) 6%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+  mask-image: radial-gradient(60% 70% at 50% 20%, black, transparent);
+  pointer-events: none;
+}
+
+.heroInner {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.heroBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(122, 162, 247, 0.4);
+  background: var(--switchboard-blue-soft);
+  color: var(--switchboard-blue);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 1.5rem;
+}
+
+.heroBadgesWrapper {
+  display: flex;
+  justify-content: center;
+  margin: 2.25rem auto 1.5rem;
+  max-width: 920px;
+  width: 100%;
+}
+
+.heroTitle {
+  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  font-weight: 800;
+  margin-bottom: 1rem;
+  background: linear-gradient(
+    135deg,
+    #ffffff 20%,
+    var(--switchboard-blue) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.heroSubtitle {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--ifm-color-emphasis-700);
+  max-width: 580px;
+  margin: 0 auto 1rem;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.primaryButton {
+  background: var(--switchboard-blue);
+  border: none;
+  border-radius: 8px;
+  box-shadow: var(--switchboard-shadow-panel);
+  color: #fff !important;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.primaryButton:hover {
+  background: var(--switchboard-blue-hover);
+  box-shadow: var(--switchboard-shadow-pop);
+}
+
+.stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.stackPill {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  border: 1px solid var(--switchboard-edge);
+  color: var(--ifm-color-emphasis-700);
+  background: var(--switchboard-surface-900);
+}
+
+.section {
+  padding: 4rem 0;
+}
+
+.sectionAlt {
+  background: var(--switchboard-surface-950);
+  border-top: 1px solid var(--switchboard-edge);
+  border-bottom: 1px solid var(--switchboard-edge);
+}
+
+.sectionHeading {
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--switchboard-blue);
+  margin-bottom: 0.75rem;
+}
+
+.sectionTitle {
+  text-align: center;
+  font-size: 1.9rem;
+  font-weight: 700;
+  margin-bottom: 3rem;
+}
+
+.ctaSection {
+  text-align: center;
+  padding: 4rem 1rem 5rem;
+}
+
+.ctaTitle {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.ctaSubtitle {
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 1.75rem;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 4rem 1rem 3rem;
+  }
+}

@@ -39,7 +39,7 @@ nullable to distinguish "unset" from "set to zero".
 
 ---
 
-## Two tracks {#two-tracks}
+## Two tracks
 
 Both run at once over the same session, and `CameraFrame.codec` says which is
 which.

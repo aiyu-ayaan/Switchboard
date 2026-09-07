@@ -1,0 +1,121 @@
+/**
+ * Switchboard Tokyo Night Documentation Theme
+ * Matching Switchboard Electron Host & Jetpack Compose Android Client
+ */
+
+:root {
+  --ifm-color-primary: #7aa2f7;
+  --ifm-color-primary-dark: #638ae6;
+  --ifm-color-primary-darker: #527ad6;
+  --ifm-color-primary-darkest: #3c5ea8;
+  --ifm-color-primary-light: #8cb1f9;
+  --ifm-color-primary-lighter: #9ec0fb;
+  --ifm-color-primary-lightest: #c5d8fd;
+  --ifm-code-font-size: 90%;
+  --docusaurus-highlighted-code-line-bg: rgba(122, 162, 247, 0.12);
+
+  --switchboard-blue: #7aa2f7;
+  --switchboard-blue-hover: #638ae6;
+  --switchboard-blue-soft: rgba(122, 162, 247, 0.14);
+  --switchboard-glow: rgba(122, 162, 247, 0.35);
+
+  --switchboard-purple: #bb9af7;
+  --switchboard-green: #9ece6a;
+  --switchboard-yellow: #e0af68;
+  --switchboard-red: #f7768e;
+  --switchboard-cyan: #7dcfff;
+
+  /* Tokyo Night Ground & Surface Ramp */
+  --switchboard-ground: #1a1b26;
+  --switchboard-surface-950: #16161e;
+  --switchboard-surface-900: #1f2335;
+  --switchboard-surface-850: #24283b;
+  --switchboard-surface-800: #292e42;
+  --switchboard-surface-700: #3b4261;
+
+  --switchboard-edge: rgba(255, 255, 255, 0.08);
+
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', Consolas, monospace;
+
+  --switchboard-radius: 0.85rem;
+  --switchboard-shadow-panel: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --switchboard-shadow-pop: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+
+  --ifm-background-color: var(--switchboard-ground);
+  --ifm-background-surface-color: var(--switchboard-surface-900);
+  --ifm-navbar-background-color: var(--switchboard-surface-950);
+  --ifm-footer-background-color: var(--switchboard-surface-950);
+  --ifm-toc-border-color: var(--switchboard-edge);
+  --ifm-color-emphasis-300: var(--switchboard-edge);
+  --ifm-hr-border-color: var(--switchboard-edge);
+  --ifm-table-border-color: var(--switchboard-edge);
+  --ifm-code-background: var(--switchboard-surface-900);
+}
+
+body {
+  background: var(--switchboard-ground);
+}
+
+.markdown h2 {
+  --ifm-h2-font-size: 1.55rem;
+  border-bottom: 1px solid var(--switchboard-edge);
+  padding-bottom: 0.4rem;
+}
+
+.markdown h3 {
+  --ifm-h3-font-size: 1.2rem;
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.navbar {
+  border-bottom: 1px solid var(--switchboard-edge);
+  box-shadow: none;
+  background-color: var(--switchboard-surface-950);
+}
+
+.navbar__link--active {
+  color: var(--switchboard-blue);
+}
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--switchboard-edge) !important;
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  background-color: var(--switchboard-blue-soft);
+  color: var(--switchboard-blue);
+  font-weight: 600;
+  border-left: 3px solid var(--switchboard-blue);
+  border-radius: 0 6px 6px 0;
+}
+
+.footer {
+  border-top: 1px solid var(--switchboard-edge);
+  background-color: var(--switchboard-surface-950);
+}
+
+/* Admonitions styling */
+.alert--info {
+  --ifm-alert-background-color: rgba(122, 162, 247, 0.12);
+  --ifm-alert-border-color: var(--switchboard-blue);
+}
+
+.alert--success {
+  --ifm-alert-background-color: rgba(158, 206, 106, 0.12);
+  --ifm-alert-border-color: var(--switchboard-green);
+}
+
+.alert--warning {
+  --ifm-alert-background-color: rgba(224, 175, 104, 0.12);
+  --ifm-alert-border-color: var(--switchboard-yellow);
+}
+
+.alert--danger {
+  --ifm-alert-background-color: rgba(247, 118, 142, 0.12);
+  --ifm-alert-border-color: var(--switchboard-red);
+}
