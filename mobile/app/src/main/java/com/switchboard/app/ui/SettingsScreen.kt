@@ -60,17 +60,41 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import com.switchboard.app.data.ThemeConfig
 import com.switchboard.app.data.ThemeMode
 import com.switchboard.app.data.TransferConfig
 import com.switchboard.app.transfer.RateUnit
+
+private object AvatarCache {
+    var cached: ImageBitmap? = null
+}
 
 @Composable
 fun SettingsScreen(
     themeConfig: ThemeConfig,
     transferConfig: TransferConfig,
     alwaysOn: Boolean,
+    startOnBoot: Boolean,
     onSetAlwaysOn: (Boolean) -> Unit,
+    onSetStartOnBoot: (Boolean) -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetSaveDirectory: (String) -> Unit,
@@ -163,6 +187,20 @@ fun SettingsScreen(
                     checked = alwaysOn,
                     onCheckedChange = { on -> if (on) enableAlwaysOn() else onSetAlwaysOn(false) }
                 )
+            }
+        }
+
+        if (alwaysOn) {
+            item {
+                SettingsCard {
+                    SwitchRow(
+                        icon = Icons.Filled.PowerSettingsNew,
+                        title = "Start on Boot",
+                        description = "Automatically connect to your computer when your device turns on.",
+                        checked = startOnBoot,
+                        onCheckedChange = onSetStartOnBoot
+                    )
+                }
             }
         }
 
@@ -379,7 +417,7 @@ fun SettingsScreen(
 
         item {
             Text(
-                text = "About",
+                text = "About Developer",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -404,19 +442,26 @@ fun SettingsScreen(
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(46.dp)
+                            modifier = Modifier.size(50.dp),
+                            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.Person,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                            GithubAvatar(
+                                url = "https://avatars.githubusercontent.com/u/76834976?v=4",
+                                contentDescription = "Aiyu Ayaan",
+                                modifier = Modifier.size(50.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.width(14.dp))
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 text = "Aiyu Ayaan",
                                 style = MaterialTheme.typography.titleMedium,
@@ -430,6 +475,80 @@ fun SettingsScreen(
                         }
                     }
 
+                    Text(
+                        text = "Software developer and creator of Switchboard. Focused on low-latency systems, zero-trust local networking, and seamless cross-device workflows without third-party cloud dependence. Code is objective.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Connect & Profiles",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                DevLinkChip(
+                                    label = "GitHub",
+                                    icon = Icons.Filled.Code,
+                                    url = "https://github.com/aiyu-ayaan",
+                                    modifier = Modifier.weight(1f)
+                                )
+                                DevLinkChip(
+                                    label = "Portfolio",
+                                    icon = Icons.Filled.Language,
+                                    url = "https://me.aiyu.co.in/",
+                                    modifier = Modifier.weight(1f)
+                                )
+                                DevLinkChip(
+                                    label = "LinkedIn",
+                                    icon = Icons.Filled.Share,
+                                    url = "https://www.linkedin.com/in/aiyu/",
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "About Switchboard",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
+            )
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -451,7 +570,7 @@ fun SettingsScreen(
                                 )
                             }
                             Text(
-                                text = "Ephemeral X25519 ECDH key exchange with AES-256-GCM local encrypted WebSocket framing.",
+                                text = "Ephemeral X25519 ECDH key exchange with AES-256-GCM local encrypted WebSocket framing. Direct peer-to-peer connection with no cloud relay.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -689,4 +808,100 @@ private fun folderLabel(treeUri: String): String {
     if (treeUri.isEmpty()) return "Downloads / Switchboard (Default)"
     val documentId = Uri.decode(treeUri.substringAfterLast('/'))
     return documentId.substringAfterLast(':').ifEmpty { documentId }
+}
+
+@Composable
+private fun GithubAvatar(
+    url: String,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    fallback: @Composable () -> Unit
+) {
+    var bitmap by remember(url) { mutableStateOf(AvatarCache.cached) }
+    var loadFailed by remember(url) { mutableStateOf(false) }
+
+    LaunchedEffect(url) {
+        if (bitmap != null) return@LaunchedEffect
+        withContext(Dispatchers.IO) {
+            try {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(10, TimeUnit.SECONDS)
+                    .build()
+                val request = Request.Builder().url(url).build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val stream = response.body.byteStream()
+                    val decoded = BitmapFactory.decodeStream(stream)
+                    if (decoded != null) {
+                        val imgBitmap = decoded.asImageBitmap()
+                        AvatarCache.cached = imgBitmap
+                        bitmap = imgBitmap
+                    } else {
+                        loadFailed = true
+                    }
+                } else {
+                    loadFailed = true
+                }
+            } catch (_: Throwable) {
+                loadFailed = true
+            }
+        }
+    }
+
+    val current = bitmap
+    if (current != null && !loadFailed) {
+        Image(
+            bitmap = current,
+            contentDescription = contentDescription,
+            modifier = modifier.clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        fallback()
+    }
+}
+
+@Composable
+private fun DevLinkChip(
+    label: String,
+    icon: ImageVector,
+    url: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = modifier.clickable {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(11.dp)
+            )
+        }
+    }
 }

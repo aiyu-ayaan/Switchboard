@@ -99,10 +99,21 @@ class HostStore(context: Context) {
             prefs.putString(KEY_ALWAYS_ON, if (value) "1" else "0")
         }
 
+    /**
+     * Whether the background connection service should automatically start
+     * up on device reboot if alwaysOn is enabled.
+     */
+    var startOnBoot: Boolean
+        get() = prefs.getString(KEY_START_ON_BOOT) != "0"
+        set(value) {
+            prefs.putString(KEY_START_ON_BOOT, if (value) "1" else "0")
+        }
+
     private companion object {
         const val KEY_IDENTITY = "identity-seed"
         const val KEY_HOSTS = "known-hosts"
         const val KEY_ALWAYS_ON = "always-on"
+        const val KEY_START_ON_BOOT = "start-on-boot"
         const val KEY_LAST_HOST = "last-host"
         const val LEGACY_PREFS = "switchboard-secure"
 

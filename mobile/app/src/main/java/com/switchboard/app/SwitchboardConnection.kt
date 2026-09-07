@@ -44,6 +44,8 @@ data class ConnectionState(
     val error: String? = null,
     /** The session is held open past the UI, and redialled when it drops. */
     val alwaysOn: Boolean = false,
+    /** Whether the connection service launches on device boot. */
+    val startOnBoot: Boolean = true,
     val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig(),
     val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList()
 )
@@ -72,7 +74,7 @@ class SwitchboardConnection private constructor(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _state = MutableStateFlow(
-        ConnectionState(hosts = store.hosts(), alwaysOn = store.alwaysOn)
+        ConnectionState(hosts = store.hosts(), alwaysOn = store.alwaysOn, startOnBoot = store.startOnBoot)
     )
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
@@ -138,6 +140,16 @@ class SwitchboardConnection private constructor(context: Context) {
                 disconnect()
             }
         }
+    }
+
+    /**
+     * Toggles whether the background connection service should automatically start
+     * up on device reboot when alwaysOn is active.
+     */
+    fun setStartOnBoot(enabled: Boolean) {
+        if (store.startOnBoot == enabled) return
+        store.startOnBoot = enabled
+        _state.update { it.copy(startOnBoot = enabled) }
     }
 
     // ---- UI attachment ----

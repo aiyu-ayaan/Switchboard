@@ -67,6 +67,8 @@ data class UiState(
     val discovered: List<DiscoveredHost> = emptyList(),
     /** The session is held open past the UI, and redialled when it drops. */
     val alwaysOn: Boolean = false,
+    /** Whether the connection service launches on device boot. */
+    val startOnBoot: Boolean = true,
     val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig(),
     val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList()
 ) {
@@ -130,6 +132,7 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                         artwork = live.artwork,
                         error = live.error,
                         alwaysOn = live.alwaysOn,
+                        startOnBoot = live.startOnBoot,
                         deckConfig = live.deckConfig,
                         installedApps = live.installedApps
                     )
@@ -211,6 +214,12 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
      * cannot drift apart.
      */
     fun setAlwaysOn(enabled: Boolean) = connection.setAlwaysOn(enabled)
+
+    /**
+     * Toggles whether the background connection service should automatically start
+     * up on device reboot when alwaysOn is active.
+     */
+    fun setStartOnBoot(enabled: Boolean) = connection.setStartOnBoot(enabled)
 
     /** "Forget system": drops stored keys for a host and leaves it if active. */
     fun forget(host: KnownHost) {
