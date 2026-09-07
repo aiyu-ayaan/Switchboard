@@ -69,8 +69,8 @@ const (
 	ActionCameraFrame   = "camera.frame"   // phone -> desktop: one encoded frame
 	ActionCameraState   = "camera.state"   // phone -> desktop: capabilities and settings
 
-	ActionHostState = "host.state" // event: full snapshot pushed to clients
-	ActionPing      = "system.ping"
+	ActionHostState  = "host.state" // event: full snapshot pushed to clients
+	ActionPing       = "system.ping"
 	ActionSystemLock = "system.lock"
 
 	// Remote unlock. The phone proves a fingerprint was just presented by
@@ -647,17 +647,22 @@ type DeckAction struct {
 }
 
 type DeckKey struct {
-	Index     int        `json:"index"`
-	Title     string     `json:"title"`
-	Icon      string     `json:"icon"`
-	BgColor   string     `json:"bgColor,omitempty"`
-	IconColor string     `json:"iconColor,omitempty"`
-	Badge     string     `json:"badge,omitempty"`
-	Action    DeckAction `json:"action"`
+	Index     int    `json:"index"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon"`
+	BgColor   string `json:"bgColor,omitempty"`
+	IconColor string `json:"iconColor,omitempty"`
+	Badge     string `json:"badge,omitempty"`
+	// IconData is an optional data: URI holding the real desktop icon of the
+	// launch target, extracted by the host shell. When present both the desktop
+	// surface and the phone render it instead of the `Icon` glyph slug, so a key
+	// looks like the application it launches.
+	IconData string     `json:"iconData,omitempty"`
+	Action   DeckAction `json:"action"`
 }
 
 type DeckInfobar struct {
-	Mode       string `json:"mode"`       // "clock", "media", "page", "text"
+	Mode       string `json:"mode"` // "clock", "media", "page", "text"
 	CustomText string `json:"customText"`
 	Format     string `json:"format,omitempty"`
 }
@@ -733,4 +738,3 @@ type InstalledApp struct {
 	Path string `json:"path"`
 	Icon string `json:"icon,omitempty"`
 }
-

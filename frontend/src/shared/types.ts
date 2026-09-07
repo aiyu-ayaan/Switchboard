@@ -344,6 +344,8 @@ export interface DeckKey {
   bgColor?: string;
   iconColor?: string;
   badge?: string;
+  /** data: URI of the launch target's real desktop icon, extracted by the host shell. */
+  iconData?: string;
   action: DeckAction;
 }
 

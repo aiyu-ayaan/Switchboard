@@ -550,6 +550,8 @@ data class DeckKey(
     val bgColor: String? = null,
     val iconColor: String? = null,
     val badge: String? = null,
+    /** data: URI of the launch target's real desktop icon, supplied by the host. */
+    val iconData: String? = null,
     val action: DeckAction = DeckAction()
 )
 

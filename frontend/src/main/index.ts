@@ -567,13 +567,39 @@ function registerFileBridge(): void {
 
   // Keep host filesystem access in the main process while allowing the deck
   // picker to show the actual Windows shell icon for each discovered shortcut.
+  //
+  // The Start Menu catalogue is made of `.lnk` shortcuts, and asking the shell
+  // for a shortcut's own icon yields the generic "shortcut" document glyph --
+  // every entry looked identical. The icon a user recognises belongs to what
+  // the shortcut points at, so resolve the link first and read the icon from
+  // its declared icon location, or failing that from its target executable.
   ipcMain.handle('deck:appIcon', async (_event, path: string) => {
     if (typeof path !== 'string' || path.length === 0 || path.length > 32_768) return '';
-    try {
-      return (await app.getFileIcon(path, { size: 'small' })).toDataURL();
-    } catch {
-      return '';
+
+    const candidates: string[] = [];
+    if (process.platform === 'win32' && path.toLowerCase().endsWith('.lnk')) {
+      try {
+        const link = shell.readShortcutLink(path);
+        if (link.icon) candidates.push(link.icon);
+        if (link.target) candidates.push(link.target);
+      } catch {
+        // Unreadable shortcut: fall through to the shortcut file itself.
+      }
     }
+    candidates.push(path);
+
+    for (const candidate of candidates) {
+      try {
+        // 48px. A deck key renders the icon far larger than the 16px 'small'
+        // variant the picker used to ask for, and Windows hands back genuinely
+        // more detail at this size for any binary that ships an icon resource.
+        const image = await app.getFileIcon(candidate, { size: 'large' });
+        if (!image.isEmpty()) return image.toDataURL();
+      } catch {
+        // Try the next candidate.
+      }
+    }
+    return '';
   });
 }
 
