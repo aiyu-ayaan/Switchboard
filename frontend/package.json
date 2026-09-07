@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Switchboard Desktop Application (Electron + React + Tailwind CSS)",
   "main": "dist/main/index.js",
