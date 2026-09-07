@@ -27,10 +27,12 @@ That leaves exactly two mechanisms:
 | Mechanism | What it is | Why not / why |
 | :--- | :--- | :--- |
 | **Credential Provider** | A COM DLL registered in `HKLM` that LogonUI loads and asks for credentials | What Switchboard does. The supported route, and the only one that works whatever you sign in with |
-| **SYSTEM keystroke injection** | A privileged helper attaches to the Winlogon desktop and types the password | Tried and dropped. It only reached a lock screen already showing the password field, so a PIN or Hello sign-in got the password typed into the wrong box |
+| **SYSTEM keystroke injection** | A privileged helper attaches to the Winlogon desktop and types the password | The fallback, used until the DLL is built. It only reaches a lock screen already showing the password field, so a PIN or Hello sign-in gets the password typed into the wrong box |
 
-Switchboard takes the first. The limits that come with it are listed below
-rather than buried.
+Switchboard implements both and prefers the first. Building the provider needs
+an MSVC toolchain, so a checkout without one still gets a working unlock — with
+the typing limitation, which is exactly what the provider removes. The limits
+are listed below rather than buried.
 
 ---
 
@@ -109,6 +111,9 @@ Four steps, once. You need an **elevated** PowerShell or Command Prompt.
 
 ### 1. Build the credential provider
 
+Strongly recommended, and the only way unlock works with a PIN or Hello lock
+screen. Skip it and `setup` falls back to the typing helper, telling you so.
+
 Needs the MSVC C++ toolchain, once:
 
 ```
@@ -148,9 +153,15 @@ writes a protected ACL admitting only `SYSTEM` and `Administrators`, and
 ```
 
 `setup` does step 2 and this one together, because either alone is a
-half-working install. It writes the CLSID under `HKLM\SOFTWARE\Classes\CLSID`
-and lists it in `HKLM\...\Authentication\Credential Providers`. No reboot
-needed — LogonUI loads providers afresh each time the session locks.
+half-working install. With the DLL present it writes the CLSID under
+`HKLM\SOFTWARE\Classes\CLSID` and lists it in
+`HKLM\...\Authentication\Credential Providers`; no reboot needed, since LogonUI
+loads providers afresh each time the session locks.
+
+Without the DLL it registers the `Switchboard-Unlock` scheduled task instead
+and prints what you are giving up. In that mode the lock screen has to be
+asking for a **password**: sign out and back in with your password once, or
+click **Sign-in options** on the lock screen and pick the password key.
 
 ### 4. Enrol the phone
 
@@ -224,7 +235,8 @@ qualify, even where Android rates them strong.
 | **Settings → Security** missing on the phone | The phone has no fingerprint reader at all | Nothing to do — face and iris do not qualify |
 | "No fingerprint is registered on this phone" | The sensor is there but unused | Add a fingerprint in Android **Settings → Security**, then reopen the Switchboard screen |
 | **Set up** is greyed out | The connected desktop does not advertise `unlock` | Run `unlock enroll` on that desktop and reconnect |
-| "unlock provider not listening" | The DLL is not registered, or the desktop is not actually locked | Re-run `unlock setup` elevated; check `bin/switchboard_cp.dll` sits next to `server.exe` |
+| "no unlock mechanism reachable" | Neither the provider nor the typing helper is installed | Run `unlock setup` elevated; for the provider, check `switchboard_cp.dll` sits next to `server.exe` |
+| Nothing happens, no error | On the typing fallback, the lock screen is asking for a PIN | Build the provider, or switch the lock screen to password sign-in |
 | Password rejected on the lock screen | The stored copy no longer matches the account | Run `unlock enroll` again |
 | "unlock the desktop before enrolling" | Enrolment while locked | Unlock at the keyboard first, then enrol |
 | Worked, then stopped | A new fingerprint was added to the phone, invalidating the key | **Remove key**, then **Set up** again |
