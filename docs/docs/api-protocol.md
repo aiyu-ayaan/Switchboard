@@ -418,7 +418,7 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `POST` | `/local/files/send` | Queue desktop files to send to a connected device. | `{"deviceId": "...", "paths": ["..."]}` |
 | `POST` | `/local/files/control` | Pause, resume, or cancel a transfer. | `{"transferId": "...", "action": "cancel"}` |
 | `GET` | `/local/settings` | Retrieve host preferences. | None |
-| `POST` | `/local/settings` | Update host preferences. | `{"downloadDir": "...", "runInBackground": true}` |
+| `POST` | `/local/settings` | Update host preferences. | `{"downloadDir": "...", "runInBackground": true, "autoStart": true}` |
 | `POST` | `/local/system/lock` | Lock the host workstation session. | `{}` |
 | `GET` | `/local/deck` | Get current Stream Deck Neo configuration. | None |
 | `POST` | `/local/deck` | Save and broadcast updated Stream Deck Neo configuration. | `DeckConfig` JSON object |
