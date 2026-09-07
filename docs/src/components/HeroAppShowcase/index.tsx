@@ -192,8 +192,14 @@ export default function HeroAppShowcase(): React.ReactElement {
           onMouseEnter={() => setHoveredTarget('android')}
           onMouseLeave={() => setHoveredTarget(null)}
         >
+          {/* Floating Mobile Badge */}
+          <div className={styles.phoneFloatingBadge}>
+            <span className={styles.phoneBadgeText}>📱 Android (Compose)</span>
+          </div>
+
           <div className={styles.phoneHardwareTop}>
             <div className={styles.phoneSpeaker} />
+            <div className={styles.phoneCamera} />
           </div>
 
           <div className={styles.phoneScreen}>
