@@ -31,6 +31,21 @@ import kotlin.coroutines.suspendCoroutine
  * Go verifies it from the standard library, so both ends agree with no
  * dependency; see backend/internal/server/unlock.go.
  */
+/** What [UnlockKey.support] found, and what the phone should say about it. */
+enum class UnlockSupport {
+    /** A fingerprint is registered and the keystore will gate a key on it. */
+    READY,
+
+    /** The sensor is there; the user has not registered a finger on it. */
+    NONE_ENROLLED,
+
+    /** Hardware present but unusable for a keystore-bound key. */
+    UNAVAILABLE,
+
+    /** No fingerprint reader. Face and iris do not qualify. */
+    NO_SENSOR,
+}
+
 object UnlockKey {
 
     private const val ALIAS = "switchboard-unlock"
@@ -38,20 +53,32 @@ object UnlockKey {
     private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
 
     /**
-     * Whether this device can take part at all.
+     * Why this device can or cannot take part.
      *
-     * Both halves matter. [PackageManager.FEATURE_FINGERPRINT] is what makes
-     * this a fingerprint feature rather than any strong biometric, and
-     * [BiometricManager.Authenticators.BIOMETRIC_STRONG] is what makes the
+     * Both halves of the check matter. [PackageManager.FEATURE_FINGERPRINT] is
+     * what makes this a fingerprint feature rather than any strong biometric,
+     * and [BiometricManager.Authenticators.BIOMETRIC_STRONG] is what makes the
      * keystore willing to gate a key on it — a device whose sensor is only
-     * class 2 cannot back one. A phone missing either simply never sees the
-     * unlock control.
+     * class 2 cannot back one.
+     *
+     * The reason is returned rather than a boolean because the commonest
+     * failure by far is a phone that has the hardware but no finger registered
+     * on it, and that is fixable in thirty seconds if anyone says so. Hiding
+     * the whole section instead makes a working device look like an app that
+     * never shipped the feature.
      */
-    fun isSupported(context: Context): Boolean {
-        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) return false
-        return BiometricManager.from(context)
-            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-            BiometricManager.BIOMETRIC_SUCCESS
+    fun support(context: Context): UnlockSupport {
+        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
+            return UnlockSupport.NO_SENSOR
+        }
+        return when (BiometricManager.from(context)
+            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
+            BiometricManager.BIOMETRIC_SUCCESS -> UnlockSupport.READY
+            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> UnlockSupport.NONE_ENROLLED
+            // A class 2 sensor lands here too: the device reports a fingerprint
+            // reader, but not one the keystore will bind a key to.
+            else -> UnlockSupport.UNAVAILABLE
+        }
     }
 
     /** True once a key exists, which is the local trace of having enrolled. */

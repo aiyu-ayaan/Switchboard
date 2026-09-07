@@ -465,7 +465,7 @@ fun SwitchboardApp(
                             alwaysOn = state.alwaysOn,
                             onSetAlwaysOn = viewModel::setAlwaysOn,
                             unlockConfig = UnlockConfig(
-                                availableOnPhone = state.unlockAvailableOnPhone,
+                                support = state.unlockSupport,
                                 enrolled = state.unlockEnrolled,
                                 hostAccepts = connected && state.hostAcceptsUnlock
                             ),

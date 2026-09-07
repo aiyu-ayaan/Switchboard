@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import com.switchboard.app.data.ThemeConfig
 import com.switchboard.app.data.ThemeMode
 import com.switchboard.app.data.TransferConfig
+import com.switchboard.app.data.UnlockSupport
 import com.switchboard.app.transfer.RateUnit
 
 /**
@@ -71,8 +72,8 @@ import com.switchboard.app.transfer.RateUnit
  * connected desktop's capabilities, so it is rebuilt from live state.
  */
 data class UnlockConfig(
-    /** The phone has a fingerprint sensor a keystore key can be gated on. */
-    val availableOnPhone: Boolean = false,
+    /** Whether this phone can gate a key on a fingerprint, and if not, why. */
+    val support: UnlockSupport = UnlockSupport.NO_SENSOR,
     /** A key exists on this phone. */
     val enrolled: Boolean = false,
     /** The connected desktop has a password enrolled for remote unlock. */
@@ -398,7 +399,11 @@ fun SettingsScreen(
         // phone needs a sensor a keystore key can be gated on, and the desktop
         // needs a password enrolled. Anything less and the section stays away
         // rather than showing a control that would fail on tap.
-        if (unlockConfig.availableOnPhone) {
+        // Shown whenever the phone has the hardware, not only when it is
+        // ready. A device with an unregistered fingerprint is one setting away
+        // from working, and a section that simply disappeared would leave no
+        // way to find that out.
+        if (unlockConfig.support != UnlockSupport.NO_SENSOR) {
             item {
                 Text(
                     text = "Security",
@@ -451,9 +456,24 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        if (!unlockConfig.enrolled && !unlockConfig.hostAccepts) {
+                        // Whichever end is not ready, named. Both can be
+                        // false at once; the phone's own state is the one the
+                        // user can act on without walking to the desktop, so it
+                        // is the one reported.
+                        val blocker = when {
+                            unlockConfig.support == UnlockSupport.NONE_ENROLLED ->
+                                "No fingerprint is registered on this phone. Add one in Android " +
+                                    "Settings \u2192 Security, then reopen this screen. Face unlock " +
+                                    "does not qualify."
+                            unlockConfig.support == UnlockSupport.UNAVAILABLE ->
+                                "This phone's fingerprint sensor cannot hold a hardware-backed key."
+                            !unlockConfig.enrolled && !unlockConfig.hostAccepts ->
+                                "The connected desktop has not been set up for remote unlock."
+                            else -> null
+                        }
+                        if (blocker != null) {
                             Text(
-                                text = "The connected desktop has not been set up for remote unlock.",
+                                text = blocker,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -465,7 +485,8 @@ fun SettingsScreen(
                             } else {
                                 TextButton(
                                     onClick = onEnrolUnlock,
-                                    enabled = unlockConfig.hostAccepts
+                                    enabled = unlockConfig.hostAccepts &&
+                                        unlockConfig.support == UnlockSupport.READY
                                 ) { Text("Set up") }
                             }
                         }

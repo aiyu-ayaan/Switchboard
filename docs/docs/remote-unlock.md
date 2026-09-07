@@ -220,7 +220,9 @@ qualify, even where Android rates them strong.
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
-| No unlock button on the phone | The desktop never enrolled a password, or the phone has no usable sensor | Run `unlock enroll`; check **Settings → Security** appears on the phone at all |
+| No unlock button on the phone | The desktop never enrolled a password, or the phone is not ready | Run `unlock enroll`; open **Settings → Security** on the phone, which names whichever end is not ready |
+| **Settings → Security** missing on the phone | The phone has no fingerprint reader at all | Nothing to do — face and iris do not qualify |
+| "No fingerprint is registered on this phone" | The sensor is there but unused | Add a fingerprint in Android **Settings → Security**, then reopen the Switchboard screen |
 | **Set up** is greyed out | The connected desktop does not advertise `unlock` | Run `unlock enroll` on that desktop and reconnect |
 | "unlock provider not listening" | The DLL is not registered, or the desktop is not actually locked | Re-run `unlock setup` elevated; check `bin/switchboard_cp.dll` sits next to `server.exe` |
 | Password rejected on the lock screen | The stored copy no longer matches the account | Run `unlock enroll` again |

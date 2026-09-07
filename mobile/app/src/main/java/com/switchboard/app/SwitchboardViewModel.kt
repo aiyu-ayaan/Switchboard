@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.switchboard.app.data.TransferPreferences
 import com.switchboard.app.data.KnownHost
 import com.switchboard.app.data.UnlockKey
+import com.switchboard.app.data.UnlockSupport
 import com.switchboard.app.net.Actions
 import com.switchboard.app.net.DiscoveredHost
 import com.switchboard.app.net.Display
@@ -70,8 +71,8 @@ data class UiState(
     val transfers: List<FileProgress> = emptyList(),
     /** Desktops seen over mDNS, so pairing does not need a typed IP address. */
     val discovered: List<DiscoveredHost> = emptyList(),
-    /** This phone has a fingerprint sensor a keystore key can be gated on. */
-    val unlockAvailableOnPhone: Boolean = false,
+    /** Whether this phone can gate a key on a fingerprint, and if not, why. */
+    val unlockSupport: UnlockSupport = UnlockSupport.NO_SENSOR,
     /** This phone holds such a key. Kept in state so the top bar does not
      *  hit the keystore on every recomposition. */
     val unlockEnrolled: Boolean = false,
@@ -101,7 +102,7 @@ data class UiState(
     val canUnlockSystem: Boolean get() = hostAcceptsUnlock && unlockEnrolled
 
     /** The phone could enrol but has not; Settings offers it. */
-    val canEnrolUnlock: Boolean get() = unlockAvailableOnPhone && !unlockEnrolled
+    val canEnrolUnlock: Boolean get() = unlockSupport == UnlockSupport.READY && !unlockEnrolled
 }
 
 /**
@@ -442,11 +443,11 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     /** Re-reads the keystore, which a new fingerprint enrolment can invalidate. */
     private fun refreshUnlockState() {
-        val available = UnlockKey.isSupported(getApplication())
+        val support = UnlockKey.support(getApplication())
         _uiState.update {
             it.copy(
-                unlockAvailableOnPhone = available,
-                unlockEnrolled = available && UnlockKey.isEnrolled()
+                unlockSupport = support,
+                unlockEnrolled = support == UnlockSupport.READY && UnlockKey.isEnrolled()
             )
         }
     }
