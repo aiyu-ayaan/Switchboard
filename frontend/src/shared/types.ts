@@ -134,6 +134,8 @@ export interface HostSettings {
   rateUnit: 'MBps' | 'Mbps';
   /** Keep the daemon alive with the window closed. */
   runInBackground: boolean;
+  /** Automatically launch Switchboard when the computer starts up. */
+  autoStart: boolean;
 }
 
 export interface LocalState {
@@ -301,6 +303,7 @@ export interface SwitchboardBridge {
     toggleMaximize(): Promise<boolean>;
     close(): Promise<void>;
   };
+  openExternal(url: string): Promise<void>;
 }
 
 export interface InstalledApp {

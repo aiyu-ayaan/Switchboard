@@ -113,7 +113,8 @@ const bridge: SwitchboardBridge = {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close')
-  }
+  },
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
 };
 
 contextBridge.exposeInMainWorld('switchboard', bridge);

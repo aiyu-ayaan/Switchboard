@@ -270,6 +270,31 @@ function registerWindowControls(): void {
     return mainWindow.isMaximized();
   });
   ipcMain.handle('window:close', () => mainWindow?.close());
+  ipcMain.handle('shell:openExternal', async (_event, url: string) => {
+    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+      await shell.openExternal(url);
+    }
+  });
+}
+
+function syncAutoStart(autoStart: boolean, background: boolean): void {
+  try {
+    if (isDev && !app.isPackaged) {
+      app.setLoginItemSettings({
+        openAtLogin: autoStart,
+        path: process.execPath,
+        args: [app.getAppPath(), '--hidden']
+      });
+    } else {
+      app.setLoginItemSettings({
+        openAtLogin: autoStart,
+        openAsHidden: background,
+        args: ['--hidden']
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to sync login item settings:', err);
+  }
 }
 
 /** Endpoints the renderer may reach, so a compromised page cannot pick its own. */
@@ -328,9 +353,19 @@ function registerDaemonBridge(): void {
     }
     const result = await daemonFetch<unknown>(route, body);
     if (route === '/state') {
-      runInBackground = (result as LocalState).settings?.runInBackground ?? runInBackground;
+      const state = result as LocalState;
+      if (state?.settings) {
+        runInBackground = state.settings.runInBackground ?? runInBackground;
+        if (typeof state.settings.autoStart === 'boolean') {
+          syncAutoStart(state.settings.autoStart, runInBackground);
+        }
+      }
     } else if (route === '/settings') {
-      runInBackground = (result as HostSettings).runInBackground;
+      const settings = result as HostSettings;
+      runInBackground = settings.runInBackground;
+      if (typeof settings.autoStart === 'boolean') {
+        syncAutoStart(settings.autoStart, runInBackground);
+      }
     }
     return result;
   });
@@ -604,6 +639,7 @@ async function bootstrap(): Promise<void> {
   // Read before `whenReady`, because Explorer's verb is how this launch was
   // started: the paths are already on our own command line.
   const coldSendPaths = pathsFromArgv(process.argv);
+  const isAutoBoot = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
 
   await app.whenReady();
   registerWindowControls();
@@ -629,15 +665,31 @@ async function bootstrap(): Promise<void> {
   });
   await startDaemon();
 
+  try {
+    const initialState = await daemonFetch<LocalState>('/state');
+    if (initialState?.settings) {
+      runInBackground = initialState.settings.runInBackground ?? runInBackground;
+      if (typeof initialState.settings.autoStart === 'boolean') {
+        syncAutoStart(initialState.settings.autoStart, runInBackground);
+      }
+    }
+  } catch {
+    // Daemon will be polled by renderer anyway
+  }
+
   // Launched by the Explorer verb rather than by the user: the picker is the
   // entire interaction, so the shell stays out of the way. The window is still
   // created, hidden — closing the last one would quit the app and take the
   // daemon, and the transfer, down with it — and the tray icon is what keeps
   // that running app visible and quittable.
-  createWindow({ show: coldSendPaths.length === 0 });
+  // Similarly, on automatic boot launch with background mode enabled, stay in tray.
+  const shouldShow = coldSendPaths.length === 0 && !(isAutoBoot && runInBackground);
+  createWindow({ show: shouldShow });
   if (coldSendPaths.length > 0) {
     ensureTray();
     queueSendPaths(coldSendPaths);
+  } else if (!shouldShow) {
+    ensureTray();
   }
 
   // Unpackaged, `execPath` is electron.exe and needs the app directory handed
