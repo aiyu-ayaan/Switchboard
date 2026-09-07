@@ -9,8 +9,9 @@
     <a href="#screenshots">Screenshots</a> •
     <a href="#features">Features</a> •
     <a href="#how-it-works">How It Works</a> •
-    <a href="#getting-started">Getting Started</a> •
-    <a href="docs/docs/README.md">Full Docs</a>
+    <a href="#-download--installation">Download</a> •
+    <a href="#%EF%B8%8F-contributor--developer-setup">Contributors</a> •
+    <a href="https://aiyu-ayaan.github.io/Switchboard/">Documentation</a>
   </p>
 
   <p>
@@ -121,44 +122,66 @@ The Go daemon sits between your phone and your operating system. When you drag a
 
 ---
 
-## Getting Started
+## 🚀 Download & Installation
+
+You don't need to build from source to use Switchboard! Pre-compiled, ready-to-run releases are available for both PC and Android on GitHub:
+
+👉 **[Download Latest Switchboard Release](https://github.com/aiyu-ayaan/Switchboard/releases)**
 
 ### What You'll Need
-- **PC**: Windows 10/11 (for DDC/CI and WASAPI mixer), Linux, or macOS.
-- **Phone**: Android 8.0 or newer.
-- **Network**: Both devices connected to the same Wi-Fi router or local network.
+- **PC**: Windows 10/11 (for DDC/CI monitor control and WASAPI audio mixer), Linux, or macOS.
+- **Phone**: Android 8.0 (Oreo, API 26) or newer.
+- **Network**: Both devices connected to the same local Wi-Fi router or subnet (no internet required).
 
 ---
 
-### Step 1: Clone the Repo
+### Step 1: Download & Install Desktop (PC)
+1. Head to the **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** page on your PC.
+2. Under **Assets**, download the desktop installer:
+   - **Windows**: `Switchboard-Setup.exe` (or the standalone portable archive).
+3. Run the installer or launch the executable.
+4. Switchboard starts the background Go control daemon and sits conveniently in your Windows system tray.
+   *(If prompted by Windows Defender Firewall, check **Private networks** and click **Allow access**).*
+
+### Step 2: Download & Install Mobile (Android)
+1. On your Android device, open **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** in your browser.
+2. Under **Assets**, download the Android application package:
+   - **Android**: `Switchboard.apk` (or `app-release.apk`).
+3. Tap the downloaded APK to install.
+   *(If prompted by Android security to allow installing unknown apps, tap **Settings**, enable **Allow from this source**, and proceed with installation).*
+
+### Step 3: Pair & Control
+1. **Open Desktop App**: Click the Switchboard icon in your system tray or app menu, and select the **Paired Devices** tab to view your pairing QR code (and 10-character manual PIN).
+2. **Scan on Phone**: Open Switchboard on your Android phone and tap **Scan QR Code**. Point your phone camera at the PC screen.
+   - *Alternatively, tap **Found on this network** to discover your PC automatically via local mDNS and enter the pairing code manually.*
+3. **You're Connected!**: Your PC's physical monitor brightness sliders, per-app volume mixer, air mouse touchpad, and encrypted file transfer immediately appear on your phone.
+
+---
+
+## 🛠️ Contributor & Developer Setup
+
+Are you a developer looking to contribute to Switchboard, add features, or build directly from source?
+
+Full code setup, inner-loop development workflows, and build instructions are documented in:
+👉 **[CONTRIBUTING.md](CONTRIBUTING.md)** (Monorepo setup, inner-loop dev commands, and commit conventions)
+👉 **[Documentation: Contributor Setup Guide](https://aiyu-ayaan.github.io/Switchboard/contributing)**
+
+### Quick Developer Commands
 ```bash
+# Clone repository with documentation submodules
 git clone --recurse-submodules https://github.com/aiyu-ayaan/Switchboard.git
 cd Switchboard
-```
 
-### Step 2: Install Dependencies & Run Desktop
-Make sure you have [Node.js 20+](https://nodejs.org/) and [Go 1.22+](https://go.dev/) installed.
-
-```bash
-# Install Node dependencies
+# Install dependencies
 pnpm install
 
-# Start both backend daemon and desktop UI
+# Run Desktop Host in development mode (Go daemon + Electron frontend)
 pnpm dev
-```
 
-*(You can also run them in separate terminals if you prefer: `cd backend && go run cmd/server/main.go` and `pnpm dev:frontend`)*
-
-### Step 3: Run the Android App
-Open the `mobile/` folder in [Android Studio](https://developer.android.com/studio) and hit **Run**, or run:
-```bash
+# Build and run Android Client on connected device / emulator
 pnpm android:run
 ```
-
-### Step 4: Pair & Use
-1. On your PC, click the **Paired Devices** icon on the left rail to show your pairing QR code.
-2. On your phone, tap **Scan QR code** and point your camera at the screen — or pick your PC from **Found on this network** and type the 10-character code instead.
-3. You're connected! Your displays and sound mixer will show up on your phone instantly.
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for detailed prerequisites (Go 1.22+, Node 20+, pnpm 9+, Android Studio Ladybug+), architecture details, and testing guidelines.
 
 ---
 
@@ -174,11 +197,12 @@ We built Switchboard because we wanted a tool we could trust on our own home net
 
 ## Documentation
 
-Need more details on how things are built? Check out the guides in [`docs/docs/`](docs/docs/):
+Need more details on how things are built? Check out the guides in [`docs/docs/`](docs/docs/) or visit the [Switchboard Documentation Portal](https://aiyu-ayaan.github.io/Switchboard/):
 
-- 📘 [**Docs Portal**](docs/docs/README.md) - Full documentation index
+- 📘 [**Docs Portal Intro**](docs/docs/intro.md) - Full documentation index
 - 🧭 [**Product Overview**](docs/docs/overview.md) - Deep dive on problems and hardware support
-- 🛠️ [**Setup & Build Guide**](docs/docs/getting-started.md) - Packaging, release builds, and flags
+- 🚀 [**Download & Installation**](docs/docs/getting-started.md) - End-user setup and release packages
+- 🛠️ [**Contributor Setup Guide**](docs/docs/contributing.md) - Monorepo development, build flags, and APK packaging
 - 🏛️ [**Architecture**](docs/docs/architecture.md) - Process boundaries, daemon internals, and IPC
 - 🔐 [**Security & Pairing**](docs/docs/security-pairing.md) - Cryptographic handshake and cipher specs
 - 📡 [**Wire Protocol Reference**](docs/docs/api-protocol.md) - WebSocket message formats and commands

@@ -1,133 +1,100 @@
-# Getting Started with Switchboard
+# Download & Installation
 
-This guide walks through configuring your environment, building all components, and running Switchboard across desktop and mobile devices.
+This guide walks through downloading pre-compiled Switchboard binaries, installing the desktop and mobile applications, and completing your first local cryptographic pairing.
 
----
-
-## 🛠️ Prerequisites
-
-Before building Switchboard, ensure you have the following tools installed:
-
-### Host Machine
-- **Git**: With submodule support.
-- **Go**: Version 1.22 or newer ([Download Go](https://go.dev/dl/)).
-- **Node.js**: Version 20 LTS or newer ([Download Node.js](https://nodejs.org/)).
-- **pnpm**: Version 9 or newer (`npm install -g pnpm`).
-- **C Compiler / Windows SDK** (Optional, for native cgo bindings if rebuilding custom system DLLs).
-
-### Mobile Environment
-- **Android Studio**: Ladybug (2024.2.1+) or newer.
-- **Android SDK**: API 34+ installed.
-- **JDK**: Java 17 or Java 21 (bundled with Android Studio).
-- **Physical Android device or Emulator**: Running Android 8.0+ (API 26+) connected via USB or Wi-Fi debugging.
+:::info Looking to Contribute or Build from Source?
+If you are a developer looking to contribute or compile Switchboard from source, see the **[Contributor & Developer Setup Guide](/contributing)** instead.
+:::
 
 ---
 
-## 📥 1. Repository Setup
+## 🚀 Official Releases
 
-Clone the repository and its documentation submodules:
+Pre-compiled, ready-to-run releases are published on GitHub:
 
-```bash
-git clone --recurse-submodules https://github.com/aiyu-ayaan/Switchboard.git
-cd Switchboard
-```
-
-If you previously cloned without `--recurse-submodules`:
-```bash
-git submodule update --init --recursive
-```
-
-Install workspace JavaScript/TypeScript dependencies:
-```bash
-pnpm install
-```
+👉 **[Download Latest Switchboard Release](https://github.com/aiyu-ayaan/Switchboard/releases)**
 
 ---
 
-## 💻 2. Running the Desktop Host
+## 📋 System Requirements
 
-Switchboard Desktop consists of a **Go backend daemon** and an **Electron frontend**.
-
-### Development Mode
-
-You can run both concurrently using the workspace runner:
-```bash
-pnpm dev
-```
-
-Or run them in separate terminals for independent logging:
-
-```bash
-# Terminal 1: Backend Daemon
-cd backend
-go run cmd/server/main.go
-```
-
-```bash
-# Terminal 2: Electron Frontend
-pnpm dev:frontend
-```
-
-### Environment Variables
-
-| Variable | Default | Purpose |
+| Platform | Minimum Requirement | Recommended |
 | :--- | :--- | :--- |
-| `SWITCHBOARD_PORT` | `9427` | The local network port the Go daemon binds to for mobile WebSocket & HTTP connections. |
-| `SWITCHBOARD_DB` | OS AppData (`%APPDATA%/switchboard/host.db`) | SQLite database path for persistent pairing keys and device registrations. |
-| `SWITCHBOARD_DEV` | `0` | Set to `1` when developing to reload Vite dev server and unpackaged daemon binaries. |
+| **PC (Desktop Host)** | Windows 10 (64-bit), Linux, or macOS | Windows 10/11 with DDC/CI monitor support |
+| **Phone (Mobile Client)** | Android 8.0 Oreo (API 26) | Android 12+ (Material You dynamic theming) |
+| **Local Network** | Wi-Fi or Ethernet on the same local subnet | 5 GHz Wi-Fi or wired PC + Wi-Fi phone |
+
+:::note Internet Not Required
+Switchboard communicates strictly over your local Wi-Fi or LAN. An active internet connection is **never** required for pairing, controls, or file transfers.
+:::
 
 ---
 
-## 📱 3. Running the Android Client
+## 🖥️ 1. Desktop Installation (PC)
 
-### Using Android Studio
-1. Launch Android Studio.
-2. Select **Open** and select the `mobile/` directory.
-3. Allow Gradle to sync dependencies.
-4. Select your target device or emulator from the device toolbar.
-5. Click **Run** (`Shift + F10`).
+1. Open the **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** page on your computer.
+2. Scroll down to the **Assets** section.
+3. Download the desktop executable:
+   - **Windows**: `Switchboard-Setup.exe` (installer) or `Switchboard-portable.zip`.
+4. Run the installer or extract the portable executable to your preferred folder.
+5. Launch **Switchboard**.
 
-### Using Command Line
-```bash
-# Build debug APK
-pnpm android:build
-
-# Install and launch debug APK on connected device/emulator
-pnpm android:run
-
-# Run unit tests
-pnpm android:test
-```
+### Windows Firewall & Tray Behavior
+- **Firewall Prompt**: On first launch, Windows Defender Firewall may ask for permission for the Switchboard daemon to communicate on private networks. Check **Private networks** and click **Allow access**.
+- **System Tray**: When you close the desktop window, Switchboard minimizes to your Windows system tray so your phone remains connected in the background. Right-click the tray icon to restore or quit.
 
 ---
 
-## 🔗 4. First-Time Pairing Workflow
+## 📱 2. Mobile Installation (Android)
 
-1. Ensure your PC and Android device are connected to the same local Wi-Fi network or subnet.
-2. Launch the desktop app and select the **Paired Devices** tab.
-3. Open Switchboard on Android.
-4. If this is your first time, the connection screen will prompt:
-   - **Scan QR Code**: Grants camera access, scans the desktop QR code, and connects immediately.
-   - **Enter code manually**: Enter the computer's local IP address and the 10-character pairing code shown on desktop.
-5. Once paired, your mobile app displays the live dashboard with your computer's monitors, volume levels, and file transfer options.
+1. On your Android phone or tablet, open **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** in your browser.
+2. Under **Assets**, download the Android package:
+   - **Android**: `Switchboard.apk` (or `app-release.apk`).
+3. Tap the downloaded APK in your browser or notification shade to begin installation.
+4. **Allow Unknown Apps**: If prompted by Android security (*"For your security, your phone is not allowed to install unknown apps from this source"*):
+   - Tap **Settings**.
+   - Enable **Allow from this source**.
+   - Return and tap **Install**.
+5. Open the **Switchboard** app from your app drawer.
 
 ---
 
-## 📦 5. Building for Production
+## 🔗 3. First-Time Pairing
 
-### Desktop Production Build
-```bash
-# Build the Go backend binary
-pnpm build:backend
+Switchboard uses ephemeral X25519 (ECDH) key exchange to establish an encrypted bridge without usernames, accounts, or passwords.
 
-# Build the Electron frontend distribution package
-pnpm build:frontend
 ```
-Production output will be generated in `frontend/dist/`.
-
-### Android Production Build
-```bash
-cd mobile
-./gradlew assembleRelease
+┌───────────────────────────┐                ┌───────────────────────────┐
+│       Desktop Host        │                │      Android Client       │
+│  1. Open "Paired Devices" │  Scan QR Code  │  1. Tap "Scan QR Code"    │
+│  2. Display QR / PIN code │ ─────────────> │  2. Point camera at PC    │
+│  3. Accept Connection     │ <───────────── │  3. Instant E2EE Key Sync │
+└───────────────────────────┘                └───────────────────────────┘
 ```
-The signed APK will be located in `mobile/app/build/outputs/apk/release/`.
+
+1. **Open Pairing Screen on PC**:
+   - In Switchboard Desktop, click the **Paired Devices** icon (left sidebar).
+   - Your PC will generate and display a unique QR code and a 10-character manual PIN.
+2. **Connect from Phone**:
+   - **Method A (QR Scan — Fastest)**: Tap **Scan QR code** in the Android app. Grant camera permission and point your camera at the PC monitor. Pairing completes within milliseconds.
+   - **Method B (Local Network Auto-Discovery)**: Ensure both devices are on the same Wi-Fi. Your PC will appear under **Found on this network** via mDNS. Tap your PC and enter the 10-character code displayed on your monitor.
+3. **Start Controlling**:
+   - Once paired, your phone immediately displays the live control deck with your hardware monitors, per-app audio mixer, air mouse touchpad, and encrypted file transfer hub!
+
+---
+
+## 🔒 Security & Privacy Features
+
+- **End-to-End Encryption**: Every packet, slider movement, and file transfer is encrypted with AES-256-GCM / ChaCha20-Poly1305.
+- **Zero Cloud Relays**: Your files and commands never touch third-party servers.
+- **Instant Device Revocation**: To disconnect or revoke trust, tap **Forget Host** on your phone or click the **Remove Device** icon in the desktop Paired Devices tab.
+
+---
+
+## ❓ Troubleshooting Common Setup Issues
+
+- **Devices cannot discover each other?** Verify that both your PC and phone are connected to the same Wi-Fi SSID and that "AP Isolation" / "Client Isolation" is disabled in your router settings.
+- **Monitor brightness sliders not moving hardware?** Ensure your external monitor has **DDC/CI enabled** in its physical On-Screen Display (OSD) settings menu.
+- **Windows Firewall blocking connection?** Ensure port `9427` (TCP) is allowed through Windows Defender Firewall for local subnet traffic.
+
+For full troubleshooting steps, see the **[Troubleshooting & FAQ Guide](/troubleshooting)**.

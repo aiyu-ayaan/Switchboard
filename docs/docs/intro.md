@@ -22,7 +22,8 @@ Official binaries for Windows (Desktop Host + Go Daemon) and Android (Native APK
 
 - **[Product Overview & Capabilities](/overview)** — Product vision, system architecture comparison with traditional tools, hardware compatibility, and phase milestones.
 - **[App Features Showcase](/features)** — Comprehensive visual deep-dive with screenshots into Displays, Audio Mixer, File Transfer, Air Mouse, Stream Deck Neo, and Security.
-- **[Getting Started & Build Guide](/getting-started)** — Prerequisites, repository structure, monorepo setup, inner-loop development commands, and packaging.
+- **[Download & Installation](/getting-started)** — End-user installation guide from GitHub Releases, desktop setup, Android sideloading, and first-time pairing.
+- **[Contributor & Developer Setup](/contributing)** — Complete codebase setup, monorepo architecture, inner-loop development (`pnpm dev`, Android Studio), and build pipeline.
 - **[System Architecture & Topology](/architecture)** — Monorepo layout, Go backend daemon, Electron desktop host, native Android client, and WebSocket packet flow.
 - **[Host Discovery (mDNS / DNS-SD)](/discovery)** — How the desktop advertises \_switchboard._tcp\ and how the Android app automatically discovers changing network IPs without cloud intermediaries.
 - **[Security & Pairing Protocol](/security-pairing)** — Zero-password trust model via ephemeral X25519 ECDH key exchange, QR code payloads, and AEAD encryption (AES-256-GCM / ChaCha20-Poly1305).

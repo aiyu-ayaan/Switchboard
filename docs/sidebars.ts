@@ -11,6 +11,7 @@ const sidebars: SidebarsConfig = {
         'overview',
         'features',
         'getting-started',
+        'contributing',
       ],
     },
     {
