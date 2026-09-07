@@ -1,7 +1,7 @@
 package com.switchboard.app
 
 import android.os.Bundle
-import androidx.fragment.app.FragmentActivity
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -78,12 +77,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import com.switchboard.app.ui.TouchpadActions
-import com.switchboard.app.ui.UnlockConfig
 import com.switchboard.app.ui.SwitchboardTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-class MainActivity : FragmentActivity() {
+class MainActivity : ComponentActivity() {
     private val pendingSharedUris = MutableStateFlow<List<Uri>?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -168,10 +166,6 @@ fun SwitchboardApp(
 
     val connected = state.status == ConnectionStatus.Connected
     val context = LocalContext.current
-
-    // The biometric prompt hangs off a FragmentActivity window, so the unlock
-    // path needs the host Activity rather than a bare Context.
-    val activity = androidx.activity.compose.LocalActivity.current as? FragmentActivity
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
@@ -279,13 +273,8 @@ fun SwitchboardApp(
             onTransferControl = viewModel::controlTransfer,
             rateUnit = transferConfig.rateUnit,
             onLockSystem = {
-                // No confirm dialog on the unlock path: the fingerprint
-                // prompt is the confirmation, and a dialog in front of it
-                // would only be a tap between the user and their finger.
                 val live = latestState.value
-                if (live.host.locked && live.canUnlockSystem && activity != null) {
-                    viewModel.unlockSystem(activity)
-                } else {
+                if (!live.host.locked) {
                     showLockConfirmDialog = true
                 }
             },
@@ -464,17 +453,10 @@ fun SwitchboardApp(
                             transferConfig = transferConfig,
                             alwaysOn = state.alwaysOn,
                             onSetAlwaysOn = viewModel::setAlwaysOn,
-                            unlockConfig = UnlockConfig(
-                                support = state.unlockSupport,
-                                enrolled = state.unlockEnrolled,
-                                hostAccepts = connected && state.hostAcceptsUnlock
-                            ),
                             onSetThemeMode = themePreferences::setThemeMode,
                             onSetDynamicColor = themePreferences::setDynamicColor,
                             onSetSaveDirectory = viewModel.transferPreferences::setSaveDirectory,
                             onSetRateUnit = viewModel.transferPreferences::setRateUnit,
-                            onEnrolUnlock = viewModel::enrolUnlock,
-                            onForgetUnlock = viewModel::forgetUnlockKey,
                             onBack = { currentScreen = AppScreen.Main }
                         )
                     }
@@ -547,21 +529,20 @@ fun SwitchboardApp(
 
     if (showLockConfirmDialog && connected) {
         val hostName = state.activeHost?.hostName ?: "the workstation"
-        val isLocked = state.host.locked
         AlertDialog(
             onDismissRequest = { showLockConfirmDialog = false },
             shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             icon = {
                 Icon(
-                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                    imageVector = Icons.Filled.Lock,
                     contentDescription = null,
-                    tint = if (isLocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.error
                 )
             },
             title = {
                 Text(
-                    text = if (isLocked) "Lock $hostName again?" else "Lock $hostName?",
+                    text = "Lock $hostName?",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )

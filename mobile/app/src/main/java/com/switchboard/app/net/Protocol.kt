@@ -20,13 +20,6 @@ object Actions {
     const val HOST_STATE = "host.state"
     const val SYSTEM_LOCK = "system.lock"
 
-    // Remote unlock. The host issues a nonce, the phone signs it with a key
-    // its keystore only releases behind a fingerprint, and the host checks the
-    // signature. See docs/docs/remote-unlock.md.
-    const val UNLOCK_ENROLL = "system.unlock.enroll"
-    const val UNLOCK_CHALLENGE = "system.unlock.challenge"
-    const val SYSTEM_UNLOCK = "system.unlock"
-
     // Air mouse. This app owns the gesture vocabulary; the desktop only
     // injects the intents resolved here.
     const val INPUT_MOVE = "input.move"
@@ -102,28 +95,6 @@ object Control {
  * type that nobody taught the encoder about is then a compile error rather than
  * an IllegalArgumentException the moment a user taps the control.
  */
-/** Registers this phone's biometric-gated public key, base64 PKIX DER. */
-@Serializable
-data class UnlockEnroll(val publicKey: String) : WirePayload
-
-/** The nonce the host wants signed, base64. Single use. */
-@Serializable
-data class UnlockChallenge(val challenge: String) : WirePayload
-
-/** A nonce and its ASN.1 ECDSA signature, both base64. */
-@Serializable
-data class UnlockProof(val challenge: String, val signature: String) : WirePayload
-
-/**
- * The exact bytes signed for an unlock, mirroring protocol.UnlockMessage on
- * the host. The label keeps an unlock signature from ever reading as one made
- * for another purpose, and the daemon ID stops a proof captured on one desktop
- * from opening a different one. Both are NUL-separated, which neither the
- * label nor a UUID contains.
- */
-fun unlockMessage(daemonId: String, challenge: ByteArray): ByteArray =
-    "switchboard-unlock-v1".toByteArray() + 0 + daemonId.toByteArray() + 0 + challenge
-
 sealed interface WirePayload
 
 val SwitchboardJson = Json {

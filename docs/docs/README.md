@@ -20,7 +20,6 @@ Switchboard provides an ultra-low-latency, zero-password encrypted bridge betwee
 ### 2. Security & Protocols
 - [**Security & Pairing Protocol**](./security-pairing.md): Cryptographic specification, zero-password trust model, X25519 ECDH key exchange, AEAD encryption, and device revocation.
 - [**API & Wire Protocol Reference**](./api-protocol.md): JSON-over-WebSocket protocol, client command envelopes, host event streams, and loopback REST API endpoints.
-- [**Remote Unlock (Fingerprint)**](./remote-unlock.md): Opening the desktop's lock screen with a phone fingerprint — why Windows has no unlock API, the keystore-bound signature that proves a finger was presented, the SYSTEM helper, the Windows setup steps, and what storing the password costs.
 - [**Host Discovery (mDNS / DNS-SD)**](./discovery.md): `_switchboard._tcp` advertisement, the TXT record, why it carries no host key, and how the phone follows a desktop that changed address.
 
 ### 3. Hardware & System Subsystems

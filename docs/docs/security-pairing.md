@@ -122,40 +122,6 @@ Once paired, all WebSocket messages and REST streaming endpoints are encrypted u
 
 ---
 
-## 👆 Fingerprint Unlock Keys
-
-Remote unlock rides on the session above but does not trust it for the one
-thing that matters: whether a finger was actually presented. A paired phone can
-already send any command, so an unlock frame proves nothing about the user
-holding it.
-
-The claim is therefore made with a second key, separate from the session.
-
-- **Curve:** ECDSA **P-256**, chosen because every Android keystore holds it in
-  hardware and Go verifies it from the standard library. The host pins the
-  curve and rejects anything else.
-- **Generation:** in the phone's hardware keystore with
-  `setUserAuthenticationRequired`, so the private half is unusable until a
-  class 3 biometric prompt succeeds. Signing runs inside the prompt's
-  `CryptoObject`, making a signature and an authentication one event.
-- **Invalidation:** `setInvalidatedByBiometricEnrollment` destroys the key when
-  a new fingerprint is enrolled on the phone.
-- **Host storage:** the public half only, in the `unlock_keys` table, keyed by
-  device. Revoking a device deletes it, so re-pairing does not restore access.
-- **Enrolment:** refused while the desktop is locked. Pairing happens with the
-  owner at the machine; a phone taken afterwards must not be able to grant
-  itself the lock screen.
-- **Signed message:**
-  `"switchboard-unlock-v1" ‖ 0x00 ‖ daemonId ‖ 0x00 ‖ challenge`. The label is
-  domain separation; the daemon ID binds the proof to one host. The 32-byte
-  challenge is spent when checked, pass or fail.
-
-The host-side cost — a stored Windows password and a `SYSTEM` helper — is
-described in full in [Remote Unlock](./remote-unlock.md), including who can
-read that password and what the feature does not defend against.
-
----
-
 ## 🛑 Threat Analysis & Mitigations
 
 | Threat | Risk Level | Mitigation in Switchboard |
@@ -165,7 +131,3 @@ read that password and what the feature does not defend against.
 | **Replay Attacks** | Medium | Strict monotonically incrementing 96-bit nonces reject replayed frames. |
 | **Shoulder Surfing** | Low | Pairing codes expire every 5 minutes and rotate instantly once used. |
 | **Malicious Desktop Page** | Medium | Desktop renderer has no direct network access; context isolation prevents rogue scripts from talking to LAN. |
-| **Stolen unlocked phone** | Medium | Unlock needs the owner's fingerprint, not just the app: the signing key is released by the keystore, not by application code. |
-| **Tampered Android build** | Medium | A patched APK can skip its own biometric prompt but still cannot use a key the keystore gates on hardware authentication. |
-| **Unlock proof replayed elsewhere** | Low | The signature covers the daemon ID and a single-use nonce, so it opens one desktop once. |
-| **Code running as the console user** | Accepted | Such code can trigger an unlock via the local pipe. It inherits that account's trust rather than crossing a new boundary; see [Remote Unlock](./remote-unlock.md). |

@@ -354,20 +354,20 @@ private fun HostHeroCard(
                 Surface(
                     shape = CircleShape,
                     color = if (isLocked) {
-                        MaterialTheme.colorScheme.errorContainer
+                        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
                     } else {
                         MaterialTheme.colorScheme.primaryContainer
                     },
                     modifier = Modifier
                         .size(38.dp)
-                        .bouncyClickable(onClick = onLock)
+                        .bouncyClickable(enabled = !isLocked, onClick = onLock)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
                             contentDescription = if (isLocked) "Host workstation is locked" else "Lock workstation",
                             tint = if (isLocked) {
-                                MaterialTheme.colorScheme.onErrorContainer
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                             } else {
                                 MaterialTheme.colorScheme.onPrimaryContainer
                             },
@@ -798,14 +798,14 @@ private fun BentoUtilityGrid(
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (isLocked) {
-                                MaterialTheme.colorScheme.errorContainer
+                                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
                             } else {
                                 MaterialTheme.colorScheme.primaryContainer
                             },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(30.dp)
-                                .bouncyClickable {
+                                .bouncyClickable(enabled = !isLocked) {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     actions.onLockSystem()
                                 }
@@ -819,7 +819,7 @@ private fun BentoUtilityGrid(
                                     imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
                                     contentDescription = null,
                                     tint = if (isLocked) {
-                                        MaterialTheme.colorScheme.onErrorContainer
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                                     } else {
                                         MaterialTheme.colorScheme.onPrimaryContainer
                                     },
@@ -831,7 +831,7 @@ private fun BentoUtilityGrid(
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isLocked) {
-                                        MaterialTheme.colorScheme.onErrorContainer
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                                     } else {
                                         MaterialTheme.colorScheme.onPrimaryContainer
                                     },

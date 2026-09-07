@@ -126,13 +126,6 @@ func (c *Controller) Lock() error { return lockSystem() }
 // IsLocked reports whether the workstation console session is locked.
 func (c *Controller) IsLocked() bool { return isLocked() }
 
-// Unlock releases the workstation, having been told a fingerprint was
-// presented. The caller owns that check: this only carries out the request.
-func (c *Controller) Unlock() error { return unlockSystem() }
-
-// UnlockSupported reports whether a password has been enrolled on this host.
-func (c *Controller) UnlockSupported() bool { return unlockSupported() }
-
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
@@ -177,11 +170,6 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 	if lockSupported() {
 		state.Capabilities = append(state.Capabilities, "lock")
 		state.Locked = isLocked()
-	}
-	// "unlock" is advertised only once a password has been enrolled on the
-	// host, so a phone never offers a button that cannot work.
-	if unlockSupported() {
-		state.Capabilities = append(state.Capabilities, "unlock")
 	}
 	return state
 }

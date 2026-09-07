@@ -25,12 +25,6 @@ func main() {
 }
 
 func run() error {
-	// "server unlock ..." runs a one-shot privileged helper instead of the
-	// daemon, so it is dispatched before any config or database is touched.
-	if handled, err := runUnlock(os.Args[1:]); handled {
-		return err
-	}
-
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		return err

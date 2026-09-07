@@ -73,14 +73,6 @@ const (
 	ActionPing       = "system.ping"
 	ActionSystemLock = "system.lock"
 
-	// Remote unlock. The phone proves a fingerprint was just presented by
-	// signing a host-issued challenge with a key its keystore only releases
-	// after biometric authentication, so a tampered app cannot assert the
-	// check it skipped. See docs/docs/remote-unlock.md.
-	ActionUnlockEnroll    = "system.unlock.enroll"    // phone -> host: register the public key
-	ActionUnlockChallenge = "system.unlock.challenge" // phone -> host: ask for a nonce
-	ActionSystemUnlock    = "system.unlock"           // phone -> host: signed nonce, please unlock
-
 	// Stream Deck Neo.
 	ActionDeckGet    = "deck.get"    // client -> host: request deck configuration
 	ActionDeckSet    = "deck.set"    // client -> host: update deck configuration
@@ -278,44 +270,6 @@ type HostState struct {
 	Media        MediaState    `json:"media"`
 	Locked       bool          `json:"locked"`
 	Capabilities []string      `json:"capabilities"`
-}
-
-// ---- Remote unlock ----
-
-// UnlockEnroll registers the phone's biometric-gated public key with the host,
-// as SubjectPublicKeyInfo (PKIX) DER over NIST P-256, base64. That curve is
-// the one every Android keystore can hold in hardware and Go can verify from
-// the standard library, so neither side needs a dependency to agree.
-type UnlockEnroll struct {
-	PublicKey string `json:"publicKey"`
-}
-
-// UnlockChallenge carries the nonce the phone must sign, base64. It is single
-// use and scoped to one connection: the transport already rejects replayed
-// frames, and this stops a signature captured once from being spent twice.
-type UnlockChallenge struct {
-	Challenge string `json:"challenge"`
-}
-
-// UnlockProof answers a challenge with an ASN.1 ECDSA signature over
-// UnlockMessage, both base64.
-type UnlockProof struct {
-	Challenge string `json:"challenge"`
-	Signature string `json:"signature"`
-}
-
-// UnlockMessage is the exact byte string both sides sign and verify. The
-// label pins the purpose so an unlock signature can never be mistaken for a
-// signature made anywhere else, and the daemon ID pins it to one host so a
-// proof lifted from one desktop will not open another. NUL separates the
-// fields, which neither a UUID nor the label contains.
-func UnlockMessage(daemonID string, challenge []byte) []byte {
-	msg := make([]byte, 0, 24+len(daemonID)+len(challenge))
-	msg = append(msg, "switchboard-unlock-v1"...)
-	msg = append(msg, 0)
-	msg = append(msg, daemonID...)
-	msg = append(msg, 0)
-	return append(msg, challenge...)
 }
 
 // ---- Wi-Fi camera ----

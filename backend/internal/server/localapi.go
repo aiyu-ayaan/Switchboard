@@ -40,9 +40,6 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/settings", s.localUpdateSettings)
 	handle("POST /local/settings/download-dir", s.localCheckDownloadDir)
 	handle("POST /local/system/lock", s.localLock)
-	handle("GET /local/unlock/status", s.localUnlockStatus)
-	handle("POST /local/unlock/setup", s.localUnlockSetup)
-	handle("POST /local/unlock/disable", s.localUnlockDisable)
 
 	handle("GET /local/camera/state", s.localCameraState)
 	handle("GET /local/camera/vcam/status", s.localCameraVCamStatus)

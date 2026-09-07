@@ -1,6 +1,6 @@
-import { Fingerprint, FolderOpen, Gauge, PanelBottom, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { HostSettings, LocalState, UnlockStatus } from '../../shared/types';
+import { FolderOpen, Gauge, PanelBottom, SlidersHorizontal } from 'lucide-react';
+import { useState } from 'react';
+import type { HostSettings, LocalState } from '../../shared/types';
 import { Card, Pane, Sidebar, SidebarItem } from './Shell';
 
 interface SettingsViewProps {
@@ -29,22 +29,6 @@ export function SettingsView({ state, patch }: SettingsViewProps) {
       setError(err instanceof Error ? err.message : 'Could not save the setting');
     }
   };
-
-  // Setup runs in an elevated console the daemon launches, so nothing here
-  // learns when it finished. The pane re-reads on focus instead, which is the
-  // moment the user comes back from the UAC prompt and the password entry.
-  const [unlock, setUnlock] = useState<UnlockStatus | null>(null);
-  useEffect(() => {
-    const read = () => {
-      window.switchboard.unlock
-        .status()
-        .then(setUnlock)
-        .catch(() => setUnlock(null));
-    };
-    read();
-    window.addEventListener('focus', read);
-    return () => window.removeEventListener('focus', read);
-  }, []);
 
   const pickDir = async () => {
     const dir = await window.switchboard.chooseDownloadDir().catch(() => null);
@@ -104,42 +88,6 @@ export function SettingsView({ state, patch }: SettingsViewProps) {
               {RATE_UNITS.find((u) => u.value === settings.rateUnit)?.hint}
             </p>
           </Card>
-
-          {unlock?.supported ? (
-            <Card title="Fingerprint unlock">
-              <div className="flex items-center gap-3">
-                <Fingerprint aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-dim" />
-                <p className="min-w-0 flex-1 text-micro text-ink-dim">
-                  {unlock.enrolled
-                    ? 'A paired phone can open this lock screen with its fingerprint.'
-                    : 'Let a paired phone open this lock screen with its fingerprint.'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const action = unlock.enrolled
-                      ? window.switchboard.unlock.disable()
-                      : window.switchboard.unlock.setup();
-                    action.catch((err: unknown) =>
-                      setError(err instanceof Error ? err.message : 'Could not start setup')
-                    );
-                  }}
-                  className={`shrink-0 rounded border px-2.5 py-1 text-micro transition-colors ${
-                    unlock.enrolled
-                      ? 'border-accent bg-accent/10 text-accent'
-                      : 'border-edge text-ink-dim hover:bg-raised hover:text-ink'
-                  }`}
-                >
-                  {unlock.enrolled ? 'Turn off' : 'Set up'}
-                </button>
-              </div>
-              <p className="text-micro text-ink-faint">
-                {unlock.enrolled
-                  ? 'Your Windows password is stored on this PC, encrypted and readable only by SYSTEM and administrators. Turning this off deletes it.'
-                  : 'Opens an administrator window to store your Windows password and register the credential provider. Read the trade-offs first: this keeps your password on this PC.'}
-              </p>
-            </Card>
-          ) : null}
 
           <Card title="Keep running in the background">
             <div className="flex items-center gap-3">

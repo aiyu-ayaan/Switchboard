@@ -187,36 +187,7 @@ Locks the host workstation console session (equivalent to `user32!LockWorkStatio
 }
 ```
 
-#### 10. `system.unlock.enroll`, `system.unlock.challenge`, `system.unlock`
-Opens the host's lock screen, proving a fingerprint was presented. Guarded by
-the `unlock` capability, which the host advertises only once a password has
-been enrolled on it. See [Remote Unlock](./remote-unlock.md).
-
-Unlocking takes a round trip the other controls do not, because the phone has
-to sign something the host chose. `system.unlock.enroll` registers the phone's
-biometric-gated public key (base64 PKIX DER, ECDSA P-256) and is refused while
-the desktop is locked. `system.unlock.challenge` returns a single-use nonce.
-`system.unlock` answers it.
-
-```json
-{
-  "type": "command",
-  "action": "system.unlock",
-  "id": "req-009",
-  "payload": {
-    "challenge": "3Xy...==",
-    "signature": "MEUCIQD...=="
-  }
-}
-```
-
-The signature is ASN.1 ECDSA over
-`"switchboard-unlock-v1" ‖ 0x00 ‖ daemonId ‖ 0x00 ‖ challenge`. The label keeps
-an unlock signature from ever reading as one made for another purpose, and the
-daemon ID stops a proof captured on one desktop from opening a different one.
-The nonce is spent when it is checked, pass or fail.
-
-#### 11. `file_transfer_init`
+#### 10. `file_transfer_init`
 Initiates a peer-to-peer file transfer.
 
 ```json
@@ -232,7 +203,7 @@ Initiates a peer-to-peer file transfer.
 }
 ```
 
-#### 12. `deck.get`
+#### 11. `deck.get`
 Requests the current Stream Deck Neo configuration including pages, keys, and infobar settings. Guarded by the `deck` capability.
 
 ```json
@@ -242,7 +213,7 @@ Requests the current Stream Deck Neo configuration including pages, keys, and in
 }
 ```
 
-#### 13. `deck.set`
+#### 12. `deck.set`
 Saves and atomically broadcasts an updated Stream Deck Neo configuration across all connected clients.
 
 ```json
@@ -280,7 +251,7 @@ Saves and atomically broadcasts an updated Stream Deck Neo configuration across 
 }
 ```
 
-#### 14. `deck.action`
+#### 13. `deck.action`
 Triggers immediate execution of a Stream Deck Neo key action on the host machine.
 
 ```json
@@ -298,7 +269,7 @@ Triggers immediate execution of a Stream Deck Neo key action on the host machine
 }
 ```
 
-#### 15. `system.apps`
+#### 14. `system.apps`
 Requests the list of applications installed on the host system (scanned from Windows Start Menu shortcuts and standard system tools).
 
 ```json

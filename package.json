@@ -9,7 +9,6 @@
     "dev:frontend": "pnpm --filter frontend dev",
     "build": "node scripts/runner.mjs build",
     "build:backend": "node scripts/runner.mjs build:backend",
-    "build:credprovider": "node scripts/credprovider.mjs",
     "build:frontend": "pnpm --filter frontend build",
     "android:build": "node scripts/android.mjs assembleDebug",
     "android:run": "node scripts/android.mjs run",
