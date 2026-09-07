@@ -65,16 +65,33 @@ import com.switchboard.app.data.ThemeMode
 import com.switchboard.app.data.TransferConfig
 import com.switchboard.app.transfer.RateUnit
 
+/**
+ * What Settings needs to know about fingerprint unlock. Derived rather than
+ * stored: the phone half comes from the keystore and the host half from the
+ * connected desktop's capabilities, so it is rebuilt from live state.
+ */
+data class UnlockConfig(
+    /** The phone has a fingerprint sensor a keystore key can be gated on. */
+    val availableOnPhone: Boolean = false,
+    /** A key exists on this phone. */
+    val enrolled: Boolean = false,
+    /** The connected desktop has a password enrolled for remote unlock. */
+    val hostAccepts: Boolean = false
+)
+
 @Composable
 fun SettingsScreen(
     themeConfig: ThemeConfig,
     transferConfig: TransferConfig,
+    unlockConfig: UnlockConfig,
     alwaysOn: Boolean,
     onSetAlwaysOn: (Boolean) -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
     onSetSaveDirectory: (String) -> Unit,
     onSetRateUnit: (RateUnit) -> Unit,
+    onEnrolUnlock: () -> Unit,
+    onForgetUnlock: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -372,6 +389,86 @@ fun SettingsScreen(
                             selected = transferConfig.rateUnit == unit,
                             onClick = { onSetRateUnit(unit) }
                         )
+                    }
+                }
+            }
+        }
+
+        // Fingerprint unlock is only offered where it can actually work: the
+        // phone needs a sensor a keystore key can be gated on, and the desktop
+        // needs a password enrolled. Anything less and the section stays away
+        // rather than showing a control that would fail on tap.
+        if (unlockConfig.availableOnPhone) {
+            item {
+                Text(
+                    text = "Security",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
+                )
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Fingerprint Unlock",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = if (unlockConfig.enrolled) {
+                                "This phone can open the desktop's lock screen. The key lives in " +
+                                    "hardware and only unlocks with your fingerprint."
+                            } else {
+                                "Register a fingerprint-gated key so this phone can open the " +
+                                    "desktop's lock screen. The desktop must be unlocked and set " +
+                                    "up for remote unlock."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // The cost is stated here, not only in the docs: the
+                        // phone is where the feature is turned on, so this is
+                        // the last screen before someone accepts it.
+                        Text(
+                            text = "Trade-off: the desktop must keep your Windows password on " +
+                                "that PC to type it at the lock screen. An administrator on it " +
+                                "can read that password.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (!unlockConfig.enrolled && !unlockConfig.hostAccepts) {
+                            Text(
+                                text = "The connected desktop has not been set up for remote unlock.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (unlockConfig.enrolled) {
+                                TextButton(onClick = onForgetUnlock) { Text("Remove key") }
+                            } else {
+                                TextButton(
+                                    onClick = onEnrolUnlock,
+                                    enabled = unlockConfig.hostAccepts
+                                ) { Text("Set up") }
+                            }
+                        }
                     }
                 }
             }

@@ -150,6 +150,9 @@ schtasks /query /tn "Switchboard-Unlock"
 With the desktop **unlocked** and the phone connected, open
 **Settings → Security → Fingerprint Unlock** on the phone and tap **Set up**.
 
+The card restates the trade-off before you tap it: the phone is where the
+feature is switched on, so that is the last screen before you accept the cost.
+
 Enrolment is refused while the desktop is locked. Pairing happens with you at
 the machine; a phone taken afterwards must not be able to grant itself the lock
 screen while you are away from it.
