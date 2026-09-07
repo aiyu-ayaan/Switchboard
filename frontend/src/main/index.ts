@@ -61,18 +61,23 @@ function daemonPath(): string | null {
 /** Resolves the branded application icon. */
 function appIconPath(): string | undefined {
   const icoCandidates = [
+    join(process.cwd(), 'resources', 'icon.ico'),
+    join(process.cwd(), 'frontend', 'resources', 'icon.ico'),
     join(app.getAppPath(), 'resources', 'icon.ico'),
     join(app.getAppPath(), 'dist', 'renderer', 'assets', 'icon.ico'),
     join(__dirname, '..', 'renderer', 'assets', 'icon.ico'),
     join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.ico')
   ];
   const pngCandidates = [
+    join(process.cwd(), 'resources', 'icon.png'),
+    join(process.cwd(), 'frontend', 'resources', 'icon.png'),
     join(app.getAppPath(), 'resources', 'icon.png'),
     join(app.getAppPath(), 'dist', 'renderer', 'assets', 'icon.png'),
     join(__dirname, '..', 'renderer', 'assets', 'icon.png'),
     join(app.getAppPath(), 'src', 'renderer', 'assets', 'icon.png')
   ];
-  const candidates = process.platform === 'win32' ? [...icoCandidates, ...pngCandidates] : pngCandidates;
+  // Prefer PNG for high quality scaling on Windows taskbar in dev
+  const candidates = [...pngCandidates, ...icoCandidates];
   return candidates.find(existsSync);
 }
 
@@ -221,7 +226,10 @@ function createWindow(options: { show?: boolean } = {}): void {
 
   if (iconPath) {
     try {
-      mainWindow.setIcon(nativeImage.createFromPath(iconPath));
+      const img = nativeImage.createFromPath(iconPath);
+      if (!img.isEmpty()) {
+        mainWindow.setIcon(img);
+      }
     } catch {
       // Ignore fallback
     }
