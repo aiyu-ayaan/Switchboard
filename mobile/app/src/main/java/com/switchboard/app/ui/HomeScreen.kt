@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
@@ -763,12 +764,11 @@ private fun BentoUtilityGrid(
                             }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Desktop",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1
+                            Icon(
+                                imageVector = Icons.Filled.DesktopWindows,
+                                contentDescription = "Show Desktop",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -784,12 +784,11 @@ private fun BentoUtilityGrid(
                             }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Tasks",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1
+                            Icon(
+                                imageVector = Icons.Filled.GridView,
+                                contentDescription = "Task View",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -810,32 +809,16 @@ private fun BentoUtilityGrid(
                                     actions.onLockSystem()
                                 }
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                                    contentDescription = null,
+                                    contentDescription = if (isLocked) "Locked" else "Lock Workstation",
                                     tint = if (isLocked) {
                                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                                     } else {
                                         MaterialTheme.colorScheme.onPrimaryContainer
                                     },
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = if (isLocked) "Locked" else "Lock",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isLocked) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                                    } else {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    },
-                                    maxLines = 1
+                                    modifier = Modifier.size(15.dp)
                                 )
                             }
                         }
@@ -983,6 +966,21 @@ private fun StreamDeckNeoTile(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "ALPHA",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)

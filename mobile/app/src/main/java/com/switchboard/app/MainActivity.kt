@@ -15,6 +15,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -61,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -610,11 +612,28 @@ fun SwitchboardApp(
                 )
             },
             title = {
-                Text(
-                    text = "Switchboard Deck",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Switchboard Deck",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "ALPHA",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             },
             text = {
                 Text(

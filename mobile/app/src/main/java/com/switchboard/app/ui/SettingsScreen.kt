@@ -893,7 +893,8 @@ private fun DevLinkChip(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Spacer(Modifier.width(2.dp))
             Icon(
