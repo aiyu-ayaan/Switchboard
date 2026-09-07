@@ -39,7 +39,7 @@ func TestDirectShowSharedMemoryProtocol(t *testing.T) {
 	defer windows.UnmapViewOfFile(view)
 
 	// 2. Read 32-byte header written by feeder
-	headerBytes := unsafe.Slice((*byte)(unsafe.Pointer(view)), vcamHeaderSize)
+	headerBytes := unsafe.Slice((*byte)(*(*unsafe.Pointer)(unsafe.Pointer(&view))), vcamHeaderSize)
 	maxSize := binary.LittleEndian.Uint32(headerBytes[0:4])
 	width := binary.LittleEndian.Uint32(headerBytes[4:8])
 	height := binary.LittleEndian.Uint32(headerBytes[8:12])

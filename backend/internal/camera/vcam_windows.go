@@ -127,7 +127,7 @@ func (v *VCamFeeder) init() error {
 	v.hWantEvent = hWant
 	v.hSentEvent = hSent
 	v.hSharedFile = hSharedFile
-	v.sharedView = unsafe.Pointer(sharedView)
+	v.sharedView = *(*unsafe.Pointer)(unsafe.Pointer(&sharedView))
 	v.standbyImage = GenerateStandbyImage(1280, 720)
 	v.frameChan = make(chan []byte, 1)
 	v.closeChan = make(chan struct{})

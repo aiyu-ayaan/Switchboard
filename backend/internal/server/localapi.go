@@ -498,4 +498,3 @@ func (s *Server) localSystemApps(w http.ResponseWriter, r *http.Request) {
 	apps := s.control.ListInstalledApps()
 	writeJSON(w, apps)
 }
-

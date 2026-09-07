@@ -377,7 +377,7 @@ func TestDestPath(t *testing.T) {
 func TestSanitizeOfferName(t *testing.T) {
 	cases := map[string]string{
 		"Recording 2024-05-07 23:44:12.mp4": "Recording 2024-05-07 23-44-12.mp4",
-		"primary:Valorant/clip.mp4":          "clip.mp4",
+		"primary:Valorant/clip.mp4":         "clip.mp4",
 		"../escape/video:part.mkv":          "video-part.mkv",
 		"":                                  "file",
 		"   ":                               "file",
@@ -390,7 +390,6 @@ func TestSanitizeOfferName(t *testing.T) {
 		}
 	}
 }
-
 
 // A dropped connection must not cost the bytes already moved. This cuts the
 // link mid-file, parks both ends the way the daemon does when a socket dies,

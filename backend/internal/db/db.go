@@ -293,7 +293,6 @@ func (d *Database) SaveDeckConfig(config protocol.DeckConfig) error {
 	return d.SetSetting(deckSettingKey, string(data))
 }
 
-
 // scanner covers both *sql.Row and *sql.Rows.
 type scanner interface{ Scan(...any) error }
 
