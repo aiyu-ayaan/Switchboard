@@ -297,6 +297,8 @@ export interface SwitchboardBridge {
     apps(): Promise<InstalledApp[]>;
     /** Resolves a platform-native icon for an application returned by apps(). */
     appIcon(path: string): Promise<string>;
+    /** Resolves a website's own icon as a data URI, or '' if it offers none. */
+    siteIcon(url: string): Promise<string>;
   };
   window: {
     minimize(): Promise<void>;

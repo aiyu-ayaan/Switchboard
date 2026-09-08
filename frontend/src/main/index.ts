@@ -20,6 +20,18 @@ import { join, resolve } from 'node:path';
 import type { HostSettings, LocalState } from '../shared/types';
 import { installExplorerVerb, pathsFromArgv } from './shellIntegration';
 import { queueSendPaths, registerSendPicker } from './sendPicker';
+import { resolveSiteIcon } from './siteIcons';
+
+/** What the user sees us called: window, notifications, startup entry. */
+const APP_NAME = 'Switchboard';
+
+/**
+ * Matches `appId` in electron-builder.yml, which is also the id the installer
+ * stamps on the Start Menu shortcut. Windows reads a toast's sender name from
+ * the shortcut carrying this id, so a mismatch is what produced the raw
+ * "electron.app.Switchboard" heading on every notification.
+ */
+const APP_USER_MODEL_ID = 'com.switchboard.desktop';
 
 const DAEMON_PORT = Number(process.env.SWITCHBOARD_PORT ?? 9427);
 const DEV_SERVER = 'http://127.0.0.1:5273';
@@ -290,6 +302,10 @@ function syncAutoStart(autoStart: boolean, background: boolean): void {
     if (isDev && !app.isPackaged) {
       app.setLoginItemSettings({
         openAtLogin: autoStart,
+        // Windows names the startup entry after the registry value, which
+        // defaults to the executable -- "electron" from a checkout. Naming it
+        // here is what puts "Switchboard" in Task Manager's Startup tab.
+        name: APP_NAME,
         path: process.execPath,
         args: [app.getAppPath(), '--hidden']
       });
@@ -297,6 +313,7 @@ function syncAutoStart(autoStart: boolean, background: boolean): void {
       app.setLoginItemSettings({
         openAtLogin: autoStart,
         openAsHidden: background,
+        name: APP_NAME,
         args: ['--hidden']
       });
     }
@@ -626,9 +643,15 @@ function registerFileBridge(): void {
         // Unreadable shortcut: fall through to the shortcut file itself.
       }
     }
-    candidates.push(path);
+    candidates.push(...commandExecutables(path), path);
 
     for (const candidate of candidates) {
+      // getFileIcon does not fail on a path that is not there -- it answers
+      // with the generic unknown-file glyph. Accepting that put the same grey
+      // document on every key whose target could not be resolved, which is
+      // worse than the lucide glyph the key would otherwise draw. Only ask
+      // about files that exist.
+      if (!existsSync(candidate)) continue;
       try {
         // 48px. A deck key renders the icon far larger than the 16px 'small'
         // variant the picker used to ask for, and Windows hands back genuinely
@@ -641,13 +664,58 @@ function registerFileBridge(): void {
     }
     return '';
   });
+
+  // A key that opens a website should look like the site. Resolved here rather
+  // than in the renderer, which makes no network requests of its own, and
+  // cached for the session because a deck re-reads the same handful of URLs on
+  // every mount.
+  const siteIcons = new Map<string, string>();
+  ipcMain.handle('deck:siteIcon', async (_event, url: string) => {
+    if (typeof url !== 'string' || url.length === 0 || url.length > 2_048) return '';
+    let origin: string;
+    try {
+      const parsed = new URL(/^[a-z]+:\/\//i.test(url) ? url : `https://${url}`);
+      // Only the web schemes: a file: or data: key must not make us read disk.
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+      origin = parsed.origin;
+    } catch {
+      return '';
+    }
+
+    const cached = siteIcons.get(origin);
+    if (cached !== undefined) return cached;
+
+    const icon = await resolveSiteIcon(origin);
+    siteIcons.set(origin, icon);
+    return icon;
+  });
 }
+
+/**
+ * Windows commands the daemon lists without a path ("notepad", "explorer"),
+ * mapped to the executables they actually run. System32 first, because that is
+ * where the shell finds most of them, then the Windows directory for the few
+ * that live at the root such as explorer.exe.
+ */
+function commandExecutables(command: string): string[] {
+  if (process.platform !== 'win32') return [];
+  if (/[\\/:]/.test(command)) return [];
+  const root = process.env.SystemRoot || String.raw`C:\Windows`;
+  const exe = command.toLowerCase().endsWith('.exe') ? command : `${command}.exe`;
+  return [join(root, 'System32', exe), join(root, exe)];
+}
+
 
 async function bootstrap(): Promise<void> {
   // Read before `whenReady`, because Explorer's verb is how this launch was
   // started: the paths are already on our own command line.
   const coldSendPaths = pathsFromArgv(process.argv);
   const isAutoBoot = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+
+  // Before anything can show a window or raise a toast: both read the name and
+  // the model id at the moment they are created.
+  app.setName(APP_NAME);
+  if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
 
   await app.whenReady();
   registerWindowControls();

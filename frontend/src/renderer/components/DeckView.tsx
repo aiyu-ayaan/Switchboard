@@ -354,6 +354,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
 
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [nativeIcons, setNativeIcons] = useState<Record<string, string>>({});
+  const [siteIcons, setSiteIcons] = useState<Record<string, string>>({});
   const [appsQuery, setAppsQuery] = useState('');
   const [loadingApps, setLoadingApps] = useState(false);
 
@@ -427,6 +428,37 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
     void loadApps();
   }, [loadConfig, loadApps]);
 
+  // A link key should wear the site's own logo rather than a generic globe.
+  // Resolution happens in the main process, which is the only side of the app
+  // that makes network requests; a URL that yields nothing is cached as '' so
+  // it is asked about once.
+  useEffect(() => {
+    if (!config) return;
+    const pending = Array.from(
+      new Set(
+        config.pages
+          .flatMap((page) => page.keys ?? [])
+          .filter((key) => key.action.type === 'url' && key.action.value)
+          .map((key) => key.action.value)
+      )
+    ).filter((url) => !(url in siteIcons));
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        pending.map(
+          async (url) =>
+            [url, await window.switchboard.deck.siteIcon(url).catch(() => '')] as const
+        )
+      );
+      if (!cancelled) setSiteIcons((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [config, siteIcons]);
+
   // ---- save -----------------------------------------------------------------
 
   /** Stages an edit locally. Nothing reaches the daemon until Save. */
@@ -487,11 +519,49 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
 
   const selectedKey = currentKeys[keyIndex] ?? currentKeys[0];
 
-  // What the selected key actually shows: a live shell icon when this machine
-  // can still resolve the target, otherwise the copy saved for the phone.
-  const selectedArt =
-    (selectedKey.action.type === 'app' ? nativeIcons[selectedKey.action.value] : undefined) ??
-    selectedKey.iconData;
+  // What a key actually shows: art this machine can resolve right now -- the
+  // shell's icon for an app, the site's own for a link -- ahead of the copy
+  // saved into the config for the phone.
+  const liveArt = useCallback(
+    (key: DeckKey): string | undefined => {
+      if (key.action.type === 'app') return nativeIcons[key.action.value] || undefined;
+      if (key.action.type === 'url') return siteIcons[key.action.value] || undefined;
+      return undefined;
+    },
+    [nativeIcons, siteIcons]
+  );
+
+  const selectedArt = liveArt(selectedKey) ?? selectedKey.iconData;
+
+  // The phone renders whatever `iconData` the config carries -- it cannot reach
+  // a website from behind the desktop, and an app key already has its icon
+  // written in when it is picked. So a resolved site logo is written back here,
+  // which is what makes a link key look like the site on the phone as well.
+  //
+  // Only fills an empty slot, so a custom icon a user chose is never replaced,
+  // and only while nothing is unsaved, so derived art never commits a
+  // half-finished edit.
+  useEffect(() => {
+    if (!config || dirty) return;
+    let filled = false;
+    const enriched: DeckConfig = {
+      ...config,
+      pages: config.pages.map((page) => ({
+        ...page,
+        keys: (page.keys ?? []).map((key) => {
+          if (key.action.type !== 'url' || key.iconData) return key;
+          const art = siteIcons[key.action.value];
+          if (!art) return key;
+          filled = true;
+          return { ...key, iconData: art };
+        })
+      }))
+    };
+    if (!filled) return;
+    setConfig(enriched);
+    pendingRef.current = { config: enriched, dirty: false };
+    void window.switchboard.deck.set(enriched).catch(() => undefined);
+  }, [config, dirty, siteIcons]);
 
   const filteredApps = useMemo(() => {
     const q = appsQuery.trim().toLowerCase();
@@ -806,9 +876,7 @@ export const DeckView: React.FC<DeckViewProps> = ({ state }) => {
                 selected={slot === keyIndex}
                 editing={editing}
                 firing={firingSlot === slot}
-                liveIcon={
-                  key.action.type === 'app' ? nativeIcons[key.action.value] : undefined
-                }
+                liveIcon={liveArt(key)}
                 onActivate={() => {
                   if (editing) setKeyIndex(slot);
                   else void fire(key);
