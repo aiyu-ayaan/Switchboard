@@ -21,6 +21,8 @@ import type {
   PairedDevice,
   PairingInfo,
   SwitchboardBridge,
+  UpdateChannel,
+  UpdateStatus,
   Volume
 } from '../shared/types';
 
@@ -114,6 +116,20 @@ const bridge: SwitchboardBridge = {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close')
+  },
+  updates: {
+    status: () => ipcRenderer.invoke('updates:status') as Promise<UpdateStatus>,
+    check: () => ipcRenderer.invoke('updates:check') as Promise<UpdateStatus>,
+    install: () =>
+      ipcRenderer.invoke('updates:install') as Promise<{ started: boolean; error?: string }>,
+    setChannel: (channel: UpdateChannel) =>
+      ipcRenderer.invoke('updates:setChannel', channel) as Promise<UpdateStatus>,
+    channels: () => ipcRenderer.invoke('updates:channels') as Promise<UpdateChannel[]>,
+    onStatus: (handler: (status: UpdateStatus) => void) => {
+      const listener = (_event: unknown, status: UpdateStatus) => handler(status);
+      ipcRenderer.on('updates:status', listener);
+      return () => ipcRenderer.off('updates:status', listener);
+    }
   },
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
 };

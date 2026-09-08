@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 import type { HostSettings, LocalState } from '../../shared/types';
 import { Card, Pane, Sidebar, SidebarItem } from './Shell';
+import { UpdatesCard } from './UpdatesCard';
 
 interface SettingsViewProps {
   state: LocalState;
@@ -149,6 +150,8 @@ export function SettingsView({ state, patch }: SettingsViewProps) {
           </Card>
 
           {error ? <p className="text-micro text-danger">{error}</p> : null}
+
+          <UpdatesCard />
 
           <div className="pt-2">
             <h2 className="mb-2 text-micro font-bold uppercase tracking-wider text-ink-faint">

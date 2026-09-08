@@ -305,7 +305,45 @@ export interface SwitchboardBridge {
     toggleMaximize(): Promise<boolean>;
     close(): Promise<void>;
   };
+  updates: {
+    status(): Promise<UpdateStatus>;
+    /** Checks now, ignoring the timer, and downloads anything it finds. */
+    check(): Promise<UpdateStatus>;
+    /** Runs the downloaded installer silently and quits. */
+    install(): Promise<{ started: boolean; error?: string }>;
+    setChannel(channel: UpdateChannel): Promise<UpdateStatus>;
+    channels(): Promise<UpdateChannel[]>;
+    /** Progress and phase changes, pushed from the main process. */
+    onStatus(handler: (status: UpdateStatus) => void): () => void;
+  };
   openExternal(url: string): Promise<void>;
+}
+
+/** Which builds this install is willing to be offered. Cumulative: beta takes stable too. */
+export type UpdateChannel = 'stable' | 'beta' | 'alpha';
+
+export interface UpdateRelease {
+  version: string;
+  name: string;
+  /** The GitHub release body, as markdown. */
+  notes: string;
+  publishedAt: string;
+  size: number;
+}
+
+export interface UpdateStatus {
+  phase: 'idle' | 'checking' | 'uptodate' | 'downloading' | 'ready' | 'error';
+  channel: UpdateChannel;
+  installedVersion: string;
+  /** False for a development run, which is never offered an update. */
+  packaged?: boolean;
+  update?: UpdateRelease;
+  /** 0..1 while downloading, or -1 when the total length is unknown. */
+  progress?: number;
+  /** Where the installer landed, once `phase` is `ready`. */
+  file?: string;
+  lastCheckedAt?: number;
+  error?: string;
 }
 
 export interface InstalledApp {

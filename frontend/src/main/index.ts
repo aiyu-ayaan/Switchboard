@@ -21,6 +21,7 @@ import type { HostSettings, LocalState } from '../shared/types';
 import { installExplorerVerb, pathsFromArgv } from './shellIntegration';
 import { queueSendPaths, registerSendPicker } from './sendPicker';
 import { resolveSiteIcon } from './siteIcons';
+import { registerUpdateBridge } from './updateBridge';
 
 /** What the user sees us called: window, notifications, startup entry. */
 const APP_NAME = 'Switchboard';
@@ -722,6 +723,7 @@ async function bootstrap(): Promise<void> {
   registerDaemonBridge();
   registerCameraBridge();
   registerFileBridge();
+  registerUpdateBridge();
   registerSendPicker({
     isDev,
     devServer: DEV_SERVER,
