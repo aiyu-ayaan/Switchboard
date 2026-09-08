@@ -13,6 +13,7 @@ import com.switchboard.app.net.Credentials
 import com.switchboard.app.net.FileProgress
 import com.switchboard.app.net.HostState
 import com.switchboard.app.net.PairingPayload
+import com.switchboard.app.net.HostDiscovery
 import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.WirePayload
 import com.switchboard.app.net.SwitchboardJson
@@ -32,6 +33,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.mapNotNull
 
 /** Everything about the live session that outlives any one Activity. */
 data class ConnectionState(
@@ -70,6 +74,7 @@ class SwitchboardConnection private constructor(context: Context) {
     private val transfers = TransferEngine.get(context)
     val camera = CameraController.get(context)
     private val client = SwitchboardClient(store.identity, "${Build.MANUFACTURER} ${Build.MODEL}")
+    private val discovery = HostDiscovery(context)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -240,6 +245,7 @@ class SwitchboardConnection private constructor(context: Context) {
             var attemptCredentials = credentials
             var attemptHost = host
             var failures = 0
+            var moves = 0
 
             while (isActive) {
                 android.util.Log.i(TAG, "Starting connection collect for credentials=$attemptCredentials")
@@ -250,16 +256,39 @@ class SwitchboardConnection private constructor(context: Context) {
                     attemptHost = handle(event, attemptHost)
                 }
 
-                // The flow completes only once the socket is gone. Without
-                // always-on that is the end of the session; with it, the drop
-                // is the thing this loop exists to paper over.
-                if (!store.alwaysOn) break
-
                 // A pairing code is spent on first use, so a pairing that never
                 // reached a handshake cannot be usefully repeated -- redialling
                 // would only burn attempts against the host's rate limiter. The
                 // user has to scan again.
                 if (!handshook && attemptCredentials is Credentials.Pair) break
+
+                if (handshook) moves = 0
+
+                // A resume that never handshook is usually dialling an address
+                // the desktop has left behind: the stored record holds whatever
+                // it had on the network the two last met on, and joining another
+                // Wi-Fi changes it. Ask mDNS where this daemon answers now and
+                // retry there immediately. This runs ahead of the always-on
+                // check on purpose -- a paired desktop must stay reachable from
+                // any network, not only for users who left always-on on.
+                if (!handshook && moves < MAX_MOVES) {
+                    val moved = rediscover(attemptHost)
+                    if (moved != null) {
+                        moves++
+                        adoptDiscoveredAddress(moved.daemonId, moved.host, moved.port)
+                        attemptHost = moved
+                        attemptCredentials = Credentials.Resume(moved)
+                        _state.update {
+                            it.copy(status = ConnectionStatus.Connecting, activeHost = moved)
+                        }
+                        continue
+                    }
+                }
+
+                // The flow completes only once the socket is gone. Without
+                // always-on that is the end of the session; with it, the drop
+                // is the thing this loop exists to paper over.
+                if (!store.alwaysOn) break
 
                 failures = if (handshook) 0 else failures + 1
 
@@ -406,6 +435,25 @@ class SwitchboardConnection private constructor(context: Context) {
      * the old address. The host key is untouched, so the handshake still has to
      * prove the machine at the new address is the same one.
      */
+    /**
+     * Where this daemon answers right now, or null if it has not moved or the
+     * network will not say.
+     *
+     * The daemon id is the identity that survives a change of address, so the
+     * lookup matches on it. Nothing is trusted from the record itself: the
+     * resume handshake is still checked against the pinned host key, so a
+     * machine advertising a stolen id gets a failed handshake, not a session.
+     */
+    private suspend fun rediscover(host: KnownHost): KnownHost? {
+        val found = withTimeoutOrNull(REDISCOVER_TIMEOUT_MS) {
+            discovery.hosts()
+                .mapNotNull { list -> list.firstOrNull { it.daemonId == host.daemonId } }
+                .firstOrNull()
+        } ?: return null
+        if (found.host == host.host && found.port == host.port) return null
+        return host.copy(host = found.host, port = found.port)
+    }
+
     fun adoptDiscoveredAddress(daemonId: String, host: String, port: Int) {
         val known = store.hosts().find { it.daemonId == daemonId } ?: return
         if (known.host == host && known.port == port) return
@@ -464,6 +512,15 @@ class SwitchboardConnection private constructor(context: Context) {
     companion object {
         private const val TAG = "SwitchboardConnection"
         const val DEFAULT_PORT = 9427
+
+        /** How long a failed resume waits for mDNS to name the host's new address. */
+        private const val REDISCOVER_TIMEOUT_MS = 4_000L
+
+        /**
+         * Address changes chased within one session. A record that flaps between
+         * two addresses would otherwise redial forever without ever backing off.
+         */
+        private const val MAX_MOVES = 3
 
         /**
          * The teardown rule, kept separate so it can be exercised without a
