@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"switchboard/backend/internal/config"
 	"switchboard/backend/internal/crypto"
 	"switchboard/backend/internal/db"
+	"switchboard/backend/internal/discovery"
 	"switchboard/backend/internal/protocol"
 	"switchboard/backend/internal/system"
 	"switchboard/backend/internal/transfer"
@@ -560,20 +560,9 @@ func (s *Server) clientCount() int {
 	return len(s.clients)
 }
 
-// localIP finds the LAN address a phone on the same network can reach. It
-// dials an off-machine address without sending anything, which makes the OS
-// pick the interface it would actually route through.
-func localIP() string {
-	conn, err := net.Dial("udp", "192.0.2.1:9") // TEST-NET-1, never routed
-	if err != nil {
-		return "127.0.0.1"
-	}
-	defer conn.Close()
-	if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
-		return addr.IP.String()
-	}
-	return "127.0.0.1"
-}
+// localIP finds the LAN address a phone on the same network can reach. Shared
+// with the mDNS advertiser, which follows the same address across networks.
+func localIP() string { return discovery.OutboundIP() }
 
 // upgrader accepts any origin: the transport is authenticated and encrypted
 // inside the socket, so browser origin has no bearing on trust here.

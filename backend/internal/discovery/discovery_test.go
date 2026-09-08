@@ -99,3 +99,32 @@ func TestAdvertiseIsDiscoverable(t *testing.T) {
 		}
 	}
 }
+
+// The advertiser swaps its registration whenever the host moves networks, so
+// the shutdown it holds is a moving target. This pins the contract the follow
+// loop relies on: a swap retires exactly the registration it replaces, Stop
+// retires whatever is current, and a swap that loses the race with Stop
+// retires itself rather than leaking a live record.
+func TestAdvertiserSwapAndStopRetireEveryRegistration(t *testing.T) {
+	var retired []string
+	a := &Advertiser{
+		stop: func() { retired = append(retired, "first") },
+		done: make(chan struct{}),
+	}
+
+	a.swap(func() { retired = append(retired, "second") })
+	if len(retired) != 1 || retired[0] != "first" {
+		t.Fatalf("swap retired %v, want the registration it replaced", retired)
+	}
+
+	a.Stop()
+	if len(retired) != 2 || retired[1] != "second" {
+		t.Fatalf("stop retired %v, want the current registration", retired)
+	}
+
+	a.Stop() // idempotent: the follow loop's channel must not be closed twice
+	a.swap(func() { retired = append(retired, "late") })
+	if len(retired) != 3 || retired[2] != "late" {
+		t.Fatalf("a swap after Stop must retire itself, got %v", retired)
+	}
+}

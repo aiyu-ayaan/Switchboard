@@ -14,6 +14,7 @@ package discovery
 import (
 	"fmt"
 	"strconv"
+	"sync"
 )
 
 // Service is the DNS-SD service type Switchboard daemons register under.
@@ -34,14 +35,51 @@ const (
 	Version = 1
 )
 
-// Advertiser publishes the daemon until it is stopped.
-type Advertiser struct{ stop func() }
+// Advertiser publishes the daemon until it is stopped. The registration behind
+// it is replaced whenever the host changes network, so `stop` is guarded.
+type Advertiser struct {
+	mu     sync.Mutex
+	stop   func()
+	done   chan struct{}
+	closed bool
+}
+
+// swap installs a fresh registration and withdraws the one it replaces.
+func (a *Advertiser) swap(stop func()) {
+	a.mu.Lock()
+	if a.closed {
+		a.mu.Unlock()
+		stop()
+		return
+	}
+	old := a.stop
+	a.stop = stop
+	a.mu.Unlock()
+	if old != nil {
+		old()
+	}
+}
 
 // Stop withdraws the advertisement, sending the DNS-SD goodbye packets so
 // clients drop the host immediately rather than waiting for the TTL.
 func (a *Advertiser) Stop() {
-	if a != nil && a.stop != nil {
-		a.stop()
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	if a.closed {
+		a.mu.Unlock()
+		return
+	}
+	a.closed = true
+	stop := a.stop
+	a.stop = nil
+	if a.done != nil {
+		close(a.done)
+	}
+	a.mu.Unlock()
+	if stop != nil {
+		stop()
 	}
 }
 
