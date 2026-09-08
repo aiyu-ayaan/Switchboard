@@ -32,6 +32,13 @@
     <!-- Start background service automatically when device boots. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!--
+      Switchboard is installed from a GitHub release rather than a store, so it
+      updates itself. This is what lets it reach Android's own install screen;
+      from API 26 the grant is a per-app setting the user makes in system
+      settings, and nothing here can install without that screen's confirmation.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!--
       Files are picked and saved through the Storage Access Framework, which
       grants per-document access, so no storage permission is declared at all.
     -->
@@ -98,6 +105,15 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!--
+          How a PackageInstaller session reports back. Not exported: the only
+          thing that may send this is the platform, answering a session this
+          app created.
+        -->
+        <receiver
+            android:name=".update.UpdateInstallReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

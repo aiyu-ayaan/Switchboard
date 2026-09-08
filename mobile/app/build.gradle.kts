@@ -105,6 +105,9 @@ android {
 
     buildFeatures {
         compose = true
+        // The updater compares BuildConfig.VERSION_NAME against the GitHub
+        // release tags, so the generated class has to exist.
+        buildConfig = true
     }
 
     compileOptions {
@@ -142,4 +145,5 @@ dependencies {
     implementation(libs.camera.lifecycle)
 
     testImplementation(libs.junit)
+    testImplementation(libs.json)
 }

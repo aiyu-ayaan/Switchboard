@@ -74,6 +74,9 @@ import com.switchboard.app.ui.Section
 import com.switchboard.app.ui.SectionActions
 import com.switchboard.app.ui.SectionScreen
 import com.switchboard.app.ui.SettingsScreen
+import com.switchboard.app.update.UpdateScreen
+import com.switchboard.app.update.UpdateSheet
+import com.switchboard.app.update.Updates
 import com.switchboard.app.ui.ShareTargetSheet
 import android.content.Intent
 import android.net.Uri
@@ -148,6 +151,7 @@ sealed interface AppScreen {
     data object Main : AppScreen
     data class Detail(val section: Section) : AppScreen
     data object Settings : AppScreen
+    data object Updates : AppScreen
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -179,6 +183,15 @@ fun SwitchboardApp(
         onDispose {
             (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+    }
+
+    // Switchboard installs from a GitHub release rather than a store, so the
+    // app is the only thing that can notice a newer one. Once per launch, and
+    // silent unless there is something to offer: `check` returns early while
+    // the feature is off or a snooze is running.
+    LaunchedEffect(Unit) {
+        Updates.init(context)
+        Updates.check()
     }
 
     LaunchedEffect(currentScreen) {
@@ -248,7 +261,9 @@ fun SwitchboardApp(
         if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
             (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
-        currentScreen = AppScreen.Main
+        // Updates is reached from Settings, so back goes there rather than
+        // dropping two levels to the home surface.
+        currentScreen = if (currentScreen is AppScreen.Updates) AppScreen.Settings else AppScreen.Main
     }
 
     // The lock control lives on the home surfaces only, so its click needs the
@@ -305,7 +320,11 @@ fun SwitchboardApp(
                                 if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
                                     (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                                 }
-                                currentScreen = AppScreen.Main
+                                currentScreen = if (currentScreen is AppScreen.Updates) {
+                                    AppScreen.Settings
+                                } else {
+                                    AppScreen.Main
+                                }
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
@@ -334,6 +353,18 @@ fun SwitchboardApp(
                                     )
                                     Text(
                                         text = "Appearance & About",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                is AppScreen.Updates -> {
+                                    Text(
+                                        text = "App updates",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Released on GitHub, installed by Android",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -461,8 +492,12 @@ fun SwitchboardApp(
                             onSetDynamicColor = themePreferences::setDynamicColor,
                             onSetSaveDirectory = viewModel.transferPreferences::setSaveDirectory,
                             onSetRateUnit = viewModel.transferPreferences::setRateUnit,
+                            onOpenUpdates = { currentScreen = AppScreen.Updates },
                             onBack = { currentScreen = AppScreen.Main }
                         )
+                    }
+                    is AppScreen.Updates -> {
+                        UpdateScreen()
                     }
                     is AppScreen.Detail -> {
                         SectionScreen(
@@ -582,6 +617,15 @@ fun SwitchboardApp(
                 }
             }
         )
+    }
+
+    // What a launch check does when it finds something. Not shown on the update
+    // screen itself, where the same offer is already on the page.
+    if (currentScreen !is AppScreen.Updates) {
+        UpdateSheet(onOpenSettings = {
+            Updates.dismiss()
+            currentScreen = AppScreen.Updates
+        })
     }
 
     if (showConnectionInfo && connected) {
