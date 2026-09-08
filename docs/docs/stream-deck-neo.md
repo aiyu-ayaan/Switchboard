@@ -64,6 +64,13 @@ Both desktop and mobile key customizers feature an integrated **Installed Applic
 - Includes real-time search filtering.
 - Shows an appropriate semantic app icon, then automatically populates the command path, key title, and matching deck icon when selected.
 
+### 🖼️ Real Icons on Every Key
+A key wears the artwork of what it actually launches, not a stand-in glyph:
+
+- **App keys** use the application's own Windows icon. Shortcuts are followed to their target first, and built-in commands such as `notepad` and `explorer` are resolved to their real executable, so each one looks like the app rather than a generic document.
+- **Link keys** use the website's own logo, read from the icons the site declares (falling back to `/favicon.ico`). The logo is stored with the key, so the same artwork appears on your phone's deck too.
+- If neither can be resolved, the key falls back to the icon you picked from the built-in library. You can always override the artwork by choosing a glyph in the inspector.
+
 ---
 
 ## 🔄 Bidirectional Real-Time Synchronization

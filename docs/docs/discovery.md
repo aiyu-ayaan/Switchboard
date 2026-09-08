@@ -76,6 +76,33 @@ Discovery is used in two places:
    this, a new DHCP lease would leave reconnect dialling an address the desktop
    has left. Only the address moves; the pinned host key is untouched, so the
    handshake still has to prove the machine at the new address is the same one.
+3. **Rescuing a failed reconnect** — a resume that never reaches the handshake
+   is usually dialling an address the desktop has left behind, which is what
+   changing Wi-Fi network does to a stored record. The phone looks the daemon
+   up by its id, adopts the address it answers on now and retries there, up to
+   three moves per session. This runs whether or not *Stay connected* is on: a
+   pairing is meant to survive a change of network, not only a dropped socket.
+
+---
+
+## 🔁 Following the Host Across Networks
+
+A pairing is not tied to the network it was made on. Both ends have to move for
+that to hold:
+
+- **The desktop** re-registers its advertisement whenever its outbound LAN
+  address changes. zeroconf reads interface addresses once, at registration, so
+  without this a desktop that joined another network kept answering queries with
+  the address it had on the old one — a record that resolved to nowhere.
+- **The phone** re-resolves by daemon id when a reconnect fails, rather than
+  giving up on the stored address.
+
+Either fix alone still leaves one end pointing at a dead address.
+
+The limit is mDNS itself: it does not cross a router. Two devices on different
+subnets, or on a network with client isolation, cannot find each other this way,
+and Switchboard has no relay — pair by address there, or put both on the same
+network.
 
 ---
 
