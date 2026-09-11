@@ -84,13 +84,27 @@ Sets the hardware contrast on a DDC/CI-capable display.
 }
 ```
 
-#### 4. `set_volume`
+#### 4. `display.power.set`
+Sets the hardware power state (standby / on) on a specific display via DDC/CI VCP `0xD6` (for external monitors) or internal panel backlight toggle.
+
+```json
+{
+  "type": "display.power.set",
+  "id": "req-004",
+  "payload": {
+    "displayId": "\\\\.\\DISPLAY4",
+    "on": false
+  }
+}
+```
+
+#### 5. `set_volume`
 Sets the system master audio volume and/or mute state.
 
 ```json
 {
   "type": "set_volume",
-  "id": "req-004",
+  "id": "req-005",
   "payload": {
     "level": 65,
     "muted": false
@@ -98,13 +112,13 @@ Sets the system master audio volume and/or mute state.
 }
 ```
 
-#### 5. `set_mixer_volume`
+#### 6. `set_mixer_volume`
 Adjusts the volume level for an individual active application session.
 
 ```json
 {
   "type": "set_mixer_volume",
-  "id": "req-005",
+  "id": "req-006",
   "payload": {
     "sessionId": "{0.0.0.00000000}.{...}|chrome.exe",
     "level": 80,
@@ -113,14 +127,14 @@ Adjusts the volume level for an individual active application session.
 }
 ```
 
-#### 6. `audio.output.set`
+#### 7. `audio.output.set`
 Moves the host's default playback endpoint. The reply is the refreshed device
 list, because changing the default changes which entry is marked, not just one.
 
 ```json
 {
   "type": "audio.output.set",
-  "id": "req-006",
+  "id": "req-007",
   "payload": {
     "deviceId": "{0.0.0.00000000}.{87039890-5e96-4cc8-83f8-1aeca934c199}"
   }
@@ -131,13 +145,13 @@ All three Windows endpoint roles — console, multimedia and communications —
 move together, so the whole host follows the choice rather than splitting
 playback from calls. Guarded by the `outputs` capability.
 
-#### 7. `media_control`
+#### 8. `media_control`
 Dispatches a playback transport action to the active media session.
 
 ```json
 {
   "type": "media_control",
-  "id": "req-006",
+  "id": "req-008",
   "payload": {
     "action": "play_pause"
   }
@@ -145,7 +159,7 @@ Dispatches a playback transport action to the active media session.
 ```
 *Supported actions*: `"play"`, `"pause"`, `"play_pause"`, `"next"`, `"previous"`, `"stop"`.
 
-#### 8. `input.move` / `input.button` / `input.scroll` / `input.gesture`
+#### 9. `input.move` / `input.button` / `input.scroll` / `input.gesture`
 The air mouse. Every gesture is recognised on the phone; the desktop receives
 resolved intents and never learns a finger was involved. All four are
 fire-and-forget — the pointer moving on screen is the acknowledgement — and
@@ -155,7 +169,7 @@ failures still return an error frame. Guarded by the `input` capability. See
 ```json
 {
   "type": "input.move",
-  "id": "req-007",
+  "id": "req-009",
   "payload": { "dx": 4.25, "dy": -1.5 }
 }
 ```
@@ -176,24 +190,24 @@ stop the cursor creeping at all.
 and that table is the entire keyboard surface the air mouse exposes, so a
 malformed frame cannot turn the pointer channel into a general keyboard.
 
-#### 9. `system.lock`
+#### 10. `system.lock`
 Locks the host workstation console session (equivalent to `user32!LockWorkStation` or Win+L). Guarded by the `lock` capability.
 
 ```json
 {
   "type": "command",
   "action": "system.lock",
-  "id": "req-008"
+  "id": "req-010"
 }
 ```
 
-#### 10. `file_transfer_init`
+#### 11. `file_transfer_init`
 Initiates a peer-to-peer file transfer.
 
 ```json
 {
   "type": "file_transfer_init",
-  "id": "req-009",
+  "id": "req-011",
   "payload": {
     "name": "photo.jpg",
     "size": 4194304,
@@ -203,23 +217,23 @@ Initiates a peer-to-peer file transfer.
 }
 ```
 
-#### 11. `deck.get`
+#### 12. `deck.get`
 Requests the current Stream Deck Neo configuration including pages, keys, and infobar settings. Guarded by the `deck` capability.
 
 ```json
 {
   "type": "deck.get",
-  "id": "req-010"
+  "id": "req-012"
 }
 ```
 
-#### 12. `deck.set`
+#### 13. `deck.set`
 Saves and atomically broadcasts an updated Stream Deck Neo configuration across all connected clients.
 
 ```json
 {
   "type": "deck.set",
-  "id": "req-011",
+  "id": "req-013",
   "payload": {
     "activePage": 0,
     "pages": [
@@ -251,13 +265,13 @@ Saves and atomically broadcasts an updated Stream Deck Neo configuration across 
 }
 ```
 
-#### 13. `deck.action`
+#### 14. `deck.action`
 Triggers immediate execution of a Stream Deck Neo key action on the host machine.
 
 ```json
 {
   "type": "deck.action",
-  "id": "req-012",
+  "id": "req-014",
   "payload": {
     "keyIndex": 0,
     "action": {
@@ -269,23 +283,23 @@ Triggers immediate execution of a Stream Deck Neo key action on the host machine
 }
 ```
 
-#### 14. `system.apps`
+#### 15. `system.apps`
 Requests the list of applications installed on the host system (scanned from Windows Start Menu shortcuts and standard system tools).
 
 ```json
 {
   "type": "system.apps",
-  "id": "req-013"
+  "id": "req-015"
 }
 ```
 
-#### 15. `system.power`
+#### 16. `system.power`
 Triggers workstation power and session operations: display power down, ACPI sleep, timed shutdown, or countdown abort. Guarded by the `power` capability.
 
 ```json
 {
   "type": "system.power",
-  "id": "req-014",
+  "id": "req-016",
   "payload": {
     "action": "shutdown",
     "seconds": 1800
@@ -294,13 +308,13 @@ Triggers workstation power and session operations: display power down, ACPI slee
 ```
 *Supported actions*: `"display_off"`, `"sleep"`, `"shutdown"`, `"abort_shutdown"`. `seconds` is optional and specifies the countdown before shutdown.
 
-#### 16. `audio.mic.set`
+#### 17. `audio.mic.set`
 Adjusts the master recording microphone volume and mute state. Guarded by the `mic` capability.
 
 ```json
 {
   "type": "audio.mic.set",
-  "id": "req-015",
+  "id": "req-017",
   "payload": {
     "level": 85,
     "muted": false
@@ -308,39 +322,39 @@ Adjusts the master recording microphone volume and mute state. Guarded by the `m
 }
 ```
 
-#### 17. `audio.input.set`
+#### 18. `audio.input.set`
 Selects the default system audio capture endpoint (recording device). Guarded by the `inputs` capability.
 
 ```json
 {
   "type": "audio.input.set",
-  "id": "req-016",
+  "id": "req-018",
   "payload": {
     "deviceId": "{0.0.1.00000000}.{e14b4334-a145-4df3-8c46-992383bbccb2}"
   }
 }
 ```
 
-#### 18. `input.text`
+#### 19. `input.text`
 Injects unicode text keystrokes into the active focused window. Guarded by the `input` capability.
 
 ```json
 {
   "type": "input.text",
-  "id": "req-017",
+  "id": "req-019",
   "payload": {
     "text": "Hello from Switchboard! 🚀"
   }
 }
 ```
 
-#### 19. `clipboard.set`
+#### 20. `clipboard.set`
 Directly writes text content to the host workstation system clipboard. Guarded by the `clipboard` capability.
 
 ```json
 {
   "type": "clipboard.set",
-  "id": "req-018",
+  "id": "req-020",
   "payload": {
     "text": "Copied text content from mobile"
   }
@@ -371,7 +385,8 @@ Pushed upon connection and whenever host state (displays, volume, mixer, output 
         "hasContrast": true,
         "contrast": 50,
         "minContrast": 0,
-        "maxContrast": 100
+        "maxContrast": 100,
+        "power": true
       }
     ],
     "volume": {
@@ -487,6 +502,7 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `POST` | `/local/displays/refresh` | Force rescan of physical display monitors. | `{}` |
 | `POST` | `/local/display/brightness` | Set monitor brightness. | `{"displayId": "...", "value": 80}` |
 | `POST` | `/local/display/contrast` | Set monitor contrast. | `{"displayId": "...", "value": 50}` |
+| `POST` | `/local/display/power` | Set monitor power state (standby/on). | `{"displayId": "...", "on": true}` |
 | `POST` | `/local/volume` | Set master system volume. | `{"level": 50, "muted": false}` |
 | `POST` | `/local/mixer` | Set per-app audio volume. | `{"sessionId": "...", "level": 100, "muted": false}` |
 | `POST` | `/local/audio/output` | Route host audio to one endpoint. | `{"deviceId": "..."}` |

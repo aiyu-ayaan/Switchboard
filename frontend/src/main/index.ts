@@ -371,6 +371,7 @@ const ALLOWED_ROUTES = new Set([
   '/displays/refresh',
   '/display/brightness',
   '/display/contrast',
+  '/display/power',
   '/volume',
   '/mixer',
   '/audio/output',

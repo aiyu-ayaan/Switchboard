@@ -51,6 +51,7 @@ const bridge: SwitchboardBridge = {
   getState: () => call<LocalState>('/state'),
   setBrightness: (displayId, value) => call<Display>('/display/brightness', { displayId, value }),
   setContrast: (displayId, value) => call<Display>('/display/contrast', { displayId, value }),
+  setDisplayPower: (displayId, on) => call('/display/power', { displayId, on }),
   refreshDisplays: () => call<Display[]>('/displays/refresh', {}),
   setVolume: (level, muted) => call<Volume>('/volume', { level, muted }),
   setMicVolume: (level, muted) => call('/audio/mic', { level, muted }),

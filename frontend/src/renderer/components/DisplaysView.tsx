@@ -1,4 +1,4 @@
-import { Contrast, Laptop, Monitor, MonitorOff, RefreshCw, Sun } from 'lucide-react';
+import { Contrast, Laptop, Monitor, MonitorOff, Power, RefreshCw, Sun } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { Display, LocalState } from '../../shared/types';
 import { useThrottledCommit } from '../useHostState';
@@ -34,6 +34,34 @@ export function DisplaysView({ state, patch, setPaused, refresh }: DisplaysViewP
     [patch]
   );
 
+  const handleTogglePower = useCallback(
+    async (id: string, on: boolean) => {
+      patch((draft) => ({
+        ...draft,
+        host: {
+          ...draft.host,
+          displays: draft.host.displays.map((d) => (d.id === id ? { ...d, power: on } : d))
+        }
+      }));
+      try {
+        const updated = await window.switchboard.setDisplayPower(id, on);
+        if (updated) {
+          patch((draft) => ({
+            ...draft,
+            host: {
+              ...draft.host,
+              displays: draft.host.displays.map((d) => (d.id === id ? { ...d, ...updated } : d))
+            }
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to set display power:', err);
+        refresh();
+      }
+    },
+    [patch, refresh]
+  );
+
   const rescan = async () => {
     setBusy(true);
     try {
@@ -59,7 +87,7 @@ export function DisplaysView({ state, patch, setPaused, refresh }: DisplaysViewP
             key={d.id}
             label={d.name}
             icon={d.internal ? Laptop : Monitor}
-            detail={`${percent(d.brightness, d.minBrightness, d.maxBrightness)}%`}
+            detail={d.power === false ? 'Off' : `${percent(d.brightness, d.minBrightness, d.maxBrightness)}%`}
             selected={selected === d.id}
             onSelect={() => setSelected(d.id)}
           />
@@ -94,6 +122,7 @@ export function DisplaysView({ state, patch, setPaused, refresh }: DisplaysViewP
                 key={display.id}
                 display={display}
                 onLocalChange={applyLocal}
+                onTogglePower={handleTogglePower}
                 setPaused={setPaused}
               />
             ))}
@@ -107,12 +136,15 @@ export function DisplaysView({ state, patch, setPaused, refresh }: DisplaysViewP
 function DisplayCard({
   display,
   onLocalChange,
+  onTogglePower,
   setPaused
 }: {
   display: Display;
   onLocalChange: (id: string, field: 'brightness' | 'contrast', value: number) => void;
+  onTogglePower: (id: string, on: boolean) => void;
   setPaused: (paused: boolean) => void;
 }) {
+  const isOff = display.power === false;
   const sendBrightness = useThrottledCommit((value: number) =>
     window.switchboard.setBrightness(display.id, value)
   );
@@ -124,43 +156,84 @@ function DisplayCard({
     <Card
       title={display.name}
       meta={
-        <span className="shrink-0 rounded bg-raised px-1.5 py-0.5 font-mono text-micro text-ink-faint">
-          {display.internal ? 'Internal' : 'DDC/CI'}
-        </span>
+        <div className="flex items-center gap-2">
+          {isOff ? (
+            <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 font-mono text-micro text-warn">
+              Standby
+            </span>
+          ) : (
+            <span className="shrink-0 rounded bg-raised px-1.5 py-0.5 font-mono text-micro text-ink-faint">
+              {display.internal ? 'Internal' : 'DDC/CI'}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => onTogglePower(display.id, isOff)}
+            aria-label={isOff ? `Turn on ${display.name}` : `Turn off ${display.name}`}
+            title={isOff ? 'Turn on display' : 'Turn off display (standby)'}
+            className={`flex items-center justify-center rounded p-1 transition-colors ${
+              isOff
+                ? 'text-ink-faint hover:bg-raised hover:text-ink'
+                : 'text-accent hover:bg-raised hover:text-accent-hover'
+            }`}
+          >
+            <Power aria-hidden="true" className="h-3.5 w-3.5" />
+          </button>
+        </div>
       }
     >
-      <LevelSlider
-        icon={Sun}
-        label={`${display.name} brightness`}
-        value={display.brightness}
-        min={display.minBrightness}
-        max={display.maxBrightness}
-        onGestureChange={setPaused}
-        onChange={(value) => {
-          onLocalChange(display.id, 'brightness', value);
-          sendBrightness(value);
-        }}
-        onCommit={(value) => window.switchboard.setBrightness(display.id, value).catch(() => {})}
-      />
+      {isOff && (
+        <div className="flex items-center justify-between rounded-md border border-edge bg-canvas/80 px-3 py-2 text-micro">
+          <div className="flex items-center gap-2">
+            <MonitorOff aria-hidden="true" className="h-3.5 w-3.5 text-warn" />
+            <span className="font-medium text-ink-dim">Display Standby / Off</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onTogglePower(display.id, true)}
+            className="rounded bg-accent px-2 py-1 text-tiny font-medium text-canvas hover:bg-accent/90 transition-colors"
+          >
+            Turn On
+          </button>
+        </div>
+      )}
 
-      {display.hasContrast ? (
+      <div className={`space-y-3 transition-opacity ${isOff ? 'opacity-40 pointer-events-none' : ''}`}>
         <LevelSlider
-          icon={Contrast}
-          label={`${display.name} contrast`}
-          value={display.contrast}
-          min={display.minContrast}
-          max={display.maxContrast}
+          icon={Sun}
+          label={`${display.name} brightness`}
+          value={display.brightness}
+          min={display.minBrightness}
+          max={display.maxBrightness}
+          disabled={isOff}
           onGestureChange={setPaused}
           onChange={(value) => {
-            onLocalChange(display.id, 'contrast', value);
-            sendContrast(value);
+            onLocalChange(display.id, 'brightness', value);
+            sendBrightness(value);
           }}
-          onCommit={(value) => window.switchboard.setContrast(display.id, value).catch(() => {})}
+          onCommit={(value) => window.switchboard.setBrightness(display.id, value).catch(() => {})}
         />
-      ) : null}
+
+        {display.hasContrast ? (
+          <LevelSlider
+            icon={Contrast}
+            label={`${display.name} contrast`}
+            value={display.contrast}
+            min={display.minContrast}
+            max={display.maxContrast}
+            disabled={isOff}
+            onGestureChange={setPaused}
+            onChange={(value) => {
+              onLocalChange(display.id, 'contrast', value);
+              sendContrast(value);
+            }}
+            onCommit={(value) => window.switchboard.setContrast(display.id, value).catch(() => {})}
+          />
+        ) : null}
+      </div>
 
       {/* The panel's own capability range, not an assumed 0-100. */}
-      <dl className="flex gap-4 border-t border-edge pt-2 font-mono text-micro text-ink-faint">
+      <dl className={`flex gap-4 border-t border-edge pt-2 font-mono text-micro text-ink-faint ${isOff ? 'opacity-40' : ''}`}>
         <div className="flex gap-1.5">
           <dt>Brightness</dt>
           <dd className="tabular-nums text-ink-dim">

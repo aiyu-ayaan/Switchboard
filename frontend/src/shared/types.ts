@@ -12,6 +12,12 @@ export interface Display {
   contrast: number;
   minContrast: number;
   maxContrast: number;
+  power?: boolean;
+}
+
+export interface DisplayPowerSet {
+  displayId: string;
+  on: boolean;
 }
 
 export interface Volume {
@@ -230,6 +236,7 @@ export interface SwitchboardBridge {
   getState(): Promise<LocalState>;
   setBrightness(displayId: string, value: number): Promise<Display>;
   setContrast(displayId: string, value: number): Promise<Display>;
+  setDisplayPower: (displayId: string, on: boolean) => Promise<Display>;
   refreshDisplays(): Promise<Display[]>;
   setVolume(level: number, muted: boolean): Promise<Volume>;
   setMicVolume: (level: number, muted: boolean) => Promise<Volume>;
