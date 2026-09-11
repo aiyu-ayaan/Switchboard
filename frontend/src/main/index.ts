@@ -149,8 +149,27 @@ async function daemonRunning(): Promise<boolean> {
  * Starts the daemon unless one is already up. During `pnpm dev` the runner
  * spins the daemon with `go run`, so this is a no-op there; in a packaged app
  * it is what actually launches the backend.
+ *
+ * Callable at any point, not just at boot: a spawn returns long before the
+ * daemon has bound the port, and an update leaves the outgoing copy's daemon
+ * listening for a moment after the new app has already asked whether one is
+ * running. Either way the answer to a refused connection is the same — make
+ * sure a daemon is coming up — so this waits for the port and can be called
+ * again whenever a request finds nothing there.
  */
-async function startDaemon(): Promise<void> {
+let daemonStart: Promise<void> | null = null;
+
+function startDaemon(): Promise<void> {
+  // One start at a time: the renderer polls every two seconds and several
+  // requests can fail together, and a second spawn would only fail to bind.
+  daemonStart ??= launchDaemon().finally(() => {
+    daemonStart = null;
+  });
+  return daemonStart;
+}
+
+async function launchDaemon(): Promise<void> {
+  if (quitting) return;
   if (await daemonRunning()) {
     console.log('[switchboard] using the daemon already listening on', DAEMON_PORT);
     return;
@@ -173,6 +192,16 @@ async function startDaemon(): Promise<void> {
     console.warn('[switchboard] daemon exited with', code);
     daemon = null;
   });
+
+  // A freshly installed binary pays for Defender to read it before it listens,
+  // which is why this mattered most right after an update. Returning early left
+  // the first /state of the session refused and the window stuck on "Waiting
+  // for the Switchboard daemon".
+  for (let attempt = 0; attempt < 20 && !quitting; attempt += 1) {
+    if (await daemonRunning()) return;
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  console.warn('[switchboard] daemon did not answer on', DAEMON_PORT);
 }
 
 function stopDaemon(): void {
@@ -364,7 +393,27 @@ const ALLOWED_ROUTES = new Set([
   '/system/apps'
 ]);
 
+/**
+ * One request, and if nothing is listening, a daemon and one more try.
+ *
+ * The daemon is a child process that can be gone for reasons this side never
+ * sees: an update replacing it, a crash, someone ending it in Task Manager.
+ * Before this, the app noticed only in the sense that every call failed
+ * forever, and the only cure was quitting and reopening the window.
+ */
 async function daemonFetch<T>(route: string, body?: unknown): Promise<T> {
+  try {
+    return await daemonRequest<T>(route, body);
+  } catch (error) {
+    // Only a connection failure: a 4xx or a daemon-reported error is an answer,
+    // and restarting a working daemon over one would be worse than the error.
+    if (!(error instanceof TypeError) || quitting) throw error;
+    await startDaemon();
+    return daemonRequest<T>(route, body);
+  }
+}
+
+async function daemonRequest<T>(route: string, body?: unknown): Promise<T> {
   const res = await fetch(`http://127.0.0.1:${DAEMON_PORT}/local${route}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
