@@ -126,6 +126,41 @@ func (c *Controller) Lock() error { return lockSystem() }
 // IsLocked reports whether the workstation console session is locked.
 func (c *Controller) IsLocked() bool { return isLocked() }
 
+// Power executes a host power command (display_off, sleep, shutdown, abort_shutdown).
+func (c *Controller) Power(action string, seconds int) error {
+	return powerAction(action, seconds)
+}
+
+// Mic reads the host default capture endpoint volume and mute state.
+func (c *Controller) Mic() (protocol.Volume, error) {
+	return getMicVolume()
+}
+
+// SetMic sets the host default capture endpoint volume and mute state.
+func (c *Controller) SetMic(level int, muted bool) (protocol.Volume, error) {
+	return setMicVolume(level, muted)
+}
+
+// Inputs lists the audio recording endpoints the host can capture from.
+func (c *Controller) Inputs() ([]protocol.AudioDevice, error) {
+	return audioInputs()
+}
+
+// SetInput routes host audio capture to one endpoint and returns the refreshed list.
+func (c *Controller) SetInput(id string) ([]protocol.AudioDevice, error) {
+	return setAudioInput(id)
+}
+
+// InputText injects unicode text as keystrokes.
+func (c *Controller) InputText(text string) error {
+	return inputText(text)
+}
+
+// SetClipboard sets the host clipboard text.
+func (c *Controller) SetClipboard(text string) error {
+	return setClipboard(text)
+}
+
 // State assembles the snapshot pushed to clients. Individual controls are
 // allowed to fail without failing the whole snapshot: a machine with no audio
 // endpoint should still be able to drive its monitors.
@@ -136,6 +171,7 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 		Displays:     []protocol.Display{},
 		Mixer:        []protocol.AudioSession{},
 		Outputs:      []protocol.AudioDevice{},
+		Inputs:       []protocol.AudioDevice{},
 		Capabilities: []string{},
 	}
 	if displays, err := c.Displays(); err == nil {
@@ -170,6 +206,27 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 	if lockSupported() {
 		state.Capabilities = append(state.Capabilities, "lock")
 		state.Locked = isLocked()
+	}
+	if powerSupported() {
+		state.Capabilities = append(state.Capabilities, "power")
+	}
+	if micSupported() {
+		state.Capabilities = append(state.Capabilities, "mic")
+		if mic, err := c.Mic(); err == nil {
+			state.Mic = mic
+		}
+	}
+	if inputsSupported() {
+		state.Capabilities = append(state.Capabilities, "inputs")
+		if inputs, err := c.Inputs(); err == nil {
+			state.Inputs = inputs
+		}
+	}
+	if keyboardSupported() {
+		state.Capabilities = append(state.Capabilities, "keyboard")
+	}
+	if clipboardSupported() {
+		state.Capabilities = append(state.Capabilities, "clipboard")
 	}
 	return state
 }

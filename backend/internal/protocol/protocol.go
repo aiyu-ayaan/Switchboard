@@ -80,6 +80,19 @@ const (
 	ActionDeckState  = "deck.state"  // host -> client: broadcast deck configuration
 
 	ActionSystemApps = "system.apps" // client -> host: query installed desktop applications
+
+	// Power & Session controls
+	ActionSystemPower = "system.power" // client -> host: display_off, sleep, shutdown, abort_shutdown
+
+	// Microphone & Input devices
+	ActionMicGet    = "audio.mic.get"    // client -> host: query mic volume & mute
+	ActionMicSet    = "audio.mic.set"    // client -> host: set mic volume & mute
+	ActionInputList = "audio.input.list" // client -> host: query recording devices
+	ActionInputSet  = "audio.input.set"  // client -> host: set default recording device
+
+	// Remote text & clipboard
+	ActionInputText    = "input.text"    // client -> host: type unicode text
+	ActionClipboardSet = "clipboard.set" // client -> host: set host clipboard text
 )
 
 // ChunkSize is the payload slice carried by one file.chunk frame.
@@ -261,12 +274,16 @@ type HostState struct {
 	DaemonID string    `json:"daemonId"`
 	Displays []Display `json:"displays"`
 	Volume   Volume    `json:"volume"`
+	Mic      Volume    `json:"mic"`
 	// Mixer is empty on a host with no per-application control, which is what
 	// the "mixer" capability tells a client to expect.
 	Mixer []AudioSession `json:"mixer"`
 	// Outputs are the endpoints the host can route sound to, guarded by the
 	// "outputs" capability. Exactly one carries Default.
-	Outputs      []AudioDevice `json:"outputs"`
+	Outputs []AudioDevice `json:"outputs"`
+	// Inputs are the capture endpoints the host can record from, guarded by the
+	// "inputs" capability. Exactly one carries Default.
+	Inputs       []AudioDevice `json:"inputs"`
 	Media        MediaState    `json:"media"`
 	Locked       bool          `json:"locked"`
 	Capabilities []string      `json:"capabilities"`
@@ -692,3 +709,28 @@ type InstalledApp struct {
 	Path string `json:"path"`
 	Icon string `json:"icon,omitempty"`
 }
+
+// Power action names for PowerCommand.
+const (
+	PowerDisplayOff    = "display_off"
+	PowerSleep         = "sleep"
+	PowerShutdown      = "shutdown"
+	PowerAbortShutdown = "abort_shutdown"
+)
+
+// PowerCommand is the payload for system.power.
+type PowerCommand struct {
+	Action  string `json:"action"`            // display_off | sleep | shutdown | abort_shutdown
+	Seconds int    `json:"seconds,omitempty"` // countdown in seconds for shutdown (0 for immediate)
+}
+
+// InputText is the payload for input.text.
+type InputText struct {
+	Text string `json:"text"`
+}
+
+// ClipboardSet is the payload for clipboard.set.
+type ClipboardSet struct {
+	Text string `json:"text"`
+}
+

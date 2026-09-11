@@ -314,6 +314,86 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		apps := s.control.ListInstalledApps()
 		s.reply(c, env, apps)
 
+	case protocol.ActionSystemPower:
+		var req protocol.PowerCommand
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.Power(req.Action, req.Seconds); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "ok"})
+
+	case protocol.ActionMicGet:
+		volume, err := s.control.Mic()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, volume)
+
+	case protocol.ActionMicSet:
+		var req protocol.Volume
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		volume, err := s.control.SetMic(req.Level, req.Muted)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, volume)
+		s.Broadcast()
+
+	case protocol.ActionInputList:
+		inputs, err := s.control.Inputs()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, inputs)
+
+	case protocol.ActionInputSet:
+		var req protocol.OutputSet
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		inputs, err := s.control.SetInput(req.DeviceID)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, inputs)
+		s.Broadcast()
+
+	case protocol.ActionInputText:
+		var req protocol.InputText
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.InputText(req.Text); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "ok"})
+
+	case protocol.ActionClipboardSet:
+		var req protocol.ClipboardSet
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.SetClipboard(req.Text); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, map[string]string{"status": "ok"})
+
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
 	}

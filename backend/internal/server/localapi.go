@@ -54,6 +54,12 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/deck", s.localSetDeck)
 	handle("POST /local/deck/action", s.localDeckAction)
 	handle("GET /local/system/apps", s.localSystemApps)
+
+	handle("POST /local/system/power", s.localPower)
+	handle("POST /local/audio/mic", s.localSetMic)
+	handle("POST /local/audio/input", s.localSetInput)
+	handle("POST /local/input/text", s.localInputText)
+	handle("POST /local/clipboard", s.localSetClipboard)
 }
 
 // loopbackOnly rejects any request that did not originate on this machine.
@@ -497,4 +503,73 @@ func (s *Server) localDeckAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) localSystemApps(w http.ResponseWriter, r *http.Request) {
 	apps := s.control.ListInstalledApps()
 	writeJSON(w, apps)
+}
+
+func (s *Server) localPower(w http.ResponseWriter, r *http.Request) {
+	var req protocol.PowerCommand
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.control.Power(req.Action, req.Seconds); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) localSetMic(w http.ResponseWriter, r *http.Request) {
+	var req protocol.Volume
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	volume, err := s.control.SetMic(req.Level, req.Muted)
+	if err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	s.Broadcast()
+	writeJSON(w, volume)
+}
+
+func (s *Server) localSetInput(w http.ResponseWriter, r *http.Request) {
+	var req protocol.OutputSet
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	inputs, err := s.control.SetInput(req.DeviceID)
+	if err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	s.Broadcast()
+	writeJSON(w, inputs)
+}
+
+func (s *Server) localInputText(w http.ResponseWriter, r *http.Request) {
+	var req protocol.InputText
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.control.InputText(req.Text); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) localSetClipboard(w http.ResponseWriter, r *http.Request) {
+	var req protocol.ClipboardSet
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.control.SetClipboard(req.Text); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
 }
