@@ -314,7 +314,12 @@ jobs:
     if: needs.plan.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
+      # Full history and tags: the release notes below are built from the
+      # commits since the previous tag, and the default shallow checkout has
+      # neither the tag to measure from nor the commits to list.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -323,6 +328,49 @@ jobs:
           merge-multiple: true
 
       - run: ls -la artifacts
+
+      # Release notes from the commits themselves.
+      #
+      # `generate_release_notes` builds its list out of pull requests merged
+      # since the last tag. Work here lands directly on master, so there were
+      # none to find and every release shipped with an empty "What's Changed" --
+      # the changes were real, the notes just could not see them.
+      #
+      # Collected before the version commit below, so that commit is not itself
+      # part of the list.
+      - name: Collect the release notes
+        id: notes
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -eu
+
+          # --match 'v*', because the only tags that bound a release are ours.
+          # Absent on the very first release, where the range is all of history.
+          previous="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          if [ -n "$previous" ]; then
+            echo "Collecting commits since $previous"
+          else
+            echo "No previous tag; taking the whole history."
+          fi
+
+          {
+            echo "## What's Changed"
+            echo
+            # Merges carry no change of their own, and the bot's version commits
+            # are bookkeeping; everything else lands as its conventional-commit
+            # summary with the release marker trimmed off the end.
+            git log --no-merges --format='%s' ${previous:+"$previous..HEAD"} \
+              | grep -v '^chore(release):' \
+              | sed -e 's/ *![a-z]*$//' -e 's/^/- /'
+            echo
+            if [ -n "$previous" ]; then
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous}...v${VERSION}"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+
+          cat "$RUNNER_TEMP/notes.md"
+          echo "path=$RUNNER_TEMP/notes.md" >> "$GITHUB_OUTPUT"
 
       # The version in the manifests is what the next release bumps from, so it
       # has to land on master. Pre-release suffixes included: `plan` reads them
@@ -353,6 +401,8 @@ jobs:
           tag_name: v${{ needs.plan.outputs.version }}
           name: Switchboard v${{ needs.plan.outputs.version }}
           prerelease: ${{ needs.plan.outputs.prerelease == 'true' }}
-          generate_release_notes: true
+          # Not generate_release_notes: it would append its own (empty) pull
+          # request list under a second "What's Changed" heading.
+          body_path: ${{ steps.notes.outputs.path }}
           files: artifacts/*
           fail_on_unmatched_files: true
