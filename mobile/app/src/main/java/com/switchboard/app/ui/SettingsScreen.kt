@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Vibration
 import com.switchboard.app.update.Updates
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Card
@@ -100,6 +101,8 @@ fun SettingsScreen(
     onSetStartOnBoot: (Boolean) -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetDynamicColor: (Boolean) -> Unit,
+    hapticsEnabled: Boolean,
+    onSetHaptics: (Boolean) -> Unit,
     onSetSaveDirectory: (String) -> Unit,
     onSetRateUnit: (RateUnit) -> Unit,
     onOpenUpdates: () -> Unit,
@@ -335,6 +338,27 @@ fun SettingsScreen(
                         PaletteChip("Surface", MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
                     }
                 }
+            }
+        }
+
+        item {
+            // Turning it back on fires the tick from a Haptics that ignores the
+            // stored setting: the switch has not reached composition yet, and a
+            // switch for feedback that gives none as you enable it reads as
+            // broken.
+            val preview = rememberHaptics(enabled = true)
+            SettingsCard {
+                SwitchRow(
+                    icon = Icons.Filled.Vibration,
+                    title = "Haptic Feedback",
+                    description = "Answer taps, toggles and gestures with a short vibration. " +
+                        "Your system haptics setting still has the last word.",
+                    checked = hapticsEnabled,
+                    onCheckedChange = { on ->
+                        onSetHaptics(on)
+                        if (on) preview.toggle(true)
+                    }
+                )
             }
         }
 
@@ -702,6 +726,7 @@ private fun SwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true
 ) {
+    val haptics = LocalHaptics.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -739,7 +764,10 @@ private fun SwitchRow(
         Spacer(Modifier.width(8.dp))
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = { on ->
+                haptics.toggle(on)
+                onCheckedChange(on)
+            },
             enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.primary,

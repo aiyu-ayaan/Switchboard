@@ -30,15 +30,24 @@ object ExpressiveMotion {
 
 /**
  * Spring-based press scale modifier providing tactile Material 3 Expressive feedback.
+ *
+ * The scale and the tick are one gesture, so they are issued from one place:
+ * every control built on this modifier answers a tap without its own author
+ * having to remember to ask, and the user's haptics switch reaches all of them
+ * at once. Controls that carry a direction or an outcome — a switch, a pairing
+ * that succeeded — say so with [Haptics.toggle] or [Haptics.confirm] at the
+ * call site instead.
  */
 fun Modifier.bouncyClickable(
     enabled: Boolean = true,
     pressedScale: Float = 0.96f,
+    haptic: Boolean = true,
     onClick: () -> Unit
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale = remember { Animatable(1f) }
+    val haptics = LocalHaptics.current
 
     LaunchedEffect(isPressed) {
         scale.animateTo(
@@ -56,7 +65,10 @@ fun Modifier.bouncyClickable(
             interactionSource = interactionSource,
             indication = null,
             enabled = enabled,
-            onClick = onClick
+            onClick = {
+                if (haptic) haptics.tap()
+                onClick()
+            }
         )
 }
 
@@ -73,6 +85,7 @@ fun Modifier.bouncyCombinedClickable(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale = remember { Animatable(1f) }
+    val haptics = LocalHaptics.current
 
     LaunchedEffect(isPressed) {
         scale.animateTo(
@@ -90,7 +103,18 @@ fun Modifier.bouncyCombinedClickable(
             interactionSource = interactionSource,
             indication = null,
             enabled = enabled,
-            onLongClick = onLongClick,
-            onClick = onClick
+            // Foundation buzzes on its own long press, which would ignore the
+            // user's switch and double up with the tick below.
+            hapticFeedbackEnabled = false,
+            onLongClick = onLongClick?.let {
+                {
+                    haptics.longPress()
+                    it()
+                }
+            },
+            onClick = {
+                haptics.tap()
+                onClick()
+            }
         )
 }

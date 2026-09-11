@@ -48,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import com.switchboard.app.data.HapticPreferences
 import com.switchboard.app.data.ThemePreferences
 import com.switchboard.app.ui.ConnectionInfoSheet
 import com.switchboard.app.ui.HomeScreen
@@ -82,7 +84,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import com.switchboard.app.ui.TouchpadActions
+import com.switchboard.app.ui.LocalHaptics
 import com.switchboard.app.ui.SwitchboardTheme
+import com.switchboard.app.ui.rememberHaptics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -97,16 +101,23 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val themePreferences = remember { ThemePreferences(context) }
             val themeConfig by themePreferences.config.collectAsState()
+            val hapticPreferences = remember { HapticPreferences.get(context) }
+            val hapticsEnabled by hapticPreferences.enabled.collectAsState()
 
             SwitchboardTheme(themeConfig = themeConfig) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    SwitchboardApp(
-                        themePreferences = themePreferences,
-                        sharedUrisFlow = pendingSharedUris
-                    )
+                // Provided around the whole app, so every control below can
+                // answer a touch without being handed the setting first.
+                CompositionLocalProvider(LocalHaptics provides rememberHaptics(hapticsEnabled)) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        SwitchboardApp(
+                            themePreferences = themePreferences,
+                            hapticPreferences = hapticPreferences,
+                            sharedUrisFlow = pendingSharedUris
+                        )
+                    }
                 }
             }
         }
@@ -159,10 +170,12 @@ sealed interface AppScreen {
 fun SwitchboardApp(
     viewModel: SwitchboardViewModel = viewModel(),
     themePreferences: ThemePreferences,
+    hapticPreferences: HapticPreferences,
     sharedUrisFlow: StateFlow<List<Uri>?> = MutableStateFlow(null)
 ) {
     val state by viewModel.uiState.collectAsState()
     val themeConfig by themePreferences.config.collectAsState()
+    val hapticsEnabled by hapticPreferences.enabled.collectAsState()
     val transferConfig by viewModel.transferPreferences.config.collectAsState()
     val sharedUris by sharedUrisFlow.collectAsState()
 
@@ -490,6 +503,8 @@ fun SwitchboardApp(
                             onSetStartOnBoot = viewModel::setStartOnBoot,
                             onSetThemeMode = themePreferences::setThemeMode,
                             onSetDynamicColor = themePreferences::setDynamicColor,
+                            hapticsEnabled = hapticsEnabled,
+                            onSetHaptics = hapticPreferences::setEnabled,
                             onSetSaveDirectory = viewModel.transferPreferences::setSaveDirectory,
                             onSetRateUnit = viewModel.transferPreferences::setRateUnit,
                             onOpenUpdates = { currentScreen = AppScreen.Updates },
