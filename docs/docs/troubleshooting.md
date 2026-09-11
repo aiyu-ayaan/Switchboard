@@ -25,6 +25,17 @@ This guide provides solutions for common connectivity, hardware, and permission 
 
 ---
 
+## 🖥️ Desktop App Issues
+
+### "Waiting for the Switchboard daemon…" after an update
+The desktop app runs a small background service (the daemon) that does the actual work, and an update replaces it while it is running. From **v1.0.3** the app waits for the daemon to come back and restarts it by itself if a request finds it gone, so this should clear within a few seconds on its own.
+
+On an older build, or if it persists:
+1. Quit Switchboard from the tray icon (right-click ➔ **Quit**) and open it again.
+2. If your antivirus quarantined `switchboard.exe` from the app's `resources/bin` folder after the update, restore it and allow the file.
+
+---
+
 ## 🖥️ Display & DDC/CI Issues
 
 ### "Monitor brightness does not change"
