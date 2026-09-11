@@ -3,7 +3,7 @@ import java.util.Properties
 // The version a release build carries comes from CI; a local build keeps the
 // checked-in default so `assembleDebug` needs no environment at all.
 val releaseVersionName: String = System.getenv("SWITCHBOARD_VERSION_NAME")?.takeIf { it.isNotBlank() }
-    ?: "0.1.0"
+    ?: "1.0.2"
 
 // Derived from the name rather than a run number: a rebuild of a version must
 // produce the same code, and every later version a higher one. A run number
