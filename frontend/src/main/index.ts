@@ -94,15 +94,28 @@ function appIconPath(): string | undefined {
   return candidates.find(existsSync);
 }
 
-/** Resolves the tray icon asset. */
+/**
+ * Resolves the tray icon asset.
+ *
+ * Windows asks the notification area for a specific pixel size -- 16px at
+ * 100% DPI, 20px at 125%, 24px at 150%, 32px at 200% -- and an ICO carries all
+ * of them, letting the shell pick the one it wants. A lone 32px PNG leaves it
+ * to blur-downscale, which is what made the icon a smudged tile beside its
+ * crisp neighbours, so the ICO is preferred wherever it exists.
+ */
 function trayIconPath(): string | undefined {
-  const candidates = [
-    join(app.getAppPath(), 'resources', 'tray.png'),
-    join(app.getAppPath(), 'dist', 'renderer', 'assets', 'tray.png'),
-    join(__dirname, '..', 'renderer', 'assets', 'tray.png'),
-    join(app.getAppPath(), 'src', 'renderer', 'assets', 'tray.png')
+  const dirs = [
+    join(app.getAppPath(), 'resources'),
+    join(app.getAppPath(), 'dist', 'renderer', 'assets'),
+    join(__dirname, '..', 'renderer', 'assets'),
+    join(app.getAppPath(), 'src', 'renderer', 'assets')
   ];
-  return candidates.find(existsSync);
+  const names = process.platform === 'win32' ? ['tray.ico', 'tray.png'] : ['tray.png'];
+  for (const name of names) {
+    const found = dirs.map((dir) => join(dir, name)).find(existsSync);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** Resolves virtual camera installer scripts. */

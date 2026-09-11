@@ -87,6 +87,25 @@ app.whenReady().then(async () => {
     </svg>
   `;
 
+  // Tray Icon: a glyph, not the app icon.
+  //
+  // The tray used to be the desktop icon downscaled to 32px, which put an
+  // opaque gradient plate and a border in a row of flat transparent glyphs --
+  // it read as a solid blue tile, and by 16px the dial and the three buttons
+  // had collapsed into mush. A notification-area icon gets ~16 device pixels,
+  // so this drops the plate for a transparent ground and keeps only the two
+  // shapes that survive at that size: the chassis outline and the jog dial.
+  // Strokes are heavy because a hairline disappears entirely once Windows
+  // scales it down.
+  const traySvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 24 24">
+      <path d="M5.67412 3.77772C5 4.78661 5 6.19108 5 9V15C5 17.8089 5 19.2134 5.67412 20.2223C5.96596 20.659 6.34096 21.034 6.77772 21.3259C7.78661 22 9.19108 22 12 22C14.8089 22 16.2134 22 17.2223 21.3259C17.659 21.034 18.034 20.659 18.3259 20.2223C19 19.2134 19 17.8089 19 15V9C19 6.19108 19 4.78661 18.3259 3.77772C18.034 3.34096 17.659 2.96596 17.2223 2.67412C16.2134 2 14.8089 2 12 2C9.19108 2 7.78661 2 6.77772 2.67412C6.34096 2.96596 5.96596 3.34096 5.67412 3.77772Z"
+            fill="none" stroke="#C8D1F0" stroke-width="2.1"/>
+      <circle cx="12" cy="14.75" r="3.15" fill="none" stroke="#C8D1F0" stroke-width="2.1"/>
+      <path d="M9 5.5H15" stroke="#C8D1F0" stroke-width="2.1" stroke-linecap="round"/>
+    </svg>
+  `;
+
   // Android Round Icon (512x512 circle on transparent canvas)
   const androidRoundSvg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
@@ -122,6 +141,9 @@ app.whenReady().then(async () => {
 
   console.log('Rendering high-contrast transparent desktop icon...');
   const desktopImg = await renderSvgToImage(desktopSvg);
+
+  console.log('Rendering tray glyph...');
+  const trayImg = await renderSvgToImage(traySvg);
 
   console.log('Rendering android round icon...');
   const androidRoundImg = await renderSvgToImage(androidRoundSvg);
@@ -182,9 +204,21 @@ app.whenReady().then(async () => {
   fs.writeFileSync(path.join(desktopDistAssetsDir, 'icon.png'), desktop512);
   fs.writeFileSync(path.join(desktopDistAssetsDir, 'icon.ico'), icoBuffer);
 
-  // Tray icon (32x32 crisp squircle)
+  // Tray icon. The ICO carries every size the notification area asks for
+  // across DPI settings (16 at 100%, 20 at 125%, 24 at 150%, 32 at 200%), so
+  // the shell picks one rather than downscaling a single 32px bitmap. The PNG
+  // stays for non-Windows hosts and as the fallback.
+  const trayIco = createIco(
+    [16, 20, 24, 32].map((size) => ({
+      width: size,
+      height: size,
+      buffer: trayImg.resize({ width: size, height: size, quality: 'best' }).toPNG()
+    }))
+  );
+  const trayPng = trayImg.resize({ width: 32, height: 32, quality: 'best' }).toPNG();
   [desktopResourcesDir, desktopAssetsDir, desktopDistAssetsDir].forEach((dir) => {
-    fs.writeFileSync(path.join(dir, 'tray.png'), desktop32);
+    fs.writeFileSync(path.join(dir, 'tray.png'), trayPng);
+    fs.writeFileSync(path.join(dir, 'tray.ico'), trayIco);
   });
 
   // Android mipmaps
