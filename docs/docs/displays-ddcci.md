@@ -66,3 +66,21 @@ Physical monitor microcontrollers operate on low-frequency I2C buses (often 100 
 Switchboard incorporates two defensive layers:
 1. **UI Debouncing & Throttling**: The mobile touch slider updates its local visual UI at 60/120 FPS, but dispatches network updates to the daemon at a throttled rate (approx. 50ms intervals).
 2. **Sequential Hardware Queue**: The Go backend serializes write requests per monitor handle, ensuring each write completes before the next is submitted.
+
+---
+
+## 🔄 Recovering from a Display Mode Change
+
+Monitor handles are not permanent. Anything that puts the display through a mode change invalidates every `HMONITOR` and the physical monitor handles opened from it:
+
+- A game (or any application) entering exclusive fullscreen
+- A resolution or refresh-rate switch
+- Toggling HDR
+- A dock or KVM handing the panel to another input
+- Waking from sleep, or a monitor being powered off and on
+
+The invalidated handles remain non-zero, so nothing about them *looks* wrong — but `SetMonitorBrightness` and `SetMonitorContrast` refuse every subsequent write. Left unhandled, this means the brightness slider stops working after a gaming session and does not recover until the daemon restarts.
+
+Switchboard treats the enumerated panel list as a **cache that heals itself**. Every brightness and contrast write goes through a single shared path that, on failure, discards the cached handles, re-enumerates the attached displays, and retries the write once against fresh handles.
+
+Because the retry lives in that shared path rather than in any one caller, it covers every way a write can arrive — the mobile sliders, the desktop UI, and the Switchboard Deck's brightness keys — and a display that is genuinely unreachable (powered off, cable pulled) still reports a real error rather than failing silently.
