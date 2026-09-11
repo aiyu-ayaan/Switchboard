@@ -153,4 +153,5 @@ Customize download locations, transfer bandwidth units, system tray minimized be
 ### Highlights:
 - **System Tray Operation**: Close to tray, minimize on startup, and auto-launch on Windows login.
 - **Material You Dynamic Theming**: Android client dynamically extracts dominant color accents from your device wallpaper.
+- **Tactile Haptic Feedback**: Answer taps, toggles, gestures, and confirmations with nuanced Material 3 vibrations, configurable and toggleable directly in settings.
 - **Flexible Rate Units**: Switch transfer metrics seamlessly between MB/s, Mbps, or MiB/s.
