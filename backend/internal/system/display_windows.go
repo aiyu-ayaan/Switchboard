@@ -86,9 +86,17 @@ type displayController struct {
 	mu     sync.Mutex
 	panels []*panel
 	loaded bool
+
+	// reloadFn is the re-enumeration withPanel falls back on, indirected only
+	// so the retry branch can be exercised without a real mode change.
+	reloadFn func() error
 }
 
-func newDisplayController() *displayController { return &displayController{} }
+func newDisplayController() *displayController {
+	c := &displayController{}
+	c.reloadFn = c.reload
+	return c
+}
 
 // List returns the current panels, enumerating on first use.
 func (c *displayController) List() ([]protocol.Display, error) {
@@ -156,29 +164,64 @@ func (c *displayController) find(id string) (*panel, error) {
 	return nil, fmt.Errorf("display %q not found", id)
 }
 
+// withPanel applies op to the panel named by id, re-enumerating once and
+// retrying if either the lookup or the write fails.
+//
+// Anything that puts the display through a mode change -- a game going
+// fullscreen, a resolution or refresh-rate switch, HDR toggling, a dock or KVM
+// handing the panel to another input -- invalidates every HMONITOR and the
+// physical-monitor handles opened from it. The stale handles stay non-zero, so
+// nothing here notices; DDC/CI simply refuses every write from then on. The
+// panels were enumerated once at first use and nothing ever re-enumerated them
+// (RefreshDisplays had no callers), so one gaming session left brightness and
+// contrast dead until the daemon restarted. Re-enumerating on failure is what
+// makes the cache self-healing, and it covers every entry point -- the phone,
+// the desktop sliders and the deck keys all write through here.
+func (c *displayController) withPanel(id string, op func(*panel) error) (protocol.Display, error) {
+	p, err := c.find(id)
+	if err == nil {
+		if err = op(p); err == nil {
+			return p.info, nil
+		}
+	}
+
+	// reload drops the handles op just failed against and opens fresh ones, so
+	// the panel pointer has to be looked up again rather than reused.
+	if reloadErr := c.reloadFn(); reloadErr != nil {
+		return protocol.Display{}, err
+	}
+	p, findErr := c.find(id)
+	if findErr != nil {
+		return protocol.Display{}, findErr
+	}
+	if err := op(p); err != nil {
+		return protocol.Display{}, err
+	}
+	return p.info, nil
+}
+
 // SetBrightness clamps to the panel's reported capability range and writes it.
 func (c *displayController) SetBrightness(id string, value int) (protocol.Display, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	p, err := c.find(id)
-	if err != nil {
-		return protocol.Display{}, err
-	}
-	v := clamp(value, p.info.MinBright, p.info.MaxBright)
-
-	if p.info.Internal {
-		if err := setInternalBrightness(p.wmiInstance, v); err != nil {
-			return protocol.Display{}, err
+	// Clamping sits inside op so a retry re-clamps against the range the
+	// freshly enumerated panel reports, which a mode change can move.
+	return c.withPanel(id, func(p *panel) error {
+		v := clamp(value, p.info.MinBright, p.info.MaxBright)
+		if p.info.Internal {
+			if err := setInternalBrightness(p.wmiInstance, v); err != nil {
+				return err
+			}
+		} else {
+			ok, _, callErr := procSetMonitorBrightness.Call(uintptr(p.handle), uintptr(uint32(v)))
+			if ok == 0 {
+				return fmt.Errorf("set brightness on %s: %w", p.info.Name, callErr)
+			}
 		}
-	} else {
-		ok, _, callErr := procSetMonitorBrightness.Call(uintptr(p.handle), uintptr(uint32(v)))
-		if ok == 0 {
-			return protocol.Display{}, fmt.Errorf("set brightness on %s: %w", p.info.Name, callErr)
-		}
-	}
-	p.info.Brightness = v
-	return p.info, nil
+		p.info.Brightness = v
+		return nil
+	})
 }
 
 // SetContrast writes VCP 0x12. Internal panels have no contrast control.
@@ -186,20 +229,18 @@ func (c *displayController) SetContrast(id string, value int) (protocol.Display,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	p, err := c.find(id)
-	if err != nil {
-		return protocol.Display{}, err
-	}
-	if !p.info.HasContrast {
-		return protocol.Display{}, fmt.Errorf("display %q has no contrast control", p.info.Name)
-	}
-	v := clamp(value, p.info.MinContrast, p.info.MaxContrast)
-	ok, _, callErr := procSetMonitorContrast.Call(uintptr(p.handle), uintptr(uint32(v)))
-	if ok == 0 {
-		return protocol.Display{}, fmt.Errorf("set contrast on %s: %w", p.info.Name, callErr)
-	}
-	p.info.Contrast = v
-	return p.info, nil
+	return c.withPanel(id, func(p *panel) error {
+		if !p.info.HasContrast {
+			return fmt.Errorf("display %q has no contrast control", p.info.Name)
+		}
+		v := clamp(value, p.info.MinContrast, p.info.MaxContrast)
+		ok, _, callErr := procSetMonitorContrast.Call(uintptr(p.handle), uintptr(uint32(v)))
+		if ok == 0 {
+			return fmt.Errorf("set contrast on %s: %w", p.info.Name, callErr)
+		}
+		p.info.Contrast = v
+		return nil
+	})
 }
 
 // enumeratePanels walks every HMONITOR and classifies it as DDC/CI-capable or
