@@ -52,6 +52,12 @@ func TestNewControlsOverTheWire(t *testing.T) {
 	if reply.Type != protocol.TypeError {
 		t.Fatalf("system.power with invalid action should return error, got %s: %s", reply.Type, reply.Payload)
 	}
+
+	// 6. DisplayPower with nonexistent display should return error
+	reply = client.call(t, protocol.ActionDisplayPower, protocol.DisplayPowerSet{DisplayID: "nonexistent", On: true})
+	if reply.Type != protocol.TypeError {
+		t.Fatalf("display.power.set with nonexistent display should return error, got %s: %s", reply.Type, reply.Payload)
+	}
 }
 
 func TestNewControlsLocalAPI(t *testing.T) {
@@ -98,5 +104,11 @@ func TestNewControlsLocalAPI(t *testing.T) {
 	rr = postJSON("/local/clipboard", protocol.ClipboardSet{Text: "localapi test clipboard"})
 	if rr.Code != http.StatusOK {
 		t.Errorf("POST /local/clipboard code = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	// 6. POST /local/display/power with nonexistent display
+	rr = postJSON("/local/display/power", protocol.DisplayPowerSet{DisplayID: "nonexistent", On: true})
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("POST /local/display/power code = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
 }

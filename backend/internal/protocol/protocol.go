@@ -22,6 +22,7 @@ const (
 	ActionDisplayList       = "display.list"
 	ActionDisplayBrightness = "display.brightness.set"
 	ActionDisplayContrast   = "display.contrast.set"
+	ActionDisplayPower      = "display.power.set"
 
 	ActionVolumeGet = "system.volume.get"
 	ActionVolumeSet = "system.volume.set"
@@ -177,6 +178,13 @@ type Display struct {
 	Contrast    int    `json:"contrast"`
 	MinContrast int    `json:"minContrast"`
 	MaxContrast int    `json:"maxContrast"`
+	Power       bool   `json:"power"`
+}
+
+// DisplayPowerSet is the payload for display.power.set.
+type DisplayPowerSet struct {
+	DisplayID string `json:"displayId"`
+	On        bool   `json:"on"`
 }
 
 // DisplaySet is the payload for display.brightness.set / display.contrast.set.

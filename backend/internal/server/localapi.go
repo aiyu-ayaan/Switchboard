@@ -26,6 +26,7 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("POST /local/displays/refresh", s.localRefreshDisplays)
 	handle("POST /local/display/brightness", s.localSetBrightness)
 	handle("POST /local/display/contrast", s.localSetContrast)
+	handle("POST /local/display/power", s.localSetPower)
 	handle("POST /local/volume", s.localSetVolume)
 	handle("POST /local/mixer", s.localSetSessionVolume)
 	handle("POST /local/audio/output", s.localSetOutput)
@@ -137,6 +138,21 @@ func (s *Server) localDisplaySet(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	display, err := set(req.DisplayID, req.Value)
+	if err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	s.Broadcast()
+	writeJSON(w, display)
+}
+
+func (s *Server) localSetPower(w http.ResponseWriter, r *http.Request) {
+	var req protocol.DisplayPowerSet
+	if err := decode(r, &req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	display, err := s.control.SetDisplayPower(req.DisplayID, req.On)
 	if err != nil {
 		httpError(w, err, http.StatusBadRequest)
 		return

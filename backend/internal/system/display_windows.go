@@ -39,6 +39,8 @@ var (
 	procSetMonitorBrightness   = dxva2.NewProc("SetMonitorBrightness")
 	procGetMonitorContrast     = dxva2.NewProc("GetMonitorContrast")
 	procSetMonitorContrast     = dxva2.NewProc("SetMonitorContrast")
+	procSetVCPFeature          = dxva2.NewProc("SetVCPFeature")
+	procGetVCPFeature          = dxva2.NewProc("GetVCPFeatureAndVCPFeatureReply")
 )
 
 const (
@@ -77,6 +79,8 @@ type panel struct {
 	handle windows.Handle
 	// internal panels only: the WMI instance name to address.
 	wmiInstance string
+	// saved brightness when turned off (for internal panel restore)
+	savedBrightness int
 }
 
 // displayController caches the enumerated panels. Opening DDC/CI handles costs
@@ -90,6 +94,9 @@ type displayController struct {
 	// reloadFn is the re-enumeration withPanel falls back on, indirected only
 	// so the retry branch can be exercised without a real mode change.
 	reloadFn func() error
+
+	setVCPFeatureFn         func(handle windows.Handle, code uint32, value uint32) error
+	setInternalBrightnessFn func(instance string, value int) error
 }
 
 func newDisplayController() *displayController {
@@ -243,6 +250,64 @@ func (c *displayController) SetContrast(id string, value int) (protocol.Display,
 	})
 }
 
+func (c *displayController) callSetVCPFeature(handle windows.Handle, code uint32, value uint32) error {
+	if c.setVCPFeatureFn != nil {
+		return c.setVCPFeatureFn(handle, code, value)
+	}
+	ok, _, callErr := procSetVCPFeature.Call(uintptr(handle), uintptr(code), uintptr(value))
+	if ok == 0 {
+		return callErr
+	}
+	return nil
+}
+
+func (c *displayController) callSetInternalBrightness(instance string, value int) error {
+	if c.setInternalBrightnessFn != nil {
+		return c.setInternalBrightnessFn(instance, value)
+	}
+	return setInternalBrightness(instance, value)
+}
+
+// SetPower toggles the display power state.
+func (c *displayController) SetPower(id string, on bool) (protocol.Display, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.withPanel(id, func(p *panel) error {
+		if !p.info.Internal {
+			var vcpVal uint32 = 4
+			if on {
+				vcpVal = 1
+			}
+			if err := c.callSetVCPFeature(p.handle, 0xD6, vcpVal); err != nil {
+				return fmt.Errorf("set power on %s: %w", p.info.Name, err)
+			}
+			p.info.Power = on
+		} else {
+			if !on {
+				if p.info.Brightness > 0 {
+					p.savedBrightness = p.info.Brightness
+				}
+				if err := c.callSetInternalBrightness(p.wmiInstance, p.info.MinBright); err != nil {
+					return err
+				}
+				p.info.Brightness = p.info.MinBright
+			} else {
+				saved := p.savedBrightness
+				if saved <= 0 {
+					saved = 50
+				}
+				if err := c.callSetInternalBrightness(p.wmiInstance, saved); err != nil {
+					return err
+				}
+				p.info.Brightness = saved
+			}
+			p.info.Power = on
+		}
+		return nil
+	})
+}
+
 // enumeratePanels walks every HMONITOR and classifies it as DDC/CI-capable or
 // an internal panel driven through WMI.
 func enumeratePanels() ([]*panel, error) {
@@ -327,6 +392,7 @@ func externalPanel(hMonitor windows.Handle, device, friendly string) *panel {
 			Brightness: int(curB),
 			MinBright:  int(minB),
 			MaxBright:  int(maxB),
+			Power:      true,
 		},
 	}
 
@@ -338,6 +404,13 @@ func externalPanel(hMonitor windows.Handle, device, friendly string) *panel {
 		p.info.Contrast = int(curC)
 		p.info.MinContrast = int(minC)
 		p.info.MaxContrast = int(maxC)
+	}
+
+	var vcpType, curVal, maxVal uint32
+	okVCP, _, _ := procGetVCPFeature.Call(uintptr(h), 0xD6,
+		uintptr(unsafe.Pointer(&vcpType)), uintptr(unsafe.Pointer(&curVal)), uintptr(unsafe.Pointer(&maxVal)))
+	if okVCP != 0 {
+		p.info.Power = (curVal == 1)
 	}
 	return p
 }
@@ -429,6 +502,7 @@ func internalPanels() []*panel {
 						Brightness: level,
 						MinBright:  0,
 						MaxBright:  100,
+						Power:      true,
 					},
 				})
 				return nil

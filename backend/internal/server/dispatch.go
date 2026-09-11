@@ -42,6 +42,20 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		s.reply(c, env, display)
 		s.Broadcast()
 
+	case protocol.ActionDisplayPower:
+		var req protocol.DisplayPowerSet
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		display, err := s.control.SetDisplayPower(req.DisplayID, req.On)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, display)
+		s.Broadcast()
+
 	case protocol.ActionVolumeGet:
 		volume, err := s.control.Volume()
 		if err != nil {

@@ -24,6 +24,10 @@ func (c *displayController) SetContrast(string, int) (protocol.Display, error) {
 	return protocol.Display{}, ErrUnsupported
 }
 
+func (c *displayController) SetPower(string, bool) (protocol.Display, error) {
+	return protocol.Display{}, ErrUnsupported
+}
+
 func getVolume() (protocol.Volume, error) { return protocol.Volume{}, ErrUnsupported }
 
 func setVolume(int, bool) (protocol.Volume, error) { return protocol.Volume{}, ErrUnsupported }

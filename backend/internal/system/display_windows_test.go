@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"golang.org/x/sys/windows"
+
 	"switchboard/backend/internal/protocol"
 )
 
@@ -81,5 +83,112 @@ func TestWithPanelReportsPersistentFailure(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("a write that failed twice reported success")
+	}
+}
+
+func TestSetDisplayPowerExternal(t *testing.T) {
+	c := loadedController("\\\\.\\DISPLAY1")
+	c.panels[0].info.Power = true
+
+	var lastCode, lastVal uint32
+	c.setVCPFeatureFn = func(handle windows.Handle, code, value uint32) error {
+		lastCode = code
+		lastVal = value
+		return nil
+	}
+
+	// Turn power off
+	disp, err := c.SetPower("\\\\.\\DISPLAY1", false)
+	if err != nil {
+		t.Fatalf("SetPower(false): %v", err)
+	}
+	if disp.Power != false {
+		t.Errorf("expected Power=false, got %v", disp.Power)
+	}
+	if lastCode != 0xD6 || lastVal != 4 {
+		t.Errorf("expected VCP code 0xD6 and val 4, got code 0x%X val %d", lastCode, lastVal)
+	}
+
+	// Turn power on
+	disp, err = c.SetPower("\\\\.\\DISPLAY1", true)
+	if err != nil {
+		t.Fatalf("SetPower(true): %v", err)
+	}
+	if disp.Power != true {
+		t.Errorf("expected Power=true, got %v", disp.Power)
+	}
+	if lastCode != 0xD6 || lastVal != 1 {
+		t.Errorf("expected VCP code 0xD6 and val 1, got code 0x%X val %d", lastCode, lastVal)
+	}
+}
+
+func TestSetDisplayPowerInternal(t *testing.T) {
+	c := &displayController{
+		loaded: true,
+		panels: []*panel{{
+			wmiInstance: "WMI\\FakePanel",
+			info: protocol.Display{
+				ID:         "INTERNAL_1",
+				Name:       "Built-in display",
+				Internal:   true,
+				Brightness: 70,
+				MinBright:  0,
+				MaxBright:  100,
+				Power:      true,
+			},
+		}},
+	}
+	c.reloadFn = func() error { return nil }
+
+	var lastInstance string
+	var lastBright int
+	c.setInternalBrightnessFn = func(instance string, value int) error {
+		lastInstance = instance
+		lastBright = value
+		return nil
+	}
+
+	// Turn off: saves brightness (70) and sets to minBrightness (0)
+	disp, err := c.SetPower("INTERNAL_1", false)
+	if err != nil {
+		t.Fatalf("SetPower(false): %v", err)
+	}
+	if disp.Power != false {
+		t.Errorf("expected Power=false, got %v", disp.Power)
+	}
+	if disp.Brightness != 0 {
+		t.Errorf("expected Brightness=0, got %d", disp.Brightness)
+	}
+	if lastInstance != "WMI\\FakePanel" || lastBright != 0 {
+		t.Errorf("setInternalBrightness called with (%s, %d), want (WMI\\FakePanel, 0)", lastInstance, lastBright)
+	}
+
+	// Turn back on: restores saved brightness (70)
+	disp, err = c.SetPower("INTERNAL_1", true)
+	if err != nil {
+		t.Fatalf("SetPower(true): %v", err)
+	}
+	if disp.Power != true {
+		t.Errorf("expected Power=true, got %v", disp.Power)
+	}
+	if disp.Brightness != 70 {
+		t.Errorf("expected restored Brightness=70, got %d", disp.Brightness)
+	}
+	if lastBright != 70 {
+		t.Errorf("setInternalBrightness called with %d, want 70", lastBright)
+	}
+
+	// If saved brightness was <= 0, turning back on defaults to 50
+	c.panels[0].savedBrightness = 0
+	c.panels[0].info.Brightness = 0
+	disp, err = c.SetPower("INTERNAL_1", true)
+	if err != nil {
+		t.Fatalf("SetPower(true): %v", err)
+	}
+	if disp.Brightness != 50 {
+		t.Errorf("expected fallback Brightness=50, got %d", disp.Brightness)
+	}
+	if lastBright != 50 {
+		t.Errorf("setInternalBrightness called with %d, want 50", lastBright)
 	}
 }

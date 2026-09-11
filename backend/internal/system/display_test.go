@@ -142,3 +142,29 @@ func TestInternalPanelBrightnessRoundTrips(t *testing.T) {
 		}
 	}
 }
+
+func TestSetDisplayPower(t *testing.T) {
+	c := NewController()
+	defer c.Close()
+
+	displays, err := c.Displays()
+	if errors.Is(err, ErrUnsupported) {
+		t.Skip("display control not implemented on this platform yet")
+	}
+	if err != nil || len(displays) == 0 {
+		t.Skip("no controllable display available")
+	}
+
+	target := displays[0]
+	got, err := c.SetDisplayPower(target.ID, target.Power)
+	if err != nil {
+		t.Fatalf("SetDisplayPower(%s, %v): %v", target.ID, target.Power, err)
+	}
+	if got.Power != target.Power {
+		t.Errorf("SetDisplayPower power=%v, want %v", got.Power, target.Power)
+	}
+
+	if _, err := c.SetDisplayPower("non-existent-display-id", true); err == nil {
+		t.Error("expected error for non-existent display id, got nil")
+	}
+}

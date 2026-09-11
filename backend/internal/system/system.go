@@ -59,6 +59,11 @@ func (c *Controller) SetContrast(id string, value int) (protocol.Display, error)
 	return c.displays.SetContrast(id, value)
 }
 
+// SetDisplayPower toggles a panel's power state.
+func (c *Controller) SetDisplayPower(id string, on bool) (protocol.Display, error) {
+	return c.displays.SetPower(id, on)
+}
+
 // Volume reads the host master output volume.
 func (c *Controller) Volume() (protocol.Volume, error) { return getVolume() }
 
