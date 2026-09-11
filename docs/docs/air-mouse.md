@@ -183,3 +183,21 @@ and it is the user's decision to make.
 does not appear. The host surface those backends need is four functions —
 `moveMouse`, `mouseButton`, `scrollMouse`, `shellGesture` — because the gesture
 engine never left the phone.
+
+---
+
+## ⌨️ Remote Text Input & Universal Clipboard
+
+The Touchpad interface is accompanied by a native typing toolbar and clipboard pusher, transforming the mobile device into a complete mouse and keyboard remote:
+
+### Remote Unicode Text Injection (`input.text`)
+- Injects full Unicode character strings directly into whichever application has active focus on the host machine.
+- Uses Windows `user32!SendInput` with `KEYEVENTF_UNICODE` (`0x0004`).
+- Encodes UTF-8 strings into UTF-16 code units via `unicode/utf16`, supporting multi-byte characters, foreign alphabets, and emojis.
+- Works with native mobile keyboards, swipe typing (Gboard), and speech-to-text voice recognition.
+
+### Universal Clipboard Pusher (`clipboard.set`)
+- Allows users to copy verification codes, URLs, or text snippets on Android and instantly push them to the Windows clipboard with a single tap.
+- Uses Win32 `OpenClipboard`, `EmptyClipboard`, `GlobalAlloc(GMEM_MOVEABLE)`, and `SetClipboardData(CF_UNICODETEXT)`.
+- Replaces manual re-typing and cloud messaging relays with instantaneous, end-to-end encrypted local clipboard synchronization.
+

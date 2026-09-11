@@ -84,3 +84,23 @@ The invalidated handles remain non-zero, so nothing about them *looks* wrong —
 Switchboard treats the enumerated panel list as a **cache that heals itself**. Every brightness and contrast write goes through a single shared path that, on failure, discards the cached handles, re-enumerates the attached displays, and retries the write once against fresh handles.
 
 Because the retry lives in that shared path rather than in any one caller, it covers every way a write can arrive — the mobile sliders, the desktop UI, and the Switchboard Deck's brightness keys — and a display that is genuinely unreachable (powered off, cable pulled) still reports a real error rather than failing silently.
+
+---
+
+## ⚡ Per-Display Hardware Power & Standby Control (VCP 0xD6)
+
+Unlike global system sleep commands or OS-level `SC_MONITORPOWER` broadcasts that cut video signal to every monitor at once, Switchboard supports **per-display power management**, allowing users to sleep or wake individual panels independently.
+
+### External Displays (DDC/CI VCP 0xD6)
+For external monitors, Switchboard drives the low-level VESA MCCS Power Mode opcode (`0xD6`) via `dxva2.dll!SetVCPFeature`:
+
+| VCP 0xD6 Value | DPMS Power Mode | Action |
+| :--- | :--- | :--- |
+| `0x01` | **D0 / On** | Fully operational panel and active backlight. |
+| `0x04` | **D3 / Off (Standby)** | Power-down backlight and put display microcontroller into low-power sleep. |
+
+When a specific external panel is toggled off from the mobile Displays pod or desktop Displays view, only that physical monitor enters standby (indicated by an amber/standby LED). The remaining displays on the workstation remain active and unaffected. Toggling it back on issues VCP `0x01` to instantly restore normal operation.
+
+### Internal Laptop Panels (Backlight Toggle)
+Internal eDP laptop displays lack an external DDC/CI I2C bus. For internal panels, Switchboard simulates standby by saving the user's active brightness level and dropping the panel to `0%` minimum brightness via direct WMI COM automation (`WmiSetBrightness`). Toggling the panel on seamlessly restores the previously saved brightness level.
+

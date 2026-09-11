@@ -116,3 +116,20 @@ Switchboard captures media playback status and track details through Windows Run
 ### Album Artwork Extraction
 - Artwork is retrieved via `IRandomAccessStreamReference` from the active media session.
 - The stream is opened in memory, converted into standard JPEG/PNG bytes, cached with a content-addressed SHA-256 hash (`artworkId`), and served efficiently via `GET /local/media/artwork?id={artworkId}`.
+
+---
+
+## 🎙️ 5. Microphone & Recording Device Management
+
+Just as Switchboard manages playback outputs, it provides comprehensive control over audio input (capture) endpoints:
+
+### Master Microphone Gain & Instant Mute
+- **Capture Endpoint**: Discovers the default recording endpoint via `IMMDeviceEnumerator::GetDefaultAudioEndpoint(eCapture, eCommunications)` (falling back to `eConsole`).
+- **Volume & Gain**: Reads and writes input levels as a normalized scalar (`0`–`100`) via `IAudioEndpointVolume::GetMasterVolumeLevelScalar` and `SetMasterVolumeLevelScalar`.
+- **Hardware "Cough Button"**: Instantly toggles microphone hardware mute state with tactile feedback. Muting the microphone works globally across all applications (Zoom, Discord, Microsoft Teams, games) without requiring focus on any specific app window.
+
+### Recording Device Selection
+- Lists active capture endpoints (`IMMDeviceEnumerator::EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE)`).
+- Dynamically moves the default recording endpoint across console, multimedia, and communications roles via `IPolicyConfig::SetDefaultEndpoint` (slot 13).
+- **Capabilities**: `mic` (microphone gain & mute) and `inputs` (capture device switching).
+

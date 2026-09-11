@@ -31,8 +31,12 @@ Switchboard operates with a strict **local-first, zero-trust philosophy**:
 | **Network Footprint** | Pure local LAN / Wi-Fi | Relayed through cloud servers | Cloud storage servers |
 | **Account Required** | ❌ None (Zero-password) | ✔️ Email / Account / Password | ✔️ Account required |
 | **DDC/CI Hardware Displays** | ✔️ Native hardware VESA commands | ❌ Software gamma overlay only | ❌ None |
+| **Per-Display Standby** | ✔️ VESA VCP 0xD6 individual sleep/wake | ❌ None | ❌ None |
 | **Per-App Audio Mixer** | ✔️ Direct Windows WASAPI sessions | ❌ Master volume only | ❌ None |
+| **Microphone & Recording** | ✔️ Hardware gain + instant cough mute | ⚠️ Master volume only | ❌ None |
 | **Media Transport & Artwork** | ✔️ Windows SMTC with album art | ⚠️ Partial / Emulated keys | ❌ None |
+| **Remote Typing & Clipboard** | ✔️ Unicode SendInput + instant sync | ⚠️ Basic key emulation | ❌ None |
+| **Workstation Power Controls** | ✔️ Screen off, sleep, timed shutdown | ⚠️ Third-party scripts | ❌ None |
 | **File Transfer Privacy** | ✔️ End-to-end encrypted direct P2P | ⚠️ Varies / often unencrypted | ⚠️ Stored on third-party servers |
 | **Android Integration** | ✔️ Material You & SAF storage | ⚠️ Outdated non-native UI | ⚠️ Generic web / mobile app |
 

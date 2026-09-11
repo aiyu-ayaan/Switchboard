@@ -362,7 +362,7 @@ jobs:
             # summary with the release marker trimmed off the end.
             git log --no-merges --format='%s' ${previous:+"$previous..HEAD"} \
               | grep -v '^chore(release):' \
-              | sed -e 's/ *![a-z]*$//' -e 's/^/- /'
+              | sed -e 's/ *![a-z]*$//' -e 's/^![a-z]* *: *//' -e 's/^/- /'
             echo
             if [ -n "$previous" ]; then
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous}...v${VERSION}"

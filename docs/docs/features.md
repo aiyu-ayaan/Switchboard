@@ -155,3 +155,38 @@ Customize download locations, transfer bandwidth units, system tray minimized be
 - **Material You Dynamic Theming**: Android client dynamically extracts dominant color accents from your device wallpaper.
 - **Tactile Haptic Feedback**: Answer taps, toggles, gestures, and confirmations with nuanced Material 3 vibrations, configurable and toggleable directly in settings.
 - **Flexible Rate Units**: Switch transfer metrics seamlessly between MB/s, Mbps, or MiB/s.
+
+---
+
+## 8. Power & Session State Deck
+
+Manage workstation power, display standby, and session lifecycle directly from your mobile device.
+
+### Highlights:
+- **Per-Display Standby & Wake**: Sleep or wake individual external monitors via DDC/CI VCP `0xD6` without disturbing your other screens, or toggle internal laptop backlights.
+- **Instant Screen Off**: Broadcasts `SC_MONITORPOWER` to immediately sleep all connected monitors.
+- **System Sleep (ACPI)**: Puts your computer into low-power sleep mode safely via `PowrProf.dll`.
+- **Scheduled Sleep Timer**: Configure 15-minute, 30-minute, or 60-minute shutdown countdowns (or abort any active countdown) directly from bed or your couch.
+- **Workstation Lock**: Secure the console session on demand via `user32!LockWorkStation`.
+
+---
+
+## 9. Microphone & Recording Device Management
+
+Complete audio input control directly complementing the WASAPI playback mixer.
+
+### Highlights:
+- **Dedicated Microphone Gain**: Remote slider adjusting master recording level via Core Audio.
+- **Tactile "Cough Button"**: Global hardware mute toggle with prominent visual state and haptic feedback, functioning across all active meeting and game apps.
+- **Input Endpoint Selector**: Switch the default microphone between desktop, headset, or USB microphones using `IPolicyConfig`.
+
+---
+
+## 10. Remote Text Input & Universal Clipboard
+
+Turn your mobile device into a versatile remote keyboard and clipboard bridge.
+
+### Highlights:
+- **Unicode Remote Typing**: Type text, passwords, and emojis into your PC using your native mobile keyboard or voice-to-text.
+- **Universal Clipboard Sync**: One-tap "Send Clipboard" pushes Android clipboard contents directly into the Windows clipboard via Win32 `CF_UNICODETEXT`.
+
