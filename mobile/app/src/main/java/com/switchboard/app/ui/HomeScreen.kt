@@ -153,6 +153,7 @@ enum class Section(val title: String, val icon: ImageVector) {
 class SectionActions(
     val onBrightness: (Display, Int) -> Unit,
     val onContrast: (Display, Int) -> Unit,
+    val onDisplayPower: (Display, Boolean) -> Unit = { _, _ -> },
     val onVolume: (Int, Boolean) -> Unit,
     val onMixerSession: (sessionId: String, level: Int, muted: Boolean) -> Unit,
     val onAudioOutput: (deviceId: String) -> Unit,
@@ -231,7 +232,11 @@ fun HomeScreen(
             // Power Quick Control Pod
             if (state.host.capabilities.contains("power")) {
                 item {
-                    PowerControlCard(state = state, onPower = actions.onPower)
+                    PowerControlCard(
+                        state = state,
+                        onPower = actions.onPower,
+                        onDisplayPower = actions.onDisplayPower
+                    )
                 }
             }
 
@@ -252,6 +257,7 @@ fun HomeScreen(
                     DisplaysControlPod(
                         displays = state.host.displays,
                         onBrightness = actions.onBrightness,
+                        onDisplayPower = actions.onDisplayPower,
                         onOpen = { onOpen(Section.Displays) }
                     )
                 }
@@ -406,12 +412,14 @@ private fun HostHeroCard(
 private fun PowerControlCard(
     state: UiState,
     onPower: (action: String, seconds: Int) -> Unit,
+    onDisplayPower: (Display, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val haptics = LocalHaptics.current
     var showSleepConfirmDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showScreenOffChoiceDialog by remember { mutableStateOf(false) }
 
     SectionCard(modifier = modifier) {
         Row(
@@ -462,8 +470,12 @@ private fun PowerControlCard(
                 modifier = Modifier.weight(1f),
                 onClick = {
                     haptics.tap()
-                    onPower("display_off", 0)
-                    Toast.makeText(context, "Turned off host display", Toast.LENGTH_SHORT).show()
+                    if (state.host.displays.size > 1) {
+                        showScreenOffChoiceDialog = true
+                    } else {
+                        onPower("display_off", 0)
+                        Toast.makeText(context, "Turned off host display", Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
 
@@ -619,6 +631,113 @@ private fun PowerControlCard(
             confirmButton = {
                 TextButton(onClick = { showSleepTimerDialog = false }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showScreenOffChoiceDialog) {
+        AlertDialog(
+            onDismissRequest = { showScreenOffChoiceDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.TvOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Turn Off Displays") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Choose whether to turn off all connected displays or select a specific monitor:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bouncyClickable {
+                                showScreenOffChoiceDialog = false
+                                haptics.confirm()
+                                onPower("display_off", 0)
+                                Toast.makeText(context, "Turned off all screens", Toast.LENGTH_SHORT).show()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.TvOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = "All Displays",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Turn off all screens",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    state.host.displays.forEach { disp ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .bouncyClickable {
+                                    showScreenOffChoiceDialog = false
+                                    haptics.confirm()
+                                    onDisplayPower(disp, false)
+                                    Toast.makeText(context, "Turned off ${disp.name}", Toast.LENGTH_SHORT).show()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (disp.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
+                                    contentDescription = null,
+                                    tint = if (disp.power) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Turn off ${disp.name}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = if (disp.power) "Active" else "In standby",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showScreenOffChoiceDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -848,12 +967,14 @@ private fun InlineVolumeSlider(
 private fun DisplaysControlPod(
     displays: List<Display>,
     onBrightness: (Display, Int) -> Unit,
+    onDisplayPower: (Display, Boolean) -> Unit,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedIndex by remember(displays.size) { mutableIntStateOf(0) }
     val safeIndex = selectedIndex.coerceIn(0, (displays.size - 1).coerceAtLeast(0))
     val display = displays.getOrNull(safeIndex) ?: return
+    val haptics = LocalHaptics.current
 
     SectionCard(modifier = modifier) {
         Row(
@@ -889,6 +1010,27 @@ private fun DisplaysControlPod(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            // Tactile display power icon toggle button
+            Surface(
+                shape = CircleShape,
+                color = if (display.power) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .size(34.dp)
+                    .bouncyClickable {
+                        haptics.tap()
+                        onDisplayPower(display, !display.power)
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (display.power) Icons.Filled.PowerSettingsNew else Icons.Filled.TvOff,
+                        contentDescription = if (display.power) "Turn off display" else "Turn on display",
+                        tint = if (display.power) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -932,9 +1074,9 @@ private fun DisplaysControlPod(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Icon(
-                                imageVector = if (disp.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
+                                imageVector = if (!disp.power) Icons.Filled.TvOff else if (disp.internal) Icons.Filled.Laptop else Icons.Filled.Monitor,
                                 contentDescription = null,
-                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (!disp.power) MaterialTheme.colorScheme.error else if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(6.dp))
@@ -951,21 +1093,94 @@ private fun DisplaysControlPod(
             }
         }
 
+        if (!display.power) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.TvOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Display is in Standby",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${display.name} is powered off",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.bouncyClickable {
+                            haptics.confirm()
+                            onDisplayPower(display, true)
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PowerSettingsNew,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Turn Display On",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(14.dp))
 
-        LevelRow(
-            icon = Icons.Filled.LightMode,
-            label = "${display.name} brightness",
-            value = display.brightness,
-            min = display.minBrightness,
-            max = display.maxBrightness,
-            onChange = { onBrightness(display, it) }
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = if (display.power) 1f else 0.45f }
+        ) {
+            LevelRow(
+                icon = Icons.Filled.LightMode,
+                label = "${display.name} brightness",
+                value = display.brightness,
+                min = display.minBrightness,
+                max = display.maxBrightness,
+                enabled = display.power,
+                onChange = { onBrightness(display, it) }
+            )
+        }
 
         Spacer(Modifier.height(10.dp))
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = if (display.power) 1f else 0.45f },
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val presets = listOf(25 to "25%", 50 to "50%", 75 to "75%", 100 to "100%")
@@ -977,7 +1192,7 @@ private fun DisplaysControlPod(
                     modifier = Modifier
                         .weight(1f)
                         .height(34.dp)
-                        .bouncyClickable {
+                        .bouncyClickable(enabled = display.power) {
                             onBrightness(display, targetVal)
                         }
                 ) {
@@ -1487,7 +1702,8 @@ private fun SectionBody(
                         display = display,
                         detailed = !compact,
                         onBrightness = { actions.onBrightness(display, it) },
-                        onContrast = { actions.onContrast(display, it) }
+                        onContrast = { actions.onContrast(display, it) },
+                        onPower = { actions.onDisplayPower(display, it) }
                     )
                 }
             }

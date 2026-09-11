@@ -10,6 +10,7 @@ object Actions {
     const val DISPLAY_LIST = "display.list"
     const val DISPLAY_BRIGHTNESS = "display.brightness.set"
     const val DISPLAY_CONTRAST = "display.contrast.set"
+    const val DISPLAY_POWER = "display.power.set"
     const val VOLUME_SET = "system.volume.set"
     const val MIXER_LIST = "audio.mixer.list"
     const val MIXER_SET = "audio.mixer.set"
@@ -75,6 +76,7 @@ object Actions {
 }
 
 const val ACTION_SYSTEM_POWER = Actions.SYSTEM_POWER
+const val ACTION_DISPLAY_POWER = Actions.DISPLAY_POWER
 const val ACTION_MIC_GET = Actions.MIC_GET
 const val ACTION_MIC_SET = Actions.MIC_SET
 const val ACTION_INPUT_LIST = Actions.INPUT_LIST
@@ -151,6 +153,7 @@ data class Display(
     val id: String,
     val name: String,
     val internal: Boolean = false,
+    val power: Boolean = true,
     val brightness: Int = 0,
     val minBrightness: Int = 0,
     val maxBrightness: Int = 100,
@@ -270,6 +273,9 @@ data class HostState(
 
 @Serializable
 data class DisplaySet(val displayId: String, val value: Int) : WirePayload
+
+@Serializable
+data class DisplayPowerSet(val displayId: String, val on: Boolean) : WirePayload
 
 @Serializable
 data class MediaCommand(val action: String) : WirePayload

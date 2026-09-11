@@ -396,6 +396,7 @@ class SwitchboardClient(
     // control that sends it.
     private fun encodePayload(payload: WirePayload) = when (payload) {
         is DisplaySet -> SwitchboardJson.encodeToJsonElement(DisplaySet.serializer(), payload)
+        is DisplayPowerSet -> SwitchboardJson.encodeToJsonElement(DisplayPowerSet.serializer(), payload)
         is Volume -> SwitchboardJson.encodeToJsonElement(Volume.serializer(), payload)
         is MixerSet -> SwitchboardJson.encodeToJsonElement(MixerSet.serializer(), payload)
         is MediaCommand -> SwitchboardJson.encodeToJsonElement(MediaCommand.serializer(), payload)
@@ -419,6 +420,9 @@ class SwitchboardClient(
         is InputText -> SwitchboardJson.encodeToJsonElement(InputText.serializer(), payload)
         is ClipboardSet -> SwitchboardJson.encodeToJsonElement(ClipboardSet.serializer(), payload)
     }
+
+    fun setDisplayPower(displayId: String, on: Boolean) =
+        send(Actions.DISPLAY_POWER, DisplayPowerSet(displayId, on))
 
     fun sendPower(action: String, seconds: Int = 0) =
         send(Actions.SYSTEM_POWER, PowerCommand(action, seconds))

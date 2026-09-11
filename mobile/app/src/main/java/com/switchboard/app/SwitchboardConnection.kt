@@ -10,6 +10,7 @@ import com.switchboard.app.data.KnownHost
 import com.switchboard.app.net.Actions
 import com.switchboard.app.net.ConnectionEvent
 import com.switchboard.app.net.Credentials
+import com.switchboard.app.net.Display
 import com.switchboard.app.net.FileProgress
 import com.switchboard.app.net.HostState
 import com.switchboard.app.net.PairingPayload
@@ -509,6 +510,17 @@ class SwitchboardConnection private constructor(context: Context) {
 
     fun sendClipboard(text: String) {
         client.sendClipboard(text)
+    }
+
+    fun patchDisplay(id: String, transform: (Display) -> Display) {
+        patchHost { host ->
+            host.copy(displays = host.displays.map { if (it.id == id) transform(it) else it })
+        }
+    }
+
+    fun setDisplayPower(displayId: String, on: Boolean) {
+        patchDisplay(displayId) { it.copy(power = on) }
+        client.setDisplayPower(displayId, on)
     }
 
     /** Applies a value locally so the control tracks the finger; the host's next broadcast reconciles it. */

@@ -44,10 +44,12 @@ import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TvOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -206,8 +208,11 @@ fun DisplayCard(
     display: Display,
     detailed: Boolean = true,
     onBrightness: (Int) -> Unit,
-    onContrast: (Int) -> Unit
+    onContrast: (Int) -> Unit,
+    onPower: ((Boolean) -> Unit)? = null
 ) {
+    val haptics = LocalHaptics.current
+
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
@@ -246,29 +251,123 @@ fun DisplayCard(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
+            if (onPower != null) {
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = if (display.power) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .bouncyClickable {
+                            haptics.tap()
+                            onPower(!display.power)
+                        }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (display.power) Icons.Filled.PowerSettingsNew else Icons.Filled.TvOff,
+                            contentDescription = if (display.power) "Turn off display" else "Turn on display",
+                            tint = if (display.power) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!display.power) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.TvOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Display is in Standby",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Panel power is turned off",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (onPower != null) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.bouncyClickable {
+                                haptics.confirm()
+                                onPower(true)
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PowerSettingsNew,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "Turn On",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
 
-        LevelRow(
-            icon = Icons.Filled.LightMode,
-            label = "${display.name} brightness",
-            value = display.brightness,
-            min = display.minBrightness,
-            max = display.maxBrightness,
-            onChange = onBrightness
-        )
+        Box(modifier = Modifier.graphicsLayer { alpha = if (display.power) 1f else 0.45f }) {
+            LevelRow(
+                icon = Icons.Filled.LightMode,
+                label = "${display.name} brightness",
+                value = display.brightness,
+                min = display.minBrightness,
+                max = display.maxBrightness,
+                enabled = display.power,
+                onChange = onBrightness
+            )
+        }
 
         if (display.hasContrast) {
             Spacer(Modifier.height(8.dp))
-            LevelRow(
-                icon = Icons.Filled.Contrast,
-                label = "${display.name} contrast",
-                value = display.contrast,
-                min = display.minContrast,
-                max = display.maxContrast,
-                onChange = onContrast
-            )
+            Box(modifier = Modifier.graphicsLayer { alpha = if (display.power) 1f else 0.45f }) {
+                LevelRow(
+                    icon = Icons.Filled.Contrast,
+                    label = "${display.name} contrast",
+                    value = display.contrast,
+                    min = display.minContrast,
+                    max = display.maxContrast,
+                    enabled = display.power,
+                    onChange = onContrast
+                )
+            }
         }
 
         if (detailed) {

@@ -41,6 +41,33 @@ class WirePayloadTest {
     }
 
     @Test
+    fun displayPowerSet_matchesTheHostFieldNames() {
+        assertEquals(
+            """{"displayId":"\\\\.\\DISPLAY1","on":true}""",
+            SwitchboardJson.encodeToString(DisplayPowerSet("\\\\.\\DISPLAY1", true))
+        )
+        assertEquals(
+            """{"displayId":"\\\\.\\DISPLAY2","on":false}""",
+            SwitchboardJson.encodeToString(DisplayPowerSet("\\\\.\\DISPLAY2", false))
+        )
+    }
+
+    @Test
+    fun display_readsPowerFlag() {
+        val displayWithPower = SwitchboardJson.decodeFromString(
+            Display.serializer(),
+            """{"id":"d1","name":"Main","power":false}"""
+        )
+        assertEquals(false, displayWithPower.power)
+
+        val displayDefaultPower = SwitchboardJson.decodeFromString(
+            Display.serializer(),
+            """{"id":"d2","name":"Secondary"}"""
+        )
+        assertEquals(true, displayDefaultPower.power)
+    }
+
+    @Test
     fun hostState_readsTheOutputsTheHostBroadcasts() {
         val state = SwitchboardJson.decodeFromString(
             HostState.serializer(),

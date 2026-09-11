@@ -323,6 +323,10 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
     // finger, then sends the command. The host echoes a full state broadcast,
     // which reconciles the two.
 
+    fun setDisplayPower(displayId: String, on: Boolean) = connection.setDisplayPower(displayId, on)
+
+    fun setDisplayPower(display: Display, on: Boolean) = setDisplayPower(display.id, on)
+
     fun setBrightness(display: Display, value: Int) {
         patchDisplay(display.id) { it.copy(brightness = value) }
         connection.send(Actions.DISPLAY_BRIGHTNESS, DisplaySet(display.id, value))

@@ -288,6 +288,7 @@ fun SwitchboardApp(
         SectionActions(
             onBrightness = viewModel::setBrightness,
             onContrast = viewModel::setContrast,
+            onDisplayPower = viewModel::setDisplayPower,
             onVolume = viewModel::setVolume,
             onMixerSession = viewModel::setSessionVolume,
             onAudioOutput = viewModel::setAudioOutput,
