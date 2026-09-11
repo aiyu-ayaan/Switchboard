@@ -955,7 +955,9 @@ private fun StreamDeckNeoTile(
                             text = "Switchboard Deck",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.width(8.dp))
                         Surface(
@@ -969,22 +971,8 @@ private fun StreamDeckNeoTile(
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = "8-KEY CONSOLE",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1
                             )
                         }
                     }
@@ -992,7 +980,9 @@ private fun StreamDeckNeoTile(
                     Text(
                         text = "$pageName ($pageCount ${if (pageCount == 1) "page" else "pages"}) • Tap for landscape console",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Icon(
