@@ -69,10 +69,12 @@ export interface HostState {
   daemonId: string;
   displays: Display[];
   volume: Volume;
+  mic?: Volume;
   /** Empty on a host without per-application control; see `capabilities`. */
   mixer: AudioSession[];
   /** Endpoints the host can route sound to; exactly one carries `default`. */
   outputs: AudioDevice[];
+  inputs?: AudioDevice[];
   media: MediaState;
   capabilities: string[];
   locked?: boolean;
@@ -147,6 +149,11 @@ export interface LocalState {
 }
 
 export type MediaAction = 'play' | 'pause' | 'toggle' | 'next' | 'prev' | 'stop';
+
+export type PowerAction = 'display_off' | 'sleep' | 'shutdown' | 'abort_shutdown';
+export interface PowerCommand { action: PowerAction; seconds?: number; }
+export interface InputText { text: string; }
+export interface ClipboardSet { text: string; }
 
 /** The surface the preload bridge exposes on `window.switchboard`. */
 /** The phone camera's full control surface, mirrored from the Go protocol. */
@@ -225,12 +232,17 @@ export interface SwitchboardBridge {
   setContrast(displayId: string, value: number): Promise<Display>;
   refreshDisplays(): Promise<Display[]>;
   setVolume(level: number, muted: boolean): Promise<Volume>;
+  setMicVolume: (level: number, muted: boolean) => Promise<Volume>;
   setSessionVolume(sessionId: string, level: number, muted: boolean): Promise<AudioSession[]>;
   /** Routes host audio to one endpoint; resolves with the refreshed list. */
   setAudioOutput(deviceId: string): Promise<AudioDevice[]>;
+  setAudioInput: (deviceId: string) => Promise<AudioDevice[]>;
   media(action: MediaAction): Promise<void>;
   getMediaArtwork(): Promise<MediaArtwork>;
   lockSystem(): Promise<{ status: string }>;
+  power: (action: PowerAction, seconds?: number) => Promise<{ status: string }>;
+  inputText: (text: string) => Promise<{ status: string }>;
+  setClipboard: (text: string) => Promise<{ status: string }>;
   rotatePairing(): Promise<PairingInfo>;
   revokeDevice(deviceId: string): Promise<void>;
   /**

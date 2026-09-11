@@ -1,8 +1,106 @@
-import { Lock, LockOpen, Minus, Square, X } from 'lucide-react';
+import { Lock, LockOpen, Minus, MonitorOff, Moon, Power, Square, Timer, X, XCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { PowerAction } from '../../shared/types';
 
 export type ViewId = 'displays' | 'audio' | 'deck' | 'camera' | 'files' | 'devices' | 'settings';
+
+export function PowerMenu() {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
+  const handleAction = async (action: PowerAction, seconds?: number) => {
+    setOpen(false);
+    try {
+      await window.switchboard.power(action, seconds);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div ref={menuRef} className="relative h-full">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label="Power quick controls"
+        title="Power quick controls"
+        aria-expanded={open}
+        className={`flex h-full w-11 items-center justify-center transition-colors ${
+          open ? 'bg-raised text-accent' : 'text-ink-dim hover:bg-raised hover:text-ink'
+        }`}
+      >
+        <Power aria-hidden="true" className="h-3.5 w-3.5" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-52 rounded-md border border-edge bg-card p-1 shadow-lg z-50 text-tiny">
+          <button
+            type="button"
+            onClick={() => handleAction('display_off')}
+            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-ink-dim hover:bg-raised hover:text-ink transition-colors"
+          >
+            <MonitorOff aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span>Turn off Displays</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction('sleep')}
+            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-ink-dim hover:bg-raised hover:text-ink transition-colors"
+          >
+            <Moon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span>Sleep</span>
+          </button>
+          <div className="my-1 border-t border-edge" />
+          <button
+            type="button"
+            onClick={() => handleAction('shutdown', 1800)}
+            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-ink-dim hover:bg-raised hover:text-ink transition-colors"
+          >
+            <Timer aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span>Shutdown Timer (30m)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction('shutdown', 3600)}
+            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-ink-dim hover:bg-raised hover:text-ink transition-colors"
+          >
+            <Timer aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span>Shutdown Timer (60m)</span>
+          </button>
+          <div className="my-1 border-t border-edge" />
+          <button
+            type="button"
+            onClick={() => handleAction('abort_shutdown')}
+            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-warn hover:bg-warn/10 transition-colors"
+          >
+            <XCircle aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span>Cancel Shutdown</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Frameless-window chrome. The bar itself is the OS drag handle. */
 export function TitleBar({ subtitle, locked }: { subtitle: string; locked?: boolean }) {
@@ -33,6 +131,7 @@ export function TitleBar({ subtitle, locked }: { subtitle: string; locked?: bool
         <span className="text-ink-faint">{subtitle}</span>
       </div>
       <div className="app-no-drag flex h-full">
+        <PowerMenu />
         {controls.map(({ label, icon: Icon, run, danger, highlight }) => (
           <button
             key={label}

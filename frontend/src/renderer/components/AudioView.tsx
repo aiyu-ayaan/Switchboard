@@ -1,6 +1,8 @@
 import {
   AudioLines,
   Check,
+  Mic,
+  MicOff,
   Music,
   Speaker,
   Pause,
@@ -24,19 +26,30 @@ interface AudioViewProps {
 }
 
 export function AudioView({ state, patch, setPaused }: AudioViewProps) {
-  const { volume, mixer, outputs } = state.host;
+  const { volume, mic, mixer, outputs, inputs } = state.host;
   const hasAudio = state.host.capabilities.includes('volume');
   const hasMedia = state.host.capabilities.includes('media');
   const hasMixer = state.host.capabilities.includes('mixer');
   const hasOutputs = state.host.capabilities.includes('outputs');
+  const hasMic = state.host.capabilities.includes('mic');
+  const hasInputs = state.host.capabilities.includes('inputs');
   const activeOutput = outputs.find((o) => o.default);
+  const activeInput = inputs?.find((i) => i.default);
+  const micState = mic ?? { level: 100, muted: false };
 
   const sendVolume = useThrottledCommit((level: number) =>
     window.switchboard.setVolume(level, volume.muted)
   );
 
+  const sendMicVolume = useThrottledCommit((level: number) =>
+    window.switchboard.setMicVolume(level, micState.muted)
+  );
+
   const applyLocal = (level: number, muted: boolean) =>
     patch((draft) => ({ ...draft, host: { ...draft.host, volume: { level, muted } } }));
+
+  const applyMicLocal = (level: number, muted: boolean) =>
+    patch((draft) => ({ ...draft, host: { ...draft.host, mic: { level, muted } } }));
 
   const applySession = useCallback(
     (id: string, level: number, muted: boolean) => {
@@ -57,6 +70,12 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
     await window.switchboard.setVolume(volume.level, next).catch(() => {});
   };
 
+  const toggleMicMute = async () => {
+    const next = !micState.muted;
+    applyMicLocal(micState.level, next);
+    await window.switchboard.setMicVolume(micState.level, next).catch(() => {});
+  };
+
   // Moving the default endpoint takes Windows a moment, and the poll would
   // otherwise show the old device still ticked. The list is patched first so
   // the tick lands under the pointer, and the reply reconciles it.
@@ -70,6 +89,18 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
       }
     }));
     await window.switchboard.setAudioOutput(deviceId).catch(() => {});
+  };
+
+  const selectInput = async (deviceId: string) => {
+    if (deviceId === activeInput?.id) return;
+    patch((draft) => ({
+      ...draft,
+      host: {
+        ...draft.host,
+        inputs: (draft.host.inputs ?? []).map((i) => ({ ...i, default: i.id === deviceId }))
+      }
+    }));
+    await window.switchboard.setAudioInput(deviceId).catch(() => {});
   };
 
   const media = state.host.media;
@@ -104,11 +135,27 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
           selected
           onSelect={() => {}}
         />
+        {hasMic && (
+          <SidebarItem
+            label="Microphone"
+            icon={micState.muted ? MicOff : Mic}
+            detail={micState.muted ? 'Muted' : `${micState.level}%`}
+            onSelect={() => {}}
+          />
+        )}
         {hasOutputs && (
           <SidebarItem
             label="Output device"
             icon={Speaker}
             detail={activeOutput?.name ?? 'None'}
+            onSelect={() => {}}
+          />
+        )}
+        {Boolean(hasInputs && activeInput) && (
+          <SidebarItem
+            label="Input device"
+            icon={Mic}
+            detail={activeInput?.name ?? 'None'}
             onSelect={() => {}}
           />
         )}
@@ -167,6 +214,47 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
             )}
           </Card>
 
+          {hasMic && (
+            <Card
+              title="Microphone"
+              meta={
+                <button
+                  type="button"
+                  onClick={toggleMicMute}
+                  aria-pressed={micState.muted}
+                  className={`flex items-center gap-1.5 rounded border px-2 py-0.5 text-micro transition-colors ${
+                    micState.muted
+                      ? 'border-warn/40 bg-warn/10 text-warn'
+                      : 'border-edge text-ink-dim hover:bg-raised hover:text-ink'
+                  }`}
+                >
+                  {micState.muted ? (
+                    <MicOff aria-hidden="true" className="h-3 w-3" />
+                  ) : (
+                    <Mic aria-hidden="true" className="h-3 w-3" />
+                  )}
+                  {micState.muted ? 'Muted' : 'Mute'}
+                </button>
+              }
+            >
+              <LevelSlider
+                icon={micState.muted ? MicOff : Mic}
+                label="Microphone volume"
+                value={micState.level}
+                min={0}
+                max={100}
+                onGestureChange={setPaused}
+                onChange={(level) => {
+                  applyMicLocal(level, micState.muted);
+                  sendMicVolume(level);
+                }}
+                onCommit={(level) =>
+                  window.switchboard.setMicVolume(level, micState.muted).catch(() => {})
+                }
+              />
+            </Card>
+          )}
+
           {hasOutputs && (
             <Card title="Output device">
               {outputs.length === 0 ? (
@@ -185,6 +273,19 @@ export function AudioView({ state, patch, setPaused }: AudioViewProps) {
               <p className="mt-2 text-micro text-ink-faint">
                 Switching the output moves playback, communications and multimedia together,
                 so the whole host follows the choice.
+              </p>
+            </Card>
+          )}
+
+          {Boolean(hasInputs && inputs && inputs.length > 0) && (
+            <Card title="Input Device">
+              <div className="grid gap-1">
+                {inputs!.map((device) => (
+                  <InputRow key={device.id} device={device} onSelect={selectInput} />
+                ))}
+              </div>
+              <p className="mt-2 text-micro text-ink-faint">
+                Switching the recording endpoint changes the active microphone across the system.
               </p>
             </Card>
           )}
@@ -317,6 +418,32 @@ function OutputRow({
       }`}
     >
       <Speaker aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{device.name}</span>
+      {device.default && <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />}
+    </button>
+  );
+}
+
+function InputRow({
+  device,
+  onSelect
+}: {
+  device: AudioDevice;
+  onSelect: (deviceId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={device.default}
+      onClick={() => onSelect(device.id)}
+      className={`flex items-center gap-2 rounded border px-2.5 py-2 text-left text-xs transition-colors ${
+        device.default
+          ? 'border-accent/50 bg-accent/10 text-ink'
+          : 'border-edge text-ink-dim hover:bg-raised hover:text-ink'
+      }`}
+    >
+      <Mic aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{device.name}</span>
       {device.default && <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent" />}
     </button>

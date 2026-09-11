@@ -53,14 +53,19 @@ const bridge: SwitchboardBridge = {
   setContrast: (displayId, value) => call<Display>('/display/contrast', { displayId, value }),
   refreshDisplays: () => call<Display[]>('/displays/refresh', {}),
   setVolume: (level, muted) => call<Volume>('/volume', { level, muted }),
+  setMicVolume: (level, muted) => call('/audio/mic', { level, muted }),
   setSessionVolume: (sessionId, level, muted) =>
     call<AudioSession[]>('/mixer', { sessionId, level, muted }),
   setAudioOutput: (deviceId) => call<AudioDevice[]>('/audio/output', { deviceId }),
+  setAudioInput: (deviceId) => call('/audio/input', { deviceId }),
   media: async (action: MediaAction) => {
     await call('/media', { action });
   },
   getMediaArtwork: () => call<MediaArtwork>('/media/artwork'),
   lockSystem: () => call<{ status: string }>('/system/lock', {}),
+  power: (action, seconds) => call('/system/power', { action, seconds }),
+  inputText: (text) => call('/input/text', { text }),
+  setClipboard: (text) => call('/clipboard', { text }),
   rotatePairing: () => call<PairingInfo>('/pairing/rotate', {}),
   revokeDevice: async (deviceId) => {
     await call('/devices/revoke', { deviceId });

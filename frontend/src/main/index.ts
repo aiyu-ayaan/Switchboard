@@ -390,7 +390,12 @@ const ALLOWED_ROUTES = new Set([
   '/camera/control',
   '/deck',
   '/deck/action',
-  '/system/apps'
+  '/system/apps',
+  '/system/power',
+  '/audio/mic',
+  '/audio/input',
+  '/input/text',
+  '/clipboard'
 ]);
 
 /**
