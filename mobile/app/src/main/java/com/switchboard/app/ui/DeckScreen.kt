@@ -3,7 +3,6 @@ package com.switchboard.app.ui
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.util.Base64
-import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -112,7 +111,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -276,7 +274,7 @@ fun DeckScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val view = LocalView.current
+    val haptics = LocalHaptics.current
     val config = state.deckConfig
 
     // A deck is glanced at and tapped, not read. Letting the display sleep
@@ -295,8 +293,10 @@ fun DeckScreen(
     var editingInfobar by remember { mutableStateOf(false) }
     var firedSlot by remember { mutableStateOf<Int?>(null) }
 
-    fun tap() = view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-    fun press() = view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    // Routed through Haptics rather than the view directly, so the deck answers
+    // to the same switch as the rest of the app.
+    fun tap() = haptics.tap()
+    fun press() = haptics.longPress()
 
     // Clear the launch flash without leaving the tile stuck lit.
     LaunchedEffect(firedSlot) {

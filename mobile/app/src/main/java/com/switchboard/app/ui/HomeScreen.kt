@@ -79,8 +79,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -492,7 +490,7 @@ private fun InlineVolumeSlider(
 ) {
     var dragging by remember { mutableFloatStateOf(Float.NaN) }
     val shown = if (dragging.isNaN()) level.toFloat() else dragging
-    val haptics = LocalHapticFeedback.current
+    val haptics = LocalHaptics.current
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -503,8 +501,10 @@ private fun InlineVolumeSlider(
             color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
             modifier = Modifier
                 .size(42.dp)
-                .bouncyClickable {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                // Mute has a direction, so it says which way it went rather
+                // than taking the modifier's plain tick.
+                .bouncyClickable(haptic = false) {
+                    haptics.toggle(muted)
                     onVolume(level, !muted)
                 }
         ) {
@@ -571,7 +571,6 @@ private fun DisplaysControlPod(
     var selectedIndex by remember(displays.size) { mutableIntStateOf(0) }
     val safeIndex = selectedIndex.coerceIn(0, (displays.size - 1).coerceAtLeast(0))
     val display = displays.getOrNull(safeIndex) ?: return
-    val haptics = LocalHapticFeedback.current
 
     SectionCard(modifier = modifier) {
         Row(
@@ -696,7 +695,6 @@ private fun DisplaysControlPod(
                         .weight(1f)
                         .height(34.dp)
                         .bouncyClickable {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onBrightness(display, targetVal)
                         }
                 ) {
@@ -727,8 +725,6 @@ private fun BentoUtilityGrid(
     onSendFile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptics = LocalHapticFeedback.current
-
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -759,8 +755,7 @@ private fun BentoUtilityGrid(
                             .weight(1f)
                             .height(30.dp)
                             .bouncyClickable {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                actions.touchpad.onGesture(ShellGesture.SHOW_DESKTOP)
+                                    actions.touchpad.onGesture(ShellGesture.SHOW_DESKTOP)
                             }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -779,8 +774,7 @@ private fun BentoUtilityGrid(
                             .weight(1f)
                             .height(30.dp)
                             .bouncyClickable {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                actions.touchpad.onGesture(ShellGesture.TASK_VIEW)
+                                    actions.touchpad.onGesture(ShellGesture.TASK_VIEW)
                             }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -805,8 +799,7 @@ private fun BentoUtilityGrid(
                                 .weight(1f)
                                 .height(30.dp)
                                 .bouncyClickable(enabled = !isLocked) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    actions.onLockSystem()
+                                            actions.onLockSystem()
                                 }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -921,7 +914,6 @@ private fun StreamDeckNeoTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptics = LocalHapticFeedback.current
     val pages = state.deckConfig.pages
     val pageCount = if (pages.isNotEmpty()) pages.size else 1
     val activePage = pages.getOrNull(state.deckConfig.activePage) ?: pages.firstOrNull()
@@ -1066,7 +1058,6 @@ private fun StreamDeckNeoTile(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.bouncyClickable {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onClick()
                         }
                     ) {

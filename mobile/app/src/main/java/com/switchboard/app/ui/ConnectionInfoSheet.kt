@@ -227,7 +227,7 @@ fun ConnectionInfoSheet(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onOpenSettings)
+                        .bouncyClickable(onClick = onOpenSettings)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -276,7 +276,7 @@ fun ConnectionInfoSheet(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onDisconnect)
+                        .bouncyClickable(onClick = onDisconnect)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),

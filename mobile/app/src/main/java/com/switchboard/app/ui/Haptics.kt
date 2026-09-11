@@ -71,6 +71,19 @@ class Haptics(private val view: View?, private val enabled: Boolean) {
     /** A press held long enough to mean something else. */
     fun longPress() = perform(HapticFeedbackConstants.LONG_PRESS)
 
+    /**
+     * One notch of a continuous gesture: a scroll wheel step, a pinch stop, a
+     * slider passing a mark. Fires many times per gesture, so it is the
+     * lightest thing the device can do.
+     */
+    fun tick() = perform(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            HapticFeedbackConstants.SEGMENT_TICK
+        } else {
+            HapticFeedbackConstants.CLOCK_TICK
+        }
+    )
+
     companion object {
         /**
          * What anything outside the app's own composition gets: a preview, a

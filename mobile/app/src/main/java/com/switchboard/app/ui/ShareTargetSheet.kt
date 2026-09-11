@@ -74,7 +74,7 @@ fun ShareTargetSheet(
                 val live = host.daemonId in liveHostIds
                 val active = host.daemonId == activeHostId
                 ListItem(
-                    modifier = Modifier.clickable(onClick = { onPick(host) }),
+                    modifier = Modifier.bouncyClickable { onPick(host) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     leadingContent = {
                         Icon(

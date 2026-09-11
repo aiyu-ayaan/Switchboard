@@ -1,7 +1,5 @@
 package com.switchboard.app.ui
 
-import android.view.HapticFeedbackConstants
-import android.view.View
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -37,7 +35,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.switchboard.app.net.ButtonAction
@@ -132,7 +129,7 @@ fun TouchpadScreen(actions: TouchpadActions, modifier: Modifier = Modifier) {
  */
 @Composable
 private fun TouchpadSurface(actions: TouchpadActions, modifier: Modifier = Modifier) {
-    val view = LocalView.current
+    val haptics = LocalHaptics.current
     val current by rememberUpdatedState(actions)
 
     // Carried across gestures, which is what makes a double tap and a
@@ -150,7 +147,7 @@ private fun TouchpadSurface(actions: TouchpadActions, modifier: Modifier = Modif
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    awaitEachGesture { recogniseGesture(view, history, current) }
+                    awaitEachGesture { recogniseGesture(haptics, history, current) }
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -187,7 +184,7 @@ private enum class TwoFinger { UNDECIDED, SCROLL, PINCH }
  * arrived a frame late.
  */
 private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.recogniseGesture(
-    view: View,
+    haptics: Haptics,
     history: TapHistory,
     actions: TouchpadActions
 ) {
@@ -237,7 +234,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
                         (travel <= Pad.TAP_SLOP_PX && elapsed > Pad.LONG_PRESS_MS))
                 ) {
                     buttonHeld = true
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    haptics.longPress()
                     actions.onButton(MouseButton.LEFT, ButtonAction.DOWN)
                 }
                 if (delta != Offset.Zero) {
@@ -277,7 +274,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
                             if (nx != 0.0 || ny != 0.0) {
                                 scrollX -= nx
                                 scrollY -= ny
-                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                haptics.tick()
                                 actions.onScroll(nx, ny, false)
                             }
                         }
@@ -286,7 +283,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
                             val notches = whole(zoom)
                             if (notches != 0.0) {
                                 zoom -= notches
-                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                haptics.tick()
                                 actions.onScroll(0.0, notches, true)
                             }
                         }
@@ -307,7 +304,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
 
     if (buttonHeld) {
         actions.onButton(MouseButton.LEFT, ButtonAction.UP)
-        view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        haptics.tap()
         history.lastTapEndedAt = 0L
         return
     }
@@ -319,11 +316,11 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
         val swipe = shellSwipe(swipeX, swipeY)
         when {
             swipe != null -> {
-                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                haptics.longPress()
                 actions.onGesture(swipe)
             }
             wasTap -> {
-                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                haptics.tap()
                 actions.onButton(MouseButton.MIDDLE, ButtonAction.CLICK)
             }
         }
@@ -338,7 +335,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
 
     when (maxPointers) {
         1 -> {
-            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            haptics.tap()
             if (continuesTap) {
                 actions.onButton(MouseButton.LEFT, ButtonAction.DOUBLE)
                 // Cleared, so a third tap opens a fresh pair instead of firing
@@ -350,7 +347,7 @@ private suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.rec
             }
         }
         2 -> {
-            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            haptics.tap()
             actions.onButton(MouseButton.RIGHT, ButtonAction.CLICK)
             history.lastTapEndedAt = 0L
         }
@@ -425,7 +422,6 @@ private fun PadButton(
     actions: TouchpadActions,
     modifier: Modifier = Modifier
 ) {
-    val view = LocalView.current
     Surface(
         modifier = modifier.fillMaxHeight(),
         shape = RoundedCornerShape(20.dp),
@@ -434,10 +430,7 @@ private fun PadButton(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable {
-                    view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                    actions.onButton(button, ButtonAction.CLICK)
-                },
+                .bouncyClickable { actions.onButton(button, ButtonAction.CLICK) },
             contentAlignment = Alignment.Center
         ) {
             Text(
