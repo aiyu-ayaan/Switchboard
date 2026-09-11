@@ -415,7 +415,25 @@ class SwitchboardClient(
         is CameraSettings -> SwitchboardJson.encodeToJsonElement(CameraSettings.serializer(), payload)
         is CameraState -> SwitchboardJson.encodeToJsonElement(CameraState.serializer(), payload)
         is CameraFrame -> SwitchboardJson.encodeToJsonElement(CameraFrame.serializer(), payload)
+        is PowerCommand -> SwitchboardJson.encodeToJsonElement(PowerCommand.serializer(), payload)
+        is InputText -> SwitchboardJson.encodeToJsonElement(InputText.serializer(), payload)
+        is ClipboardSet -> SwitchboardJson.encodeToJsonElement(ClipboardSet.serializer(), payload)
     }
+
+    fun sendPower(action: String, seconds: Int = 0) =
+        send(Actions.SYSTEM_POWER, PowerCommand(action, seconds))
+
+    fun setMicVolume(level: Int, muted: Boolean) =
+        send(Actions.MIC_SET, Volume(level, muted))
+
+    fun setInputDevice(deviceId: String) =
+        send(Actions.INPUT_SET, OutputSet(deviceId))
+
+    fun sendText(text: String) =
+        send(Actions.INPUT_TEXT, InputText(text))
+
+    fun sendClipboard(text: String) =
+        send(Actions.CLIPBOARD_SET, ClipboardSet(text))
 
     fun disconnect() {
         socket?.close(NORMAL_CLOSURE, null)

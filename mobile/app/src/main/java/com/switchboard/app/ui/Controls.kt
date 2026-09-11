@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -81,6 +83,7 @@ import com.switchboard.app.net.AudioDevice
 import com.switchboard.app.net.AudioSession
 import com.switchboard.app.net.Display
 import com.switchboard.app.net.MediaState
+import com.switchboard.app.net.Volume
 import kotlin.math.roundToInt
 
 /**
@@ -370,6 +373,116 @@ fun VolumeCard(level: Int, muted: Boolean, onVolume: (Int, Boolean) -> Unit) {
         }
     }
 }
+
+/**
+ * Expressive microphone input volume card with prominent Cough Button / Mute toggle and slider.
+ */
+@Composable
+fun MicrophoneCard(
+    level: Int,
+    muted: Boolean,
+    onMicVolume: (Int, Boolean) -> Unit
+) {
+    var dragging by remember { mutableFloatStateOf(Float.NaN) }
+    val shown = if (dragging.isNaN()) level.toFloat() else dragging
+    val haptics = LocalHaptics.current
+
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (muted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                        contentDescription = null,
+                        tint = if (muted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = "Microphone",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    text = if (muted) "MUTED" else "$level%",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = if (muted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Prominent Mute / Cough Button
+            Surface(
+                shape = CircleShape,
+                color = if (muted) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier
+                    .size(44.dp)
+                    .bouncyClickable(haptic = false) {
+                        haptics.toggle(muted)
+                        onMicVolume(level, !muted)
+                    }
+            ) {
+                Box(
+                    modifier = Modifier.size(44.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (muted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                        contentDescription = if (muted) "Unmute microphone" else "Mute microphone (Cough button)",
+                        tint = if (muted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Slider(
+                value = shown,
+                onValueChange = { dragging = it },
+                onValueChangeFinished = {
+                    if (!dragging.isNaN()) {
+                        onMicVolume(dragging.roundToInt(), muted)
+                        dragging = Float.NaN
+                    }
+                },
+                valueRange = 0f..100f,
+                enabled = !muted,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { contentDescription = "Microphone input volume" }
+            )
+        }
+    }
+}
+
+@Composable
+fun MicrophoneCard(
+    mic: Volume,
+    onMicVolume: (Int, Boolean) -> Unit
+) = MicrophoneCard(mic.level, mic.muted, onMicVolume)
 
 /**
  * Animated 3-bar vertical equalizer pulse indicating live audio playback.
@@ -703,6 +816,103 @@ private fun OutputRow(device: AudioDevice, onSelect: (deviceId: String) -> Unit)
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "Current output",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Audio input/recording device routing card: which microphone endpoint the host captures from.
+ */
+@Composable
+fun InputCard(
+    inputs: List<AudioDevice>,
+    onSelect: (deviceId: String) -> Unit
+) {
+    SectionCard {
+        Text(
+            text = "Input device",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        if (inputs.isEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "The desktop reports no active recording devices.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@SectionCard
+        }
+
+        inputs.forEach { device ->
+            Spacer(Modifier.height(8.dp))
+            InputRow(device = device, onSelect = onSelect)
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Default audio capture and communication recording follows the choice.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun InputRow(device: AudioDevice, onSelect: (deviceId: String) -> Unit) {
+    val isCurrent = device.default
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = if (isCurrent)
+            MaterialTheme.colorScheme.secondaryContainer
+        else
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { role = Role.RadioButton }
+            .bouncyClickable(enabled = !isCurrent) { onSelect(device.id) }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Mic,
+                contentDescription = null,
+                tint = if (isCurrent)
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = device.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (isCurrent)
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            AnimatedVisibility(
+                visible = isCurrent,
+                enter = scaleIn(ExpressiveMotion.Bouncy) + fadeIn(tween(180)),
+                exit = scaleOut(ExpressiveMotion.Snappy) + fadeOut(tween(120))
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "Current input",
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier
                         .padding(start = 8.dp)

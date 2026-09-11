@@ -1,5 +1,8 @@
 package com.switchboard.app.ui
 
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -12,21 +15,33 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.SwipeVertical
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,7 +49,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.switchboard.app.net.ButtonAction
 import com.switchboard.app.net.MouseButton
@@ -54,7 +72,9 @@ class TouchpadActions(
     val onMove: (dx: Double, dy: Double) -> Unit,
     val onButton: (button: String, action: String) -> Unit,
     val onScroll: (dx: Double, dy: Double, ctrl: Boolean) -> Unit,
-    val onGesture: (name: String) -> Unit
+    val onGesture: (name: String) -> Unit,
+    val onText: (text: String) -> Unit = {},
+    val onClipboard: (text: String) -> Unit = {}
 )
 
 /**
@@ -113,6 +133,7 @@ fun TouchpadScreen(actions: TouchpadActions, modifier: Modifier = Modifier) {
                 .weight(1f)
         )
         ButtonBar(actions)
+        RemoteKeyboardToolbar(actions)
         GestureLegend()
     }
 }
@@ -442,19 +463,154 @@ private fun PadButton(
     }
 }
 
+/**
+ * Remote keyboard & clipboard toolbar.
+ * Allows typing arbitrary text to inject into the host desktop and sending system clipboard.
+ */
+@Composable
+private fun RemoteKeyboardToolbar(actions: TouchpadActions) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val haptics = LocalHaptics.current
+    var inputText by remember { mutableStateOf("") }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp)
+        ) {
+            OutlinedTextField(
+                value = inputText,
+                onValueChange = { inputText = it },
+                placeholder = {
+                    Text(
+                        "Type text to host...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        if (inputText.isNotEmpty()) {
+                            haptics.tap()
+                            actions.onText(inputText)
+                            inputText = ""
+                        }
+                    }
+                ),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier.weight(1f)
+            )
+
+            // Send Text Button
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (inputText.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier
+                    .size(48.dp)
+                    .bouncyClickable(enabled = inputText.isNotEmpty()) {
+                        haptics.tap()
+                        actions.onText(inputText)
+                        inputText = ""
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send text",
+                        tint = if (inputText.isNotEmpty()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Send Clipboard Button
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier
+                    .height(48.dp)
+                    .bouncyClickable {
+                        val text = clipboardManager.getText()?.text
+                        if (!text.isNullOrEmpty()) {
+                            haptics.confirm()
+                            actions.onClipboard(text)
+                            Toast.makeText(context, "Sent clipboard to host", Toast.LENGTH_SHORT).show()
+                        } else {
+                            haptics.reject()
+                            Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentPaste,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Paste",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun GestureLegend() {
+    var expanded by remember { mutableStateOf(false) }
     SectionCard {
-        Text(
-            "Gestures",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(10.dp))
-        LegendRow(Icons.Filled.TouchApp, "Tap to click · two fingers right · three middle")
-        LegendRow(Icons.Filled.Mouse, "Double tap then drag, or hold, to move without a button")
-        LegendRow(Icons.Filled.SwipeVertical, "Two fingers to scroll · pinch to zoom")
-        LegendRow(Icons.Filled.OpenWith, "Three fingers: up for Task View, down for the desktop, sideways to switch")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .bouncyClickable { expanded = !expanded }
+        ) {
+            Text(
+                "Gestures",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse gestures" else "Expand gestures",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column {
+                Spacer(Modifier.height(10.dp))
+                LegendRow(Icons.Filled.TouchApp, "Tap to click · two fingers right · three middle")
+                LegendRow(Icons.Filled.Mouse, "Double tap then drag, or hold, to move without a button")
+                LegendRow(Icons.Filled.SwipeVertical, "Two fingers to scroll · pinch to zoom")
+                LegendRow(Icons.Filled.OpenWith, "Three fingers: up for Task View, down for the desktop, sideways to switch")
+            }
+        }
     }
 }
 

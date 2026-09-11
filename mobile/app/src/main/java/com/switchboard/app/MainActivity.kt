@@ -299,7 +299,9 @@ fun SwitchboardApp(
                 onMove = viewModel::movePointer,
                 onButton = viewModel::mouseButton,
                 onScroll = viewModel::scroll,
-                onGesture = viewModel::shellGesture
+                onGesture = viewModel::shellGesture,
+                onText = viewModel::sendText,
+                onClipboard = viewModel::sendClipboard
             ),
             onTransferControl = viewModel::controlTransfer,
             rateUnit = transferConfig.rateUnit,
@@ -311,7 +313,10 @@ fun SwitchboardApp(
             },
             onDeckAction = viewModel::triggerDeckAction,
             onSaveDeckConfig = viewModel::saveDeckConfig,
-            onRefreshApps = viewModel::refreshInstalledApps
+            onRefreshApps = viewModel::refreshInstalledApps,
+            onPower = viewModel::sendPower,
+            onMicVolume = viewModel::setMicVolume,
+            onAudioInput = viewModel::setInputDevice
         )
     }
 

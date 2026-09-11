@@ -52,6 +52,41 @@ object Actions {
     const val DECK_ACTION = "deck.action"
     const val DECK_STATE = "deck.state"
     const val SYSTEM_APPS = "system.apps"
+
+    // Power & Session controls
+    const val SYSTEM_POWER = "system.power"
+    const val ACTION_SYSTEM_POWER = "system.power"
+
+    // Microphone & Input devices
+    const val MIC_GET = "audio.mic.get"
+    const val ACTION_MIC_GET = "audio.mic.get"
+    const val MIC_SET = "audio.mic.set"
+    const val ACTION_MIC_SET = "audio.mic.set"
+    const val INPUT_LIST = "audio.input.list"
+    const val ACTION_INPUT_LIST = "audio.input.list"
+    const val INPUT_SET = "audio.input.set"
+    const val ACTION_INPUT_SET = "audio.input.set"
+
+    // Remote text & clipboard
+    const val INPUT_TEXT = "input.text"
+    const val ACTION_INPUT_TEXT = "input.text"
+    const val CLIPBOARD_SET = "clipboard.set"
+    const val ACTION_CLIPBOARD_SET = "clipboard.set"
+}
+
+const val ACTION_SYSTEM_POWER = Actions.SYSTEM_POWER
+const val ACTION_MIC_GET = Actions.MIC_GET
+const val ACTION_MIC_SET = Actions.MIC_SET
+const val ACTION_INPUT_LIST = Actions.INPUT_LIST
+const val ACTION_INPUT_SET = Actions.INPUT_SET
+const val ACTION_INPUT_TEXT = Actions.INPUT_TEXT
+const val ACTION_CLIPBOARD_SET = Actions.CLIPBOARD_SET
+
+object PowerAction {
+    const val DISPLAY_OFF = "display_off"
+    const val SLEEP = "sleep"
+    const val SHUTDOWN = "shutdown"
+    const val ABORT_SHUTDOWN = "abort_shutdown"
 }
 
 /**
@@ -224,8 +259,10 @@ data class HostState(
     val daemonId: String = "",
     val displays: List<Display> = emptyList(),
     val volume: Volume = Volume(),
+    val mic: Volume = Volume(),
     val mixer: List<AudioSession> = emptyList(),
     val outputs: List<AudioDevice> = emptyList(),
+    val inputs: List<AudioDevice> = emptyList(),
     val media: MediaState = MediaState(),
     val locked: Boolean = false,
     val capabilities: List<String> = emptyList()
@@ -236,6 +273,15 @@ data class DisplaySet(val displayId: String, val value: Int) : WirePayload
 
 @Serializable
 data class MediaCommand(val action: String) : WirePayload
+
+@Serializable
+data class PowerCommand(val action: String, val seconds: Int = 0) : WirePayload
+
+@Serializable
+data class InputText(val text: String) : WirePayload
+
+@Serializable
+data class ClipboardSet(val text: String) : WirePayload
 
 // ---- Wi-Fi camera ----
 

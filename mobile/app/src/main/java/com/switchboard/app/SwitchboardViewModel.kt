@@ -80,6 +80,9 @@ data class UiState(
     val canDriveInput: Boolean get() = host.capabilities.contains("input")
     val canLockSystem: Boolean get() = host.capabilities.contains("lock")
     val canControlDeck: Boolean get() = host.capabilities.contains("deck")
+    val canControlPower: Boolean get() = host.capabilities.contains("power")
+    val canControlMic: Boolean get() = host.capabilities.contains("mic")
+    val canRouteInput: Boolean get() = host.capabilities.contains("inputs")
 }
 
 /**
@@ -387,6 +390,21 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
         connection.patchHost { it.copy(locked = true) }
         connection.send(Actions.SYSTEM_LOCK)
     }
+
+    fun sendPower(action: String, seconds: Int = 0) =
+        connection.sendPower(action, seconds)
+
+    fun setMicVolume(level: Int, muted: Boolean) =
+        connection.setMicVolume(level, muted)
+
+    fun setInputDevice(deviceId: String) =
+        connection.setInputDevice(deviceId)
+
+    fun sendText(text: String) =
+        connection.sendText(text)
+
+    fun sendClipboard(text: String) =
+        connection.sendClipboard(text)
 
     // ---- Air mouse ----
     //

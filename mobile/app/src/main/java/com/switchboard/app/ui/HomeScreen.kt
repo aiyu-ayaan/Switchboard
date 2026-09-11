@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import android.widget.Toast
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
@@ -55,14 +57,21 @@ import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TvOff
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -71,6 +80,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -156,7 +166,10 @@ class SectionActions(
     val onLockSystem: () -> Unit = {},
     val onDeckAction: (Int, com.switchboard.app.net.DeckAction, String?) -> Unit = { _, _, _ -> },
     val onSaveDeckConfig: (com.switchboard.app.net.DeckConfig) -> Unit = {},
-    val onRefreshApps: () -> Unit = {}
+    val onRefreshApps: () -> Unit = {},
+    val onPower: (action: String, seconds: Int) -> Unit = { _, _ -> },
+    val onMicVolume: (level: Int, muted: Boolean) -> Unit = { _, _ -> },
+    val onAudioInput: (deviceId: String) -> Unit = {}
 )
 
 /**
@@ -193,7 +206,7 @@ fun HomeScreen(
     }
 
     val hasAnyControls = state.canControlDisplay || state.canControlVolume ||
-        state.canControlMedia || state.canDriveInput
+        state.canControlMedia || state.canDriveInput || state.host.capabilities.contains("power")
 
     LazyColumn(
         state = listState,
@@ -213,6 +226,13 @@ fun HomeScreen(
             // 1. Hero Connection Status Banner
             item {
                 HostHeroCard(state = state, onLock = actions.onLockSystem)
+            }
+
+            // Power Quick Control Pod
+            if (state.host.capabilities.contains("power")) {
+                item {
+                    PowerControlCard(state = state, onPower = actions.onPower)
+                }
             }
 
             // 2. Active Now Playing & Audio Controls Pod (0-Click Media + Master Volume)
@@ -375,6 +395,269 @@ private fun HostHeroCard(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Expressive Power & Session control card with Screen Off, Sleep, and Countdown Timer.
+ */
+@Composable
+private fun PowerControlCard(
+    state: UiState,
+    onPower: (action: String, seconds: Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val haptics = LocalHaptics.current
+    var showSleepConfirmDialog by remember { mutableStateOf(false) }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
+
+    SectionCard(modifier = modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.PowerSettingsNew,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "Power & Session",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Screen off, sleep & shutdown timer",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Screen Off
+            PowerActionButton(
+                icon = Icons.Filled.TvOff,
+                label = "Screen Off",
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    haptics.tap()
+                    onPower("display_off", 0)
+                    Toast.makeText(context, "Turned off host display", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            // Sleep
+            PowerActionButton(
+                icon = Icons.Filled.Bedtime,
+                label = "Sleep",
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    haptics.tap()
+                    showSleepConfirmDialog = true
+                }
+            )
+
+            // Sleep Timer
+            PowerActionButton(
+                icon = Icons.Filled.Timer,
+                label = "Sleep Timer",
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    haptics.tap()
+                    showSleepTimerDialog = true
+                }
+            )
+        }
+    }
+
+    if (showSleepConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showSleepConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Bedtime,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Put Host to Sleep?") },
+            text = {
+                Text(
+                    "This will put ${state.activeHost?.hostName ?: "the desktop"} into sleep mode immediately. You can wake it via Wake-on-LAN or by pressing the power button."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSleepConfirmDialog = false
+                        haptics.confirm()
+                        onPower("sleep", 0)
+                        Toast.makeText(context, "Putting host to sleep...", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Sleep", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSleepConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showSleepTimerDialog) {
+        AlertDialog(
+            onDismissRequest = { showSleepTimerDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Timer,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Sleep & Shutdown Timer") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Schedule a countdown timer to shut down the host desktop, or abort any pending timer:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    listOf(
+                        15 to "15 Minutes",
+                        30 to "30 Minutes",
+                        60 to "60 Minutes"
+                    ).forEach { (mins, label) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .bouncyClickable {
+                                    showSleepTimerDialog = false
+                                    haptics.confirm()
+                                    onPower("shutdown", mins * 60)
+                                    Toast.makeText(context, "Shutdown timer set for $label", Toast.LENGTH_SHORT).show()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Timer,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bouncyClickable {
+                                showSleepTimerDialog = false
+                                haptics.tap()
+                                onPower("abort_shutdown", 0)
+                                Toast.makeText(context, "Shutdown timer aborted", Toast.LENGTH_SHORT).show()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Stop,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = "Abort Active Timer",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSleepTimerDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun PowerActionButton(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = modifier
+            .height(56.dp)
+            .bouncyClickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
         }
     }
 }
@@ -1233,10 +1516,24 @@ private fun SectionBody(
                     )
                 }
 
+                if (state.host.capabilities.contains("mic")) {
+                    MicrophoneCard(
+                        mic = state.host.mic,
+                        onMicVolume = actions.onMicVolume
+                    )
+                }
+
                 if (state.canRouteOutput) {
                     OutputCard(
                         outputs = state.host.outputs,
                         onSelect = actions.onAudioOutput
+                    )
+                }
+
+                if (state.host.capabilities.contains("inputs") && state.host.inputs.isNotEmpty()) {
+                    InputCard(
+                        inputs = state.host.inputs,
+                        onSelect = actions.onAudioInput
                     )
                 }
 

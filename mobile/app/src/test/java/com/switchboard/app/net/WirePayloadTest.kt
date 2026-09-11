@@ -52,4 +52,50 @@ class WirePayloadTest {
         assertEquals("Speakers", state.outputs.first { it.default }.name)
         assertEquals(listOf("outputs"), state.capabilities)
     }
+
+    @Test
+    fun powerCommand_matchesHostFieldNames() {
+        assertEquals(
+            """{"action":"display_off","seconds":0}""",
+            SwitchboardJson.encodeToString(PowerCommand("display_off", 0))
+        )
+        assertEquals(
+            """{"action":"shutdown","seconds":900}""",
+            SwitchboardJson.encodeToString(PowerCommand("shutdown", 900))
+        )
+    }
+
+    @Test
+    fun inputText_matchesHostFieldName() {
+        assertEquals(
+            """{"text":"Hello, Switchboard!"}""",
+            SwitchboardJson.encodeToString(InputText("Hello, Switchboard!"))
+        )
+    }
+
+    @Test
+    fun clipboardSet_matchesHostFieldName() {
+        assertEquals(
+            """{"text":"Clipboard content"}""",
+            SwitchboardJson.encodeToString(ClipboardSet("Clipboard content"))
+        )
+    }
+
+    @Test
+    fun hostState_readsMicAndInputs() {
+        val state = SwitchboardJson.decodeFromString(
+            HostState.serializer(),
+            """{
+                "mic":{"level":65,"muted":false},
+                "inputs":[{"id":"mic-1","name":"USB Microphone","default":true}],
+                "capabilities":["power","mic","inputs"]
+            }"""
+        )
+        assertEquals(65, state.mic.level)
+        assertEquals(false, state.mic.muted)
+        assertEquals(1, state.inputs.size)
+        assertEquals("USB Microphone", state.inputs.first().name)
+        assertEquals(true, state.inputs.first().default)
+        assertEquals(listOf("power", "mic", "inputs"), state.capabilities)
+    }
 }

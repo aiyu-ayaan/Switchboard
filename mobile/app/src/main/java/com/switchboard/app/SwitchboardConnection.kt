@@ -18,6 +18,7 @@ import com.switchboard.app.net.SwitchboardClient
 import com.switchboard.app.net.WirePayload
 import com.switchboard.app.net.SwitchboardJson
 import com.switchboard.app.net.TransferStatus
+import com.switchboard.app.net.Volume
 import com.switchboard.app.camera.CameraController
 import com.switchboard.app.transfer.TransferEngine
 import kotlinx.coroutines.CoroutineScope
@@ -484,6 +485,30 @@ class SwitchboardConnection private constructor(context: Context) {
 
     fun refreshInstalledApps() {
         send(Actions.SYSTEM_APPS)
+    }
+
+    fun sendPower(action: String, seconds: Int = 0) {
+        client.sendPower(action, seconds)
+    }
+
+    fun setMicVolume(level: Int, muted: Boolean) {
+        patchHost { it.copy(mic = Volume(level, muted)) }
+        client.setMicVolume(level, muted)
+    }
+
+    fun setInputDevice(deviceId: String) {
+        patchHost { host ->
+            host.copy(inputs = host.inputs.map { it.copy(default = it.id == deviceId) })
+        }
+        client.setInputDevice(deviceId)
+    }
+
+    fun sendText(text: String) {
+        client.sendText(text)
+    }
+
+    fun sendClipboard(text: String) {
+        client.sendClipboard(text)
     }
 
     /** Applies a value locally so the control tracks the finger; the host's next broadcast reconciles it. */
