@@ -733,4 +733,3 @@ type InputText struct {
 type ClipboardSet struct {
 	Text string `json:"text"`
 }
-

@@ -18,10 +18,11 @@ var (
 	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
 	procSetClipboardData = user32.NewProc("SetClipboardData")
 
-	procGlobalAlloc  = kernel32.NewProc("GlobalAlloc")
-	procGlobalFree   = kernel32.NewProc("GlobalFree")
-	procGlobalLock   = kernel32.NewProc("GlobalLock")
-	procGlobalUnlock = kernel32.NewProc("GlobalUnlock")
+	procGlobalAlloc     = kernel32.NewProc("GlobalAlloc")
+	procGlobalFree      = kernel32.NewProc("GlobalFree")
+	procGlobalLock      = kernel32.NewProc("GlobalLock")
+	procGlobalUnlock    = kernel32.NewProc("GlobalUnlock")
+	procRtlMoveMemory   = kernel32.NewProc("RtlMoveMemory")
 )
 
 const (
@@ -51,8 +52,7 @@ func setClipboard(text string) error {
 		return fmt.Errorf("clipboard: GlobalLock failed: %w", err)
 	}
 
-	dest := unsafe.Slice((*uint16)(unsafe.Pointer(ptr)), len(u16))
-	copy(dest, u16)
+	procRtlMoveMemory.Call(ptr, uintptr(unsafe.Pointer(&u16[0])), uintptr(bytesLen))
 	procGlobalUnlock.Call(hMem)
 
 	var openErr error
