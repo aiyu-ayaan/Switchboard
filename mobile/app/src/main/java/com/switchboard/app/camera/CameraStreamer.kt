@@ -70,6 +70,17 @@ class CameraStreamer(private val context: Context) {
     private val sequence = AtomicLong(0)
     private val videoSequence = AtomicLong(0)
 
+    /**
+     * Which bind the encoder session belongs to.
+     *
+     * CameraX hands back a surface asynchronously and tells us it has finished
+     * with one just as asynchronously, so on a rebind both can arrive out of
+     * order with respect to the new session. Stamping each surface request with
+     * the bind that asked for it is what lets a late callback tell "tear down
+     * the session I belong to" from "tear down whatever is running now".
+     */
+    private val bindGeneration = AtomicLong(0)
+
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
     private var analysis: ImageAnalysis? = null
@@ -165,8 +176,16 @@ class CameraStreamer(private val context: Context) {
 
     fun stop() {
         streaming = false
+        // Nothing still in flight for the session being torn down may act on
+        // the encoder after this point.
+        bindGeneration.incrementAndGet()
+        // Queued before unbindAll, so it is ordered ahead of any surface
+        // release CameraX dispatches to this same single-threaded executor:
+        // the codec must go before the surface it created, or releasing the
+        // surface under a live codec is a native crash. Off the main thread
+        // because MediaCodec teardown blocks -- see bind().
+        encoderExecutor.execute { encoder.stop() }
         provider?.unbindAll()
-        encoder.stop()
         camera = null
         analysis = null
         preview = null
@@ -200,7 +219,25 @@ class CameraStreamer(private val context: Context) {
             previous.fps != updated.fps
 
         if (needsRebind) {
-            provider?.let { runCatching { bind(owner, it) } }
+            val provider = provider
+            if (provider != null) {
+                // A rebind that throws used to be swallowed whole, which left
+                // the camera torn down, the stream dead and the desktop and
+                // phone both still showing it as running.
+                val failure = runCatching { bind(owner, provider) }.exceptionOrNull()
+                if (failure != null) {
+                    Log.w(TAG, "rebind failed", failure)
+                    streaming = false
+                    onState?.invoke(
+                        CameraState(
+                            streaming = false,
+                            settings = updated,
+                            error = failure.message ?: "Could not switch camera"
+                        )
+                    )
+                    return
+                }
+            }
         } else {
             applyLive(updated)
         }
@@ -210,8 +247,21 @@ class CameraStreamer(private val context: Context) {
     // ---- Binding ----
 
     private fun bind(owner: LifecycleOwner, provider: ProcessCameraProvider) {
+        // Everything below belongs to a new session; a surface request or
+        // release still in flight for the previous one must not touch it.
+        val generation = bindGeneration.incrementAndGet()
+
+        // Off the main thread, and queued before unbindAll.
+        //
+        // This used to be a bare encoder.stop() here, on the main thread:
+        // MediaCodec.stop()/release() on a surface-input codec blocks, and it
+        // blocked while the encoder executor could be holding this encoder's
+        // own monitor inside provideEncoderSurface. Switching the camera froze
+        // the UI. The executor is single-threaded, so queueing the teardown
+        // also orders it ahead of the surface request this bind is about to
+        // make, and ahead of any release CameraX dispatches for the old one.
+        encoderExecutor.execute { encoder.stop() }
         provider.unbindAll()
-        encoder.stop()
         framingCrop = null
 
         val selector = CameraSelector.Builder()
@@ -274,7 +324,7 @@ class CameraStreamer(private val context: Context) {
         Camera2Interop.Extender(builder).setSessionCaptureCallback(faceWatcher)
 
         val preview = previewBuilder.build()
-        preview.setSurfaceProvider(encoderExecutor, ::provideEncoderSurface)
+        preview.setSurfaceProvider(encoderExecutor) { provideEncoderSurface(it, generation) }
         this.preview = preview
 
         val analysis = builder.build()
@@ -303,7 +353,15 @@ class CameraStreamer(private val context: Context) {
      * device with no hardware AVC encoder takes it: the JPEG track carries on
      * alone and the desktop still gets a picture.
      */
-    private fun provideEncoderSurface(request: SurfaceRequest) {
+    private fun provideEncoderSurface(request: SurfaceRequest, generation: Long) {
+        // A request left over from a bind that has already been replaced.
+        // Answering it would configure an encoder for the session that is being
+        // torn down and hand its surface to a camera nothing reads.
+        if (!isCurrent(generation)) {
+            request.willNotProvideSurface()
+            return
+        }
+
         val size = request.resolution
         videoSize = size
         request.setTransformationInfoListener(encoderExecutor) { info ->
@@ -323,11 +381,23 @@ class CameraStreamer(private val context: Context) {
         }
         // The codec owns the surface, so it goes first: releasing a surface out
         // from under a running codec is a native crash, not an exception.
+        //
+        // Only for the session this surface belongs to, though. CameraX
+        // delivers this callback asynchronously, and on a rebind it can arrive
+        // *after* the next session's encoder is already configured -- stopping
+        // it then left the camera drawing into a surface whose codec was gone,
+        // so the video track went silent and never came back. That is what made
+        // switching to the front camera kill the stream for good. A superseded
+        // session's own codec is already released by then: VideoEncoder.start
+        // stops the previous one before configuring its own.
         request.provideSurface(surface, encoderExecutor) {
-            encoder.stop()
+            if (isCurrent(generation)) encoder.stop()
             surface.release()
         }
     }
+
+    /** Whether [generation] is still the live bind. */
+    private fun isCurrent(generation: Long) = generation == bindGeneration.get()
 
     private fun targetSize(quality: String): Size = when (quality) {
         CameraQuality.LOW -> Size(640, 480)
