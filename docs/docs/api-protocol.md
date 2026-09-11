@@ -279,6 +279,74 @@ Requests the list of applications installed on the host system (scanned from Win
 }
 ```
 
+#### 15. `system.power`
+Triggers workstation power and session operations: display power down, ACPI sleep, timed shutdown, or countdown abort. Guarded by the `power` capability.
+
+```json
+{
+  "type": "system.power",
+  "id": "req-014",
+  "payload": {
+    "action": "shutdown",
+    "seconds": 1800
+  }
+}
+```
+*Supported actions*: `"display_off"`, `"sleep"`, `"shutdown"`, `"abort_shutdown"`. `seconds` is optional and specifies the countdown before shutdown.
+
+#### 16. `audio.mic.set`
+Adjusts the master recording microphone volume and mute state. Guarded by the `mic` capability.
+
+```json
+{
+  "type": "audio.mic.set",
+  "id": "req-015",
+  "payload": {
+    "level": 85,
+    "muted": false
+  }
+}
+```
+
+#### 17. `audio.input.set`
+Selects the default system audio capture endpoint (recording device). Guarded by the `inputs` capability.
+
+```json
+{
+  "type": "audio.input.set",
+  "id": "req-016",
+  "payload": {
+    "deviceId": "{0.0.1.00000000}.{e14b4334-a145-4df3-8c46-992383bbccb2}"
+  }
+}
+```
+
+#### 18. `input.text`
+Injects unicode text keystrokes into the active focused window. Guarded by the `input` capability.
+
+```json
+{
+  "type": "input.text",
+  "id": "req-017",
+  "payload": {
+    "text": "Hello from Switchboard! 🚀"
+  }
+}
+```
+
+#### 19. `clipboard.set`
+Directly writes text content to the host workstation system clipboard. Guarded by the `clipboard` capability.
+
+```json
+{
+  "type": "clipboard.set",
+  "id": "req-018",
+  "payload": {
+    "text": "Copied text content from mobile"
+  }
+}
+```
+
 ---
 
 ### Host Broadcasts & Events (Desktop ➔ Phone)
@@ -310,6 +378,10 @@ Pushed upon connection and whenever host state (displays, volume, mixer, output 
       "level": 65,
       "muted": false
     },
+    "mic": {
+      "level": 85,
+      "muted": false
+    },
     "mixer": [
       {
         "id": "{0.0.0.00000000}.{...}|chrome.exe",
@@ -330,6 +402,13 @@ Pushed upon connection and whenever host state (displays, volume, mixer, output 
         "id": "{0.0.0.00000000}.{20325cd4-f5f6-487f-8f91-147998a8b9c4}",
         "name": "Headphones (Realtek(R) Audio)",
         "default": false
+      }
+    ],
+    "inputs": [
+      {
+        "id": "{0.0.1.00000000}.{e14b4334-a145-4df3-8c46-992383bbccb2}",
+        "name": "Microphone (Realtek(R) Audio)",
+        "default": true
       }
     ],
     "media": {
@@ -424,3 +503,8 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `POST` | `/local/deck` | Save and broadcast updated Stream Deck Neo configuration. | `DeckConfig` JSON object |
 | `POST` | `/local/deck/action` | Execute Stream Deck Neo key action immediately. | `DeckActionRequest` JSON object |
 | `GET` | `/local/system/apps` | Enumerate applications installed on the system. | None |
+| `POST` | `/local/system/power` | Trigger power actions (display_off, sleep, shutdown, abort_shutdown). | `{"action": "shutdown", "seconds": 1800}` |
+| `POST` | `/local/audio/mic` | Set system microphone volume and mute state. | `{"level": 80, "muted": false}` |
+| `POST` | `/local/audio/input` | Set default audio recording device endpoint. | `{"deviceId": "..."}` |
+| `POST` | `/local/input/text` | Inject unicode text strings into focused application. | `{"text": "Hello"}` |
+| `POST` | `/local/clipboard` | Set host system clipboard text content. | `{"text": "Copied content"}` |
