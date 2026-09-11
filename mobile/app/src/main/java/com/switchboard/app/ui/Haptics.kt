@@ -106,3 +106,34 @@ fun rememberHaptics(enabled: Boolean): Haptics {
     val view = LocalView.current
     return remember(view, enabled) { Haptics(view, enabled) }
 }
+
+/**
+ * A click that ticks first: `onClick = tapping(onForget)`.
+ *
+ * Material 3 components take a plain lambda, which cannot read a
+ * CompositionLocal of its own. Written out, each of those call sites would need
+ * a `val haptics` hoisted into its enclosing composable — dozens of them, each
+ * an opportunity to forget one. This runs in composable position, where the
+ * local is readable, and hands back the wrapped lambda.
+ *
+ * [bouncyClickable] already does this for everything built on it; this is for
+ * the buttons that are not.
+ */
+@Composable
+fun tapping(onClick: () -> Unit): () -> Unit {
+    val haptics = LocalHaptics.current
+    return {
+        haptics.tap()
+        onClick()
+    }
+}
+
+/** The same for a switch or checkbox, which has a direction to report. */
+@Composable
+fun toggling(onCheckedChange: (Boolean) -> Unit): (Boolean) -> Unit {
+    val haptics = LocalHaptics.current
+    return { on ->
+        haptics.toggle(on)
+        onCheckedChange(on)
+    }
+}

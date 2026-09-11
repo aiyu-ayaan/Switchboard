@@ -413,10 +413,11 @@ fun DeckScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight(),
+                                // The tile is built on bouncyCombinedClickable,
+                                // which ticks for both of these already.
                                 onClick = {
                                     if (editing) {
                                         editingSlot = key.index
-                                        tap()
                                     } else {
                                         launch(key)
                                     }
@@ -424,7 +425,6 @@ fun DeckScreen(
                                 onLongClick = {
                                     editing = true
                                     editingSlot = key.index
-                                    press()
                                 }
                             )
                         }
@@ -509,7 +509,7 @@ private fun DeckTopBar(
                 val selected = idx == pageIndex
                 FilterChip(
                     selected = selected,
-                    onClick = { onSelectPage(idx) },
+                    onClick = tapping { onSelectPage(idx) },
                     label = {
                         Text(
                             pages[idx].name,
@@ -631,7 +631,15 @@ private fun DeckKeyTile(
                     Modifier.background(accent.copy(alpha = 0.10f + 0.16f * elevation))
                 }
             )
-            .bouncyCombinedClickable(pressedScale = 0.93f, onLongClick = onLongClick, onClick = onClick),
+            // haptic = false: a deck key's feel is decided by what the key
+            // does -- a launch taps, a blank slot presses -- so the handlers
+            // own it rather than the modifier ticking first.
+            .bouncyCombinedClickable(
+                pressedScale = 0.93f,
+                haptic = false,
+                onLongClick = onLongClick,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         if (deckKey.badge?.isNotBlank() == true) {
@@ -849,7 +857,7 @@ private fun KeyEditorSheet(
                     val kind = ACTION_KINDS[idx]
                     FilterChip(
                         selected = actionType == kind.id,
-                        onClick = {
+                        onClick = tapping {
                             actionType = kind.id
                             actionValue = ""
                             // A glyph the user picked survives a retype; a host
@@ -921,7 +929,7 @@ private fun KeyEditorSheet(
                             val (value, label) = presets[idx]
                             FilterChip(
                                 selected = actionValue == value,
-                                onClick = {
+                                onClick = tapping {
                                     actionValue = value
                                     if (title.isBlank()) title = label
                                 },
@@ -947,7 +955,7 @@ private fun KeyEditorSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { iconData = null }) { Text("Choose glyph") }
+                    TextButton(onClick = tapping { iconData = null }) { Text("Choose glyph") }
                 }
             } else {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -978,11 +986,11 @@ private fun KeyEditorSheet(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextButton(onClick = onClear, modifier = Modifier.weight(1f)) { Text("Clear key") }
+                TextButton(onClick = tapping(onClear), modifier = Modifier.weight(1f)) { Text("Clear key") }
                 FilledTonalButton(
                     modifier = Modifier.weight(1f),
                     shape = CircleShape,
-                    onClick = {
+                    onClick = tapping {
                         onApply(
                             deckKey.copy(
                                 title = title.trim(),
@@ -1142,7 +1150,7 @@ private fun InfobarSheet(
                     val option = listOf("clock", "media", "page", "text")[idx]
                     FilterChip(
                         selected = mode == option,
-                        onClick = { mode = option },
+                        onClick = tapping { mode = option },
                         label = { Text(option.replaceFirstChar { it.uppercase() }) },
                         shape = CircleShape
                     )
@@ -1161,7 +1169,7 @@ private fun InfobarSheet(
             }
 
             FilledTonalButton(
-                onClick = { onApply(infobar.copy(mode = mode, customText = text)) },
+                onClick = tapping { onApply(infobar.copy(mode = mode, customText = text)) },
                 shape = CircleShape,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Apply") }

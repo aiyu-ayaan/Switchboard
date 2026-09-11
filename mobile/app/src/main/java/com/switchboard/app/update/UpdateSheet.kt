@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.switchboard.app.ui.tapping
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -118,11 +119,11 @@ fun UpdateSheet(onOpenSettings: () -> Unit) {
 
                 is UpdateState.Ready -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = {
+                        onClick = tapping {
                             if (!Updates.canInstall(context)) {
                                 permissionNeeded = true
                                 Updates.requestInstallPermission(context)
-                                return@Button
+                                return@tapping
                             }
                             scope.launch {
                                 runCatching { Updates.install(context, current.file) }.onFailure {
@@ -132,12 +133,12 @@ fun UpdateSheet(onOpenSettings: () -> Unit) {
                         },
                         modifier = Modifier.weight(1f),
                     ) { Text("Install") }
-                    TextButton(onClick = { Updates.snooze() }) { Text("Not now") }
+                    TextButton(onClick = tapping { Updates.snooze() }) { Text("Not now") }
                 }
 
                 is UpdateState.Available -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = {
+                        onClick = tapping {
                             scope.launch {
                                 runCatching { Updates.download(current.release, current.apk) }
                                     .onFailure { Updates.fail(it.message ?: "The download failed") }
@@ -145,7 +146,7 @@ fun UpdateSheet(onOpenSettings: () -> Unit) {
                         },
                         modifier = Modifier.weight(1f),
                     ) { Text("Download") }
-                    TextButton(onClick = { Updates.snooze() }) { Text("Not now") }
+                    TextButton(onClick = tapping { Updates.snooze() }) { Text("Not now") }
                 }
 
                 else -> Unit
@@ -162,7 +163,7 @@ fun UpdateSheet(onOpenSettings: () -> Unit) {
             }
 
             Spacer(Modifier.height(6.dp))
-            TextButton(onClick = onOpenSettings) { Text("Update settings") }
+            TextButton(onClick = tapping(onOpenSettings)) { Text("Update settings") }
         }
     }
 }

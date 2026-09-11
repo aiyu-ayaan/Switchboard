@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,6 +90,7 @@ fun PairingScreen(
     onRescan: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val haptics = LocalHaptics.current
     var confirmForget by remember { mutableStateOf<KnownHost?>(null) }
     var manualOpen by remember { mutableStateOf(false) }
     // Set when the user taps a discovered desktop: the dialog opens with the
@@ -146,7 +146,10 @@ fun PairingScreen(
                     )
                     Spacer(Modifier.height(20.dp))
                     Button(
-                        onClick = onScan,
+                        onClick = {
+                            haptics.tap()
+                            onScan()
+                        },
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
@@ -166,7 +169,10 @@ fun PairingScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     OutlinedButton(
-                        onClick = { manualOpen = true },
+                        onClick = {
+                            haptics.tap()
+                            manualOpen = true
+                        },
                         shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
                         modifier = Modifier
@@ -309,7 +315,7 @@ fun PairingScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onOpenSettings)
+                    .bouncyClickable(onClick = onOpenSettings)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
@@ -391,6 +397,9 @@ fun PairingScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // Deleting the keys for a desktop is the end of
+                        // something, and is not a tap like any other.
+                        haptics.confirm()
                         onForget(host)
                         confirmForget = null
                     }
@@ -403,7 +412,12 @@ fun PairingScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmForget = null }) {
+                TextButton(
+                    onClick = {
+                        haptics.tap()
+                        confirmForget = null
+                    }
+                ) {
                     Text("Cancel", fontWeight = FontWeight.Medium)
                 }
             }
@@ -495,7 +509,7 @@ private fun HostRow(
                 }
             }
             IconButton(
-                onClick = onForget,
+                onClick = tapping(onForget),
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
@@ -667,13 +681,13 @@ private fun ManualPairingDialog(
                 ) {
                     Checkbox(
                         checked = addPortToo,
-                        onCheckedChange = { addPortToo = it }
+                        onCheckedChange = toggling { addPortToo = it }
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Add port too",
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.clickable { addPortToo = !addPortToo }
+                        modifier = Modifier.bouncyClickable { addPortToo = !addPortToo }
                     )
                 }
                 AnimatedVisibility(
@@ -725,7 +739,7 @@ private fun ManualPairingDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
+                onClick = tapping {
                     val finalAddress = if (addPortToo && port.isNotBlank()) {
                         "${address.trim()}:${port.trim()}"
                     } else {
@@ -744,7 +758,7 @@ private fun ManualPairingDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = tapping(onDismiss)) {
                 Text("Cancel", fontWeight = FontWeight.Medium)
             }
         }

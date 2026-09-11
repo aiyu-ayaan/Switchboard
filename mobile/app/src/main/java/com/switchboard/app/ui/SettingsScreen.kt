@@ -65,7 +65,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Code
@@ -404,7 +403,7 @@ fun SettingsScreen(
 
                     if (transferConfig.saveDirectory.isNotEmpty()) {
                         TextButton(
-                            onClick = { onSetSaveDirectory("") },
+                            onClick = tapping { onSetSaveDirectory("") },
                             modifier = Modifier.align(Alignment.End)
                         ) {
                             Text("Reset to Default (Downloads)")
@@ -461,7 +460,7 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onOpenUpdates)
+                        .bouncyClickable(onClick = onOpenUpdates)
                         .padding(18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -963,7 +962,7 @@ private fun DevLinkChip(
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = modifier.clickable {
+        modifier = modifier.bouncyClickable {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
     ) {

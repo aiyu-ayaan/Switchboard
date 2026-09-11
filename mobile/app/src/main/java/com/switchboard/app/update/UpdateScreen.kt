@@ -43,6 +43,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.switchboard.app.ui.tapping
+import com.switchboard.app.ui.toggling
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -122,7 +124,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                             )
                         }
                         OutlinedButton(
-                            onClick = { scope.launch { Updates.check(manual = true) } },
+                            onClick = tapping { scope.launch { Updates.check(manual = true) } },
                             enabled = state !is UpdateState.Checking,
                         ) {
                             if (state is UpdateState.Checking) {
@@ -179,7 +181,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                             is UpdateState.Available -> {
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = {
+                                    Button(onClick = tapping {
                                         scope.launch {
                                             runCatching { Updates.download(current.release, current.apk) }
                                                 .onFailure { Updates.fail(it.message ?: "The download failed") }
@@ -189,7 +191,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                                         Spacer(Modifier.width(6.dp))
                                         Text("Download")
                                     }
-                                    TextButton(onClick = { Updates.snooze() }) {
+                                    TextButton(onClick = tapping { Updates.snooze() }) {
                                         Text("Not now")
                                     }
                                 }
@@ -205,12 +207,12 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Spacer(Modifier.height(8.dp))
-                                    Button(onClick = { Updates.requestInstallPermission(context) }) {
+                                    Button(onClick = tapping { Updates.requestInstallPermission(context) }) {
                                         Text("Open settings")
                                     }
                                 } else {
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick = {
+                                        Button(onClick = tapping {
                                             scope.launch {
                                                 runCatching { Updates.install(context, current.file) }
                                                     .onFailure {
@@ -220,7 +222,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                                         }) {
                                             Text("Install")
                                         }
-                                        TextButton(onClick = { Updates.snooze() }) { Text("Not now") }
+                                        TextButton(onClick = tapping { Updates.snooze() }) { Text("Not now") }
                                     }
                                 }
                             }
@@ -257,7 +259,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                         Spacer(Modifier.width(8.dp))
                         Switch(
                             checked = enabled,
-                            onCheckedChange = {
+                            onCheckedChange = toggling {
                                 enabled = it
                                 Updates.enabled = it
                             },
@@ -284,7 +286,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                         UpdateChannel.entries.forEach { option ->
                             FilterChip(
                                 selected = channel == option,
-                                onClick = {
+                                onClick = tapping {
                                     channel = option
                                     Updates.channel = option
                                     scope.launch { Updates.check(manual = true) }
@@ -317,7 +319,7 @@ fun UpdateScreen(modifier: Modifier = Modifier) {
                         SNOOZE_CHOICES.forEach { days ->
                             FilterChip(
                                 selected = snoozeDays == days,
-                                onClick = {
+                                onClick = tapping {
                                     snoozeDays = days
                                     Updates.snoozeDays = days
                                 },

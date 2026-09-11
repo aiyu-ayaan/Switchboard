@@ -235,20 +235,20 @@ private fun StatusCard(
 
         Spacer(Modifier.height(14.dp))
         when {
-            !granted -> Button(onClick = onGrant) { Text("Allow camera access") }
+            !granted -> Button(onClick = tapping(onGrant)) { Text("Allow camera access") }
             streaming -> {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onStop,
+                        onClick = tapping(onStop),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Stop")
                     }
                     Button(
-                        onClick = onLockDisplay,
+                        onClick = tapping(onLockDisplay),
                         modifier = Modifier.weight(1.2f)
                     ) {
                         Icon(Icons.Filled.Lock, contentDescription = null)
@@ -257,7 +257,7 @@ private fun StatusCard(
                     }
                 }
             }
-            else -> Button(onClick = onStart) { Text("Start streaming") }
+            else -> Button(onClick = tapping(onStart)) { Text("Start streaming") }
         }
     }
 }
@@ -443,7 +443,7 @@ private fun <T> ChipRow(
         options.forEach { (value, label) ->
             FilterChip(
                 selected = value == selected,
-                onClick = { onSelect(value) },
+                onClick = tapping { onSelect(value) },
                 label = { Text(label) }
             )
         }
@@ -490,7 +490,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = toggling(onChange))
     }
 }
 
@@ -513,6 +513,6 @@ private fun IconToggleRow(
             Spacer(Modifier.width(10.dp))
             Text(label, style = MaterialTheme.typography.bodyMedium)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = toggling(onChange))
     }
 }

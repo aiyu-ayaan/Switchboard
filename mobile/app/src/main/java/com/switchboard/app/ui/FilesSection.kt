@@ -136,7 +136,7 @@ fun FilesBody(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { launchWithNotifications { filesPicker.launch(arrayOf("*/*")) } },
+                    onClick = tapping { launchWithNotifications { filesPicker.launch(arrayOf("*/*")) } },
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -145,7 +145,7 @@ fun FilesBody(
                     Text("Files", maxLines = 1)
                 }
                 FilledTonalButton(
-                    onClick = { launchWithNotifications { folderPicker.launch(null) } },
+                    onClick = tapping { launchWithNotifications { folderPicker.launch(null) } },
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -195,7 +195,7 @@ fun FilesBody(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(onClick = tapping {
                     blocked = false
                     context.startActivity(
                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
@@ -204,7 +204,7 @@ fun FilesBody(
                 }) { Text("Open settings") }
             },
             dismissButton = {
-                TextButton(onClick = { blocked = false }) { Text("Not now") }
+                TextButton(onClick = tapping { blocked = false }) { Text("Not now") }
             }
         )
     }

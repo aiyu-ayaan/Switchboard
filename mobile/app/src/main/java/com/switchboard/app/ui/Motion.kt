@@ -79,6 +79,7 @@ fun Modifier.bouncyClickable(
 fun Modifier.bouncyCombinedClickable(
     enabled: Boolean = true,
     pressedScale: Float = 0.96f,
+    haptic: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ): Modifier = composed {
@@ -108,12 +109,12 @@ fun Modifier.bouncyCombinedClickable(
             hapticFeedbackEnabled = false,
             onLongClick = onLongClick?.let {
                 {
-                    haptics.longPress()
+                    if (haptic) haptics.longPress()
                     it()
                 }
             },
             onClick = {
-                haptics.tap()
+                if (haptic) haptics.tap()
                 onClick()
             }
         )

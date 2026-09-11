@@ -185,6 +185,7 @@ fun SwitchboardApp(
 
     val connected = state.status == ConnectionStatus.Connected
     val context = LocalContext.current
+    val haptics = LocalHaptics.current
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
@@ -330,6 +331,7 @@ fun SwitchboardApp(
                     if (currentScreen !is AppScreen.Main) {
                         IconButton(
                             onClick = {
+                                haptics.tap()
                                 if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
                                     (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                                 }
@@ -444,21 +446,30 @@ fun SwitchboardApp(
 
                         if (connected) {
                             IconButton(
-                                onClick = { viewModel.disconnect() },
+                                onClick = {
+                                    haptics.tap()
+                                    viewModel.disconnect()
+                                },
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(Icons.Filled.SwapHoriz, contentDescription = "Switch desktop")
                             }
 
                             IconButton(
-                                onClick = { showConnectionInfo = true },
+                                onClick = {
+                                    haptics.tap()
+                                    showConnectionInfo = true
+                                },
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(Icons.Filled.Info, contentDescription = "Connection info")
                             }
                         } else {
                             IconButton(
-                                onClick = { scanner(Unit) },
+                                onClick = {
+                                    haptics.tap()
+                                    scanner(Unit)
+                                },
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan pairing code")
@@ -611,6 +622,9 @@ fun SwitchboardApp(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // Not a tap: locking the desktop is the end of an
+                        // errand, and it should not feel like opening a menu.
+                        haptics.confirm()
                         showLockConfirmDialog = false
                         viewModel.lockSystem()
                     },
@@ -626,7 +640,10 @@ fun SwitchboardApp(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showLockConfirmDialog = false }
+                    onClick = {
+                        haptics.tap()
+                        showLockConfirmDialog = false
+                    }
                 ) {
                     Text("Cancel")
                 }
@@ -704,6 +721,7 @@ fun SwitchboardApp(
             confirmButton = {
                 Button(
                     onClick = {
+                        haptics.tap()
                         showLandscapePromptDialog = false
                         (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                         currentScreen = AppScreen.Detail(Section.Deck)
@@ -714,7 +732,10 @@ fun SwitchboardApp(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showLandscapePromptDialog = false }
+                    onClick = {
+                        haptics.tap()
+                        showLandscapePromptDialog = false
+                    }
                 ) {
                     Text("Cancel")
                 }
