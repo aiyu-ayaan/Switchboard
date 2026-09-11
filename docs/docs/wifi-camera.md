@@ -176,6 +176,33 @@ every apply.
 The distinction matters because a rebind flashes black for a frame. Slider
 drags (zoom, exposure) must not rebind on every tick.
 
+### What a rebind has to get right
+
+A rebind tears down the H.264 encoder and builds a new one, and CameraX drives
+both halves of that asynchronously: it asks for a surface when it is ready, and
+it reports that it has finished with the old one whenever the old session
+finally lets go. Neither is ordered against the other, so the teardown of the
+previous session can land *after* the next one is already running.
+
+Two rules keep a lens switch from killing the stream:
+
+- **Every surface request is stamped with the bind that asked for it.** A
+  "finished with this surface" callback only stops the encoder while its own
+  bind is still the live one. Without the stamp, a late callback from the
+  outgoing session stopped the incoming session's encoder, leaving the camera
+  drawing into a surface whose codec was gone — the picture never returned, and
+  only stopping and restarting the stream recovered it.
+- **Encoder teardown never runs on the main thread.** `MediaCodec.stop()` and
+  `release()` block on a surface-input codec, and they contend with the encoder
+  executor for the encoder's own lock. Running them on the main thread froze the
+  app for the length of the teardown. They are queued onto the encoder executor
+  instead, ahead of the surface work, because the codec must always be released
+  before the surface it created.
+
+A rebind that fails outright reports itself as camera state with the error
+attached, rather than leaving both clients showing a stream that has already
+stopped.
+
 ---
 
 ## Permissions
