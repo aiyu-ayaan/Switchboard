@@ -193,14 +193,16 @@ Turn your mobile device into a versatile remote keyboard and clipboard bridge.
 
 ---
 
-## 11. Home-Screen Widget
+## 11. Home-Screen Widgets
 
-Control every paired desktop from the Android home screen, without opening the app.
+Two Material 3 widgets built with Glance: control every paired desktop, and watch the connected one's load — without opening the app.
 
 ### Highlights:
-- **Self-maintaining list**: The widget shows whatever the app has paired. Pair a machine and it appears; forget one and it goes.
+- **Self-maintaining list**: The controls widget shows whatever the app has paired. Pair a machine and it appears; forget one and it goes.
 - **Buttons you choose, per widget**: Media transport, volume, mute, lock, screen off, sleep and shutdown. Place two widgets and give them different rows.
-- **Live session marker**: The desktop currently connected is marked, so you know which tap is instant and which pays for a handshake.
-- **No background polling**: `updatePeriodMillis` is zero — the widget redraws on interaction and when the app reports a change, not on a timer.
+- **Wraps, never shrinks**: The button row lays out against the widget's real width and splits into balanced rows rather than dropping below Material's 48dp touch target.
+- **Live readout**: Given the height, the connected desktop's card shows what it is playing and how loud, straight from the session broadcast.
+- **Performance widget**: CPU, memory, GPU and network with temperatures, cached so the cards are still readable with the app closed — and stamped with each reading's age.
+- **No background polling**: `updatePeriodMillis` is zero on both — they redraw on interaction and when the app reports a change, not on a timer.
 
-👉 Learn more in the [Home-Screen Widget Documentation](/home-screen-widget).
+👉 Learn more in the [Home-Screen Widgets Documentation](/home-screen-widget).
