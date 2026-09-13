@@ -23,8 +23,18 @@ import { queueSendPaths, registerSendPicker } from './sendPicker';
 import { resolveSiteIcon } from './siteIcons';
 import { registerUpdateBridge } from './updateBridge';
 
+const isDev = process.env.SWITCHBOARD_DEV === '1';
+
+/**
+ * Names the parallel installation a checkout runs as, so `pnpm dev` does not
+ * have to displace an installed Switchboard. Everything the two would
+ * otherwise contend for is keyed off this: the single-instance lock, the
+ * userData directory, the daemon's port and its SQLite identity store.
+ */
+const PROFILE = isDev ? 'dev' : '';
+
 /** What the user sees us called: window, notifications, startup entry. */
-const APP_NAME = 'Switchboard';
+const APP_NAME = isDev ? 'Switchboard Dev' : 'Switchboard';
 
 /**
  * Matches `appId` in electron-builder.yml, which is also the id the installer
@@ -32,11 +42,21 @@ const APP_NAME = 'Switchboard';
  * the shortcut carrying this id, so a mismatch is what produced the raw
  * "electron.app.Switchboard" heading on every notification.
  */
-const APP_USER_MODEL_ID = 'com.switchboard.desktop';
+const APP_USER_MODEL_ID = isDev ? 'com.switchboard.desktop.dev' : 'com.switchboard.desktop';
 
-const DAEMON_PORT = Number(process.env.SWITCHBOARD_PORT ?? 9427);
+/** Mirrors config.ProfilePort in the daemon: a profile takes the next port. */
+const DAEMON_PORT = Number(process.env.SWITCHBOARD_PORT ?? (isDev ? 9428 : 9427));
 const DEV_SERVER = 'http://127.0.0.1:5273';
-const isDev = process.env.SWITCHBOARD_DEV === '1';
+
+// Before anything else in this file runs, and in particular before the
+// single-instance lock at the bottom: the lock is keyed by the userData
+// directory, so a dev build that renames itself after requesting it would
+// still collide with an installed copy and quit on launch.
+app.setName(APP_NAME);
+// Anchored to appData rather than derived from the current userData: Electron
+// computes that one from the app name, which the line above just changed, so
+// reading it back and appending would double the suffix.
+if (isDev) app.setPath('userData', join(app.getPath('appData'), 'Switchboard Dev'));
 
 /** A 16px accent ring, inlined so the tray needs no packaged asset. */
 const TRAY_ICON =
@@ -184,7 +204,9 @@ async function launchDaemon(): Promise<void> {
   // hands it a fresh one and an empty terminal window sits beside the app for
   // the whole session. Inherited stdio still reaches a dev terminal when there
   // is one, so this costs no logging.
-  daemon = spawn(bin, ['--port', String(DAEMON_PORT)], {
+  const args = ['--port', String(DAEMON_PORT)];
+  if (PROFILE) args.push('--profile', PROFILE);
+  daemon = spawn(bin, args, {
     stdio: 'inherit',
     windowsHide: true
   });
@@ -781,9 +803,8 @@ async function bootstrap(): Promise<void> {
   const coldSendPaths = pathsFromArgv(process.argv);
   const isAutoBoot = process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
 
-  // Before anything can show a window or raise a toast: both read the name and
-  // the model id at the moment they are created.
-  app.setName(APP_NAME);
+  // The name is already set at module load. The model id only has to beat the
+  // first window and the first toast, which both read it as they are created.
   if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
 
   await app.whenReady();
@@ -855,7 +876,7 @@ async function bootstrap(): Promise<void> {
   });
 }
 
-// One instance, always. The daemon binds port 9427 and holds the SQLite
+// One instance per profile. The daemon binds a port and holds the SQLite
 // identity store, so a second copy would fail to bind and un-pair nothing but
 // itself — and Explorer's verb launches the app afresh on every right-click.
 // Those launches hand their paths to the instance already running.

@@ -17,7 +17,16 @@ const rootDir = resolve(__dirname, '..');
 
 const isWindows = process.platform === 'win32';
 const activeChildren = new Set();
-const BACKEND_PORT = Number(process.env.SWITCHBOARD_PORT ?? 9427);
+
+// A checkout runs as the "dev" profile so it does not displace an installed
+// Switchboard: the daemon moves to the next port and a separate database, and
+// Electron renames its userData and single-instance lock to match. Exported
+// rather than passed, because every child below inherits it -- `go run`, the
+// Electron launch and the ADB gateway all have to agree on the same port.
+const PROFILE = process.env.SWITCHBOARD_PROFILE ?? 'dev';
+process.env.SWITCHBOARD_PROFILE = PROFILE;
+const BACKEND_PORT = Number(process.env.SWITCHBOARD_PORT ?? (PROFILE ? 9428 : 9427));
+process.env.SWITCHBOARD_PORT = String(BACKEND_PORT);
 
 function log(prefix, message) {
   const colors = {
@@ -107,7 +116,9 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 async function spinBackend() {
-  return runProcess('go', ['run', './cmd/server'], {
+  const args = ['run', './cmd/server', '--port', String(BACKEND_PORT)];
+  if (PROFILE) args.push('--profile', PROFILE);
+  return runProcess('go', args, {
     cwd: resolve(rootDir, 'backend'),
     name: 'backend',
     streamPrefix: true
@@ -187,6 +198,9 @@ async function spinGateway() {
 
 async function devAll() {
   log('system', '=== Spinning Backend Daemon, Frontend UI & Emulator Gateway ===');
+  log('system', PROFILE
+    ? `Profile "${PROFILE}" on port ${BACKEND_PORT}; an installed Switchboard can keep running.`
+    : `No profile: binding the shipped port ${BACKEND_PORT}.`);
 
   const gateway = spinGateway().catch(err => log('gateway', `Gateway notice: ${err.message}`));
   const backend = spinBackend().catch(err => log('backend', `Backend notice: ${err.message}`));

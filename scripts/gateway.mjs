@@ -4,11 +4,12 @@
  * Switchboard Android Emulator & Device Gateway
  *
  * Automatically detects running Android emulators and USB-connected devices,
- * establishing and maintaining ADB reverse port forwarding (tcp:9427 -> host:9427).
+ * establishing and maintaining ADB reverse port forwarding for the daemon's
+ * port, so an emulator or USB device reaches the desktop daemon on
+ * 127.0.0.1 as if it were running on the host machine.
  *
- * This allows Android emulators and physical devices to seamlessly connect to
- * the desktop daemon using 127.0.0.1:9427 or localhost:9427 as if they were
- * running directly on the host machine.
+ * Defaults to the "dev" profile's port, because this is a development tool and
+ * the phone build it serves is the debug one, which dials the same port.
  */
 
 import { spawn, execSync } from 'node:child_process';
@@ -17,7 +18,7 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 
 const isWindows = process.platform === 'win32';
-const PORT = Number(process.env.SWITCHBOARD_PORT ?? 9427);
+const PORT = Number(process.env.SWITCHBOARD_PORT ?? ((process.env.SWITCHBOARD_PROFILE ?? 'dev') ? 9428 : 9427));
 const POLL_INTERVAL_MS = 3000;
 
 function log(message) {
