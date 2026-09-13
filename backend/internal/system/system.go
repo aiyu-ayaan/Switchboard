@@ -43,6 +43,17 @@ func (c *Controller) HostName() string {
 	return c.hostName
 }
 
+// SetHostName overrides the machine name shown in the mobile host switcher.
+//
+// A profiled daemon uses it to mark itself: a developer running a checkout
+// beside the installed app sees two entries in the phone's list, and picking
+// the wrong one is the kind of confusion that costs an afternoon.
+func (c *Controller) SetHostName(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.hostName = name
+}
+
 // Displays returns every controllable panel with its real capability range.
 func (c *Controller) Displays() ([]protocol.Display, error) { return c.displays.List() }
 

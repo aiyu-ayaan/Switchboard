@@ -42,6 +42,12 @@ func run() error {
 	control := system.NewController()
 	defer control.Close()
 
+	// A profiled daemon says so everywhere it is named, because the phone
+	// lists it next to the installed copy.
+	if cfg.Profile != "" {
+		control.SetHostName(control.HostName() + " (" + cfg.Profile + ")")
+	}
+
 	srv, err := server.New(cfg, store, control)
 	if err != nil {
 		return err
