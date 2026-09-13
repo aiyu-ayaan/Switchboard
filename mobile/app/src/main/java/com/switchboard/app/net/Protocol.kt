@@ -73,6 +73,11 @@ object Actions {
     const val ACTION_INPUT_TEXT = "input.text"
     const val CLIPBOARD_SET = "clipboard.set"
     const val ACTION_CLIPBOARD_SET = "clipboard.set"
+
+    // Telemetry & Resources
+    const val SYSTEM_RESOURCES_QUERY = "system.resources.query"
+    const val SYSTEM_RESOURCES_LIVE = "system.resources.live"
+    const val SYSTEM_ABOUT_QUERY = "system.about.query"
 }
 
 const val ACTION_SYSTEM_POWER = Actions.SYSTEM_POWER
@@ -83,6 +88,9 @@ const val ACTION_INPUT_LIST = Actions.INPUT_LIST
 const val ACTION_INPUT_SET = Actions.INPUT_SET
 const val ACTION_INPUT_TEXT = Actions.INPUT_TEXT
 const val ACTION_CLIPBOARD_SET = Actions.CLIPBOARD_SET
+const val ACTION_SYSTEM_RESOURCES_QUERY = Actions.SYSTEM_RESOURCES_QUERY
+const val ACTION_SYSTEM_RESOURCES_LIVE = Actions.SYSTEM_RESOURCES_LIVE
+const val ACTION_SYSTEM_ABOUT_QUERY = Actions.SYSTEM_ABOUT_QUERY
 
 object PowerAction {
     const val DISPLAY_OFF = "display_off"
@@ -646,4 +654,108 @@ data class InstalledApp(
 data class InstalledAppsPayload(
     val apps: List<InstalledApp> = emptyList()
 )
+
+// ---- Telemetry & Resources ----
+
+@Serializable
+data class MetricPoint(
+    val timestamp: Long = 0L,
+    val cpu: Double = 0.0,
+    val ramUsed: Long = 0L,
+    val ramTotal: Long = 0L,
+    val gpu: Double = 0.0,
+    val gpuMemUsed: Long = 0L,
+    val gpuMemTotal: Long = 0L,
+    val diskRead: Long = 0L,
+    val diskWrite: Long = 0L,
+    val netRx: Long = 0L,
+    val netTx: Long = 0L,
+    val cpuTemp: Double? = null,
+    val gpuTemp: Double? = null
+)
+
+@Serializable
+data class ProcessItem(
+    val name: String = "",
+    val pid: Int = 0,
+    val cpu: Double = 0.0,
+    val ramBytes: Long = 0L
+)
+
+@Serializable
+data class DriveItem(
+    val device: String = "",
+    val label: String = "",
+    val totalBytes: Long = 0L,
+    val freeBytes: Long = 0L
+)
+
+@Serializable
+data class ResourcesQuery(
+    val range: String = "1h"
+) : WirePayload
+
+@Serializable
+data class ResourcesResponse(
+    val range: String = "1h",
+    val points: List<MetricPoint> = emptyList()
+) : WirePayload
+
+@Serializable
+data class ResourcesLivePush(
+    val current: MetricPoint = MetricPoint(),
+    val topProcesses: List<ProcessItem> = emptyList(),
+    val drives: List<DriveItem> = emptyList()
+) : WirePayload
+
+@Serializable
+data class BatteryInfo(
+    val present: Boolean = false,
+    val charging: Boolean = false,
+    val percent: Int = 0,
+    val wearPercent: Double = 0.0,
+    val cycleCount: Int = 0,
+    val designCapacityMwh: Long = 0L,
+    val fullCapacityMwh: Long = 0L
+)
+
+@Serializable
+data class CpuInfo(
+    val model: String = "",
+    val cores: Int = 0,
+    val threads: Int = 0,
+    val baseClockMhz: Int = 0
+)
+
+@Serializable
+data class GpuInfo(
+    val name: String = "",
+    val driver: String = "",
+    val vramBytes: Long = 0L
+)
+
+@Serializable
+data class MemoryInfo(
+    val totalBytes: Long = 0L,
+    val type: String = "",
+    val slots: Int = 0
+)
+
+@Serializable
+data class OsInfo(
+    val name: String = "",
+    val build: String = "",
+    val uptimeSeconds: Long = 0L
+)
+
+@Serializable
+data class AboutSystemResponse(
+    val os: OsInfo = OsInfo(),
+    val cpu: CpuInfo = CpuInfo(),
+    val memory: MemoryInfo = MemoryInfo(),
+    val gpus: List<GpuInfo> = emptyList(),
+    val drives: List<DriveItem> = emptyList(),
+    val battery: BatteryInfo = BatteryInfo()
+) : WirePayload
+
 
