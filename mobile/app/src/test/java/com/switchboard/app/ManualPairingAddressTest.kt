@@ -4,9 +4,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ManualPairingAddressTest {
+    /**
+     * Unit tests run against the debug variant, which is the development
+     * client: it must dial the "dev" profile's daemon rather than the shipped
+     * port, or a checkout of the desktop app and an installed copy become
+     * indistinguishable from the phone.
+     */
     @Test
-    fun defaultPort_is9427() {
-        assertEquals(9427, SwitchboardViewModel.DEFAULT_PORT)
+    fun debugClient_dialsTheDevProfilePort() {
+        assertEquals(9428, SwitchboardViewModel.DEFAULT_PORT)
+        assertEquals(BuildConfig.DEFAULT_PORT, SwitchboardViewModel.DEFAULT_PORT)
     }
 
     @Test

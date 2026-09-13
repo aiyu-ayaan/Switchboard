@@ -98,7 +98,7 @@ data class UiState(
 class SwitchboardViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        const val DEFAULT_PORT = SwitchboardConnection.DEFAULT_PORT
+        val DEFAULT_PORT = SwitchboardConnection.DEFAULT_PORT
 
         /** One pointer frame per ~60 Hz tick, regardless of the panel's rate. */
         private const val POINTER_FLUSH_MS = 16L

@@ -68,6 +68,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.switchboard.app.SwitchboardConnection
 import com.switchboard.app.SwitchboardViewModel
 import com.switchboard.app.data.KnownHost
 import com.switchboard.app.net.DiscoveredHost
@@ -704,7 +705,7 @@ private fun ManualPairingDialog(
                                 }
                             },
                             label = { Text("Port") },
-                            placeholder = { Text("9427") },
+                            placeholder = { Text(SwitchboardConnection.DEFAULT_PORT.toString()) },
                             shape = RoundedCornerShape(14.dp),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

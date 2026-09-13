@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Switchboard</string>
+    <!--
+      app_name is generated per build type in app/build.gradle.kts, so the dev
+      client is labelled apart from the installed one on the same launcher.
+    -->
 </resources>

@@ -71,9 +71,9 @@ async function main() {
       log('android', 'Installing debug build on connected Android device/emulator...');
       await runCommand(gradle, ['installDebug']);
       
-      log('android', 'Launching com.switchboard.app/.MainActivity via adb...');
+      log('android', 'Launching the debug client via adb...');
       try {
-        await runCommand('adb', ['shell', 'am', 'start', '-n', 'com.switchboard.app/.MainActivity'], { cwd: rootDir });
+        await runCommand('adb', ['shell', 'am', 'start', '-n', 'com.switchboard.app.dev/.MainActivity'], { cwd: rootDir });
         log('android', 'App launched successfully on target device.');
       } catch {
         log('android', 'Note: Make sure an Android device or emulator is connected with USB debugging enabled.');

@@ -54,6 +54,16 @@ android {
         resourceConfigurations += listOf("en")
     }
 
+    // The debug build is the development client, and the desktop it talks to
+    // is a checkout running the "dev" profile on the next port. Carried as a
+    // build type rather than a product flavour on purpose: a flavour dimension
+    // renames every Gradle task and APK path, and CI, the release workflow and
+    // the helper scripts all name them.
+    //
+    // The application id suffix is what lets the two sit on one phone. It also
+    // separates their keystore-backed host stores, so pairing the dev client
+    // cannot disturb the pairings of the installed one.
+
     // The signature and build metadata of every jar on the classpath, none of
     // which is read at runtime. BouncyCastle alone accounts for most of it.
     packaging {
@@ -95,7 +105,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Switchboard Dev")
+            buildConfigField("int", "DEFAULT_PORT", "9428")
+        }
         release {
+            resValue("string", "app_name", "Switchboard")
+            buildConfigField("int", "DEFAULT_PORT", "9427")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -108,6 +125,9 @@ android {
         // The updater compares BuildConfig.VERSION_NAME against the GitHub
         // release tags, so the generated class has to exist.
         buildConfig = true
+        // app_name is generated per build type, which AGP 9 requires opting in
+        // to rather than assuming.
+        resValues = true
     }
 
     compileOptions {

@@ -618,7 +618,14 @@ class SwitchboardConnection private constructor(context: Context) {
 
     companion object {
         private const val TAG = "SwitchboardConnection"
-        const val DEFAULT_PORT = 9427
+
+        /**
+         * The port to assume when an address carries none. Generated per build
+         * type: the debug client is the development one and dials the "dev"
+         * profile's daemon, which moves off the shipped port so a checkout can
+         * run beside an installed Switchboard.
+         */
+        val DEFAULT_PORT = BuildConfig.DEFAULT_PORT
 
         /** How long a failed resume waits for mDNS to name the host's new address. */
         private const val REDISCOVER_TIMEOUT_MS = 4_000L
