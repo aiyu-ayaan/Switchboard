@@ -201,6 +201,7 @@ Two Material 3 widgets built with Glance: control every paired desktop, and watc
 - **Self-maintaining list**: The controls widget shows whatever the app has paired. Pair a machine and it appears; forget one and it goes.
 - **Buttons you choose, per widget**: Media transport, volume, mute, lock, screen off, sleep and shutdown. Place two widgets and give them different rows.
 - **Wraps, never shrinks**: The button row lays out against the widget's real width and splits into balanced rows rather than dropping below Material's 48dp touch target.
+- **Resizes without clipping**: Both widgets read their real height and drop whole elements — secondary lines, then chrome, then a whole row — rather than letting a reading slide off the bottom edge.
 - **Live readout**: Given the height, the connected desktop's card shows what it is playing and how loud, straight from the session broadcast.
 - **Performance widget**: CPU, memory, GPU and network with temperatures, cached so the cards are still readable with the app closed — and stamped with each reading's age.
 - **No background polling**: `updatePeriodMillis` is zero on both — they redraw on interaction and when the app reports a change, not on a timer.

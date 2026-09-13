@@ -46,9 +46,12 @@ is 48dp, and six of those do not fit a four-cell placement, so the widget
 declares `SizeMode.Exact`, reads its real width, and splits the buttons into
 balanced rows — 3 + 3, never 4 + 2.
 
-When the widget is tall enough (~170dp), the connected desktop's card also
-shows **what it is playing and how loud**. Both come from the session broadcast
-the app is already receiving; nothing asks the desktop for anything extra.
+Above ~185dp, the connected desktop's card also shows **what it is playing and
+how loud**. Both come from the session broadcast the app is already receiving;
+nothing asks the desktop for anything extra.
+
+On a narrow widget the status pill shortens to `Idle`, because "Tap to control"
+crowds out the machine name beside it — and the name is the part being read.
 
 ### Configuring
 
@@ -66,6 +69,22 @@ CPU, memory, GPU and network for the desktop this phone is talking to, with
 temperatures where the host reports them. Throughput is shown as two rates
 rather than a meter — a progress bar needs a ceiling, and a network has no
 honest one.
+
+### Resizing
+
+The stat grid has a fixed number of rows and no way to scroll, so it gives
+elements up rather than letting them be sliced:
+
+| Height | What you get |
+| :--- | :--- |
+| ~210dp and up | Everything: title bar, four cards with temperatures and used/total, age stamp |
+| ~190–210dp | Smaller figures, no secondary lines |
+| ~150–190dp | …and no age stamp |
+| ~140–150dp | …and CPU + memory only |
+| below ~140dp | …and no title bar |
+
+Half the readings shown properly beats four with two of them cut in half, and a
+reading that silently disappears off the bottom edge is the worst of the three.
 
 ### Where the numbers come from
 
@@ -120,6 +139,7 @@ reading **Tap to control**.
 | Performance widget | `mobile/.../widget/PerformanceWidget.kt` |
 | Cached readings and formatting | `mobile/.../widget/WidgetTelemetry.kt` |
 | Configuration screen | `mobile/.../widget/WidgetConfigActivity.kt` |
+| Size thresholds | `mobile/.../widget/WidgetDensity.kt` |
 | Provider metadata | `mobile/app/src/main/res/xml/switchboard_*widget_info.xml` |
 | Picker previews | `mobile/app/src/main/res/layout/widget_preview_*.xml` |
 
