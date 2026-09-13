@@ -70,7 +70,8 @@ data class UiState(
     /** Whether the connection service launches on device boot. */
     val startOnBoot: Boolean = true,
     val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig(),
-    val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList()
+    val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList(),
+    val telemetry: TelemetryState = TelemetryState()
 ) {
     val canControlDisplay: Boolean get() = host.capabilities.contains("display")
     val canControlVolume: Boolean get() = host.capabilities.contains("volume")
@@ -137,7 +138,8 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
                         alwaysOn = live.alwaysOn,
                         startOnBoot = live.startOnBoot,
                         deckConfig = live.deckConfig,
-                        installedApps = live.installedApps
+                        installedApps = live.installedApps,
+                        telemetry = live.telemetry
                     )
                 }
             }
@@ -513,5 +515,15 @@ class SwitchboardViewModel(application: Application) : AndroidViewModel(applicat
 
     fun refreshInstalledApps() {
         connection.refreshInstalledApps()
+    }
+
+    // ---- Telemetry & Resources ----
+
+    fun queryResources(range: String = "1h") {
+        connection.queryResources(range)
+    }
+
+    fun queryAboutSystem() {
+        connection.queryAboutSystem()
     }
 }

@@ -53,7 +53,18 @@ data class ConnectionState(
     /** Whether the connection service launches on device boot. */
     val startOnBoot: Boolean = true,
     val deckConfig: com.switchboard.app.net.DeckConfig = com.switchboard.app.net.DeckConfig(),
-    val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList()
+    val installedApps: List<com.switchboard.app.net.InstalledApp> = emptyList(),
+    val telemetry: TelemetryState = TelemetryState()
+)
+
+data class TelemetryState(
+    val selectedRange: String = "1h",
+    val points: List<com.switchboard.app.net.MetricPoint> = emptyList(),
+    val liveCurrent: com.switchboard.app.net.MetricPoint = com.switchboard.app.net.MetricPoint(),
+    val topProcesses: List<com.switchboard.app.net.ProcessItem> = emptyList(),
+    val drives: List<com.switchboard.app.net.DriveItem> = emptyList(),
+    val aboutSystem: com.switchboard.app.net.AboutSystemResponse? = null,
+    val isLoadingHistory: Boolean = false
 )
 
 /**
@@ -344,9 +355,10 @@ class SwitchboardConnection private constructor(context: Context) {
                 transfers.bind { action, payload, blob -> client.send(action, payload, blob) }
                 camera.bind { action, payload, blob -> client.send(action, payload, blob) }
                 store.save(saved)
-                store.lastHostId = saved.daemonId
                 client.send(Actions.DECK_GET)
                 client.send(Actions.SYSTEM_APPS)
+                client.queryResources("1h")
+                client.queryAboutSystem()
                 _state.update {
                     it.copy(
                         status = ConnectionStatus.Connected,
@@ -356,6 +368,46 @@ class SwitchboardConnection private constructor(context: Context) {
                     )
                 }
                 return saved
+            }
+
+            is ConnectionEvent.Resources -> {
+                _state.update {
+                    it.copy(
+                        telemetry = it.telemetry.copy(
+                            points = event.response.points,
+                            selectedRange = event.response.range,
+                            isLoadingHistory = false
+                        )
+                    )
+                }
+            }
+
+            is ConnectionEvent.ResourcesLive -> {
+                _state.update {
+                    val nextPoints = if (it.telemetry.selectedRange == "1m") {
+                        listOf(event.live.current)
+                    } else {
+                        it.telemetry.points
+                    }
+                    it.copy(
+                        telemetry = it.telemetry.copy(
+                            liveCurrent = event.live.current,
+                            topProcesses = event.live.topProcesses,
+                            drives = event.live.drives,
+                            points = nextPoints
+                        )
+                    )
+                }
+            }
+
+            is ConnectionEvent.AboutSystem -> {
+                _state.update {
+                    it.copy(
+                        telemetry = it.telemetry.copy(
+                            aboutSystem = event.about
+                        )
+                    )
+                }
             }
 
             is ConnectionEvent.State -> {
@@ -545,6 +597,15 @@ class SwitchboardConnection private constructor(context: Context) {
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
             }.getOrNull()
         }
+
+    fun queryResources(range: String = "1h") {
+        _state.update { it.copy(telemetry = it.telemetry.copy(selectedRange = range, isLoadingHistory = true)) }
+        client.queryResources(range)
+    }
+
+    fun queryAboutSystem() {
+        client.queryAboutSystem()
+    }
 
     companion object {
         private const val TAG = "SwitchboardConnection"

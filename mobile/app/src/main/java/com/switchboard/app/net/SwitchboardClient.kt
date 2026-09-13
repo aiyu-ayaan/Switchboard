@@ -36,6 +36,9 @@ sealed interface ConnectionEvent {
     data class Artwork(val artwork: MediaArtwork) : ConnectionEvent
     data class DeckState(val config: DeckConfig) : ConnectionEvent
     data class InstalledApps(val apps: List<InstalledApp>) : ConnectionEvent
+    data class Resources(val response: ResourcesResponse) : ConnectionEvent
+    data class ResourcesLive(val live: ResourcesLivePush) : ConnectionEvent
+    data class AboutSystem(val about: AboutSystemResponse) : ConnectionEvent
 
     /**
      * Any `file.*` frame, handed over undecoded. Transfers are stateful and
@@ -316,6 +319,33 @@ class SwitchboardClient(
                             trySend(ConnectionEvent.InstalledApps(appsList))
                         }
 
+                        envelope.action == Actions.SYSTEM_RESOURCES_QUERY && payload != null -> trySend(
+                            ConnectionEvent.Resources(
+                                SwitchboardJson.decodeFromJsonElement(
+                                    ResourcesResponse.serializer(),
+                                    payload
+                                )
+                            )
+                        )
+
+                        envelope.action == Actions.SYSTEM_RESOURCES_LIVE && payload != null -> trySend(
+                            ConnectionEvent.ResourcesLive(
+                                SwitchboardJson.decodeFromJsonElement(
+                                    ResourcesLivePush.serializer(),
+                                    payload
+                                )
+                            )
+                        )
+
+                        envelope.action == Actions.SYSTEM_ABOUT_QUERY && payload != null -> trySend(
+                            ConnectionEvent.AboutSystem(
+                                SwitchboardJson.decodeFromJsonElement(
+                                    AboutSystemResponse.serializer(),
+                                    payload
+                                )
+                            )
+                        )
+
                         envelope.action.startsWith("camera.") ->
                             trySend(ConnectionEvent.CameraCommand(envelope.action, payload))
 
@@ -419,7 +449,17 @@ class SwitchboardClient(
         is PowerCommand -> SwitchboardJson.encodeToJsonElement(PowerCommand.serializer(), payload)
         is InputText -> SwitchboardJson.encodeToJsonElement(InputText.serializer(), payload)
         is ClipboardSet -> SwitchboardJson.encodeToJsonElement(ClipboardSet.serializer(), payload)
+        is ResourcesQuery -> SwitchboardJson.encodeToJsonElement(ResourcesQuery.serializer(), payload)
+        is ResourcesResponse -> SwitchboardJson.encodeToJsonElement(ResourcesResponse.serializer(), payload)
+        is ResourcesLivePush -> SwitchboardJson.encodeToJsonElement(ResourcesLivePush.serializer(), payload)
+        is AboutSystemResponse -> SwitchboardJson.encodeToJsonElement(AboutSystemResponse.serializer(), payload)
     }
+
+    fun queryResources(range: String = "1h") =
+        send(Actions.SYSTEM_RESOURCES_QUERY, ResourcesQuery(range))
+
+    fun queryAboutSystem() =
+        send(Actions.SYSTEM_ABOUT_QUERY)
 
     fun setDisplayPower(displayId: String, on: Boolean) =
         send(Actions.DISPLAY_POWER, DisplayPowerSet(displayId, on))
