@@ -160,6 +160,13 @@ dependencies {
     implementation(libs.bouncycastle)
     implementation(libs.zxing.embedded)
 
+    // Home-screen widget. Glance rather than hand-built RemoteViews: the widget
+    // renders a list whose length and contents both come from user data, which
+    // in RemoteViews means a RemoteViewsService collection adapter and a layout
+    // per cell.
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+
     implementation(libs.camera.core)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)

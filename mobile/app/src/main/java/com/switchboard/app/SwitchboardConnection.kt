@@ -38,6 +38,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.glance.appwidget.updateAll
 
 /** Everything about the live session that outlives any one Activity. */
 data class ConnectionState(
@@ -126,6 +129,19 @@ class SwitchboardConnection private constructor(context: Context) {
         // system restarts the service on its own, and the notification has to
         // come back with it or the process loses its reason to be resident.
         if (store.alwaysOn && last != null) ConnectionService.start(appContext)
+
+        // Home-screen widgets render the paired list and which desktop is live.
+        // Only those two things, and only when they change: a widget redraw is
+        // a binder round trip per placed widget, and state arrives several
+        // times a second while media is playing.
+        scope.launch {
+            _state
+                .map { it.hosts.map(KnownHost::daemonId) to it.activeHost?.daemonId?.takeIf { _ -> it.status == ConnectionStatus.Connected } }
+                .distinctUntilChanged()
+                .collect {
+                    runCatching { com.switchboard.app.widget.SwitchboardWidget().updateAll(appContext) }
+                }
+        }
     }
 
     // ---- Always-on ----
@@ -666,5 +682,16 @@ class SwitchboardConnection private constructor(context: Context) {
         fun get(context: Context): SwitchboardConnection = instance ?: synchronized(this) {
             instance ?: SwitchboardConnection(context.applicationContext).also { instance = it }
         }
+
+        /**
+         * The holder this process already has, or null.
+         *
+         * For readers that must not cause a connection: constructing the holder
+         * dials the last host, so anything that only wants to *display* the
+         * session -- the home-screen widget redrawing on rotation, on resize or
+         * after a reboot -- has to ask this way or it opens a socket every time
+         * the launcher repaints.
+         */
+        fun peek(): SwitchboardConnection? = instance
     }
 }

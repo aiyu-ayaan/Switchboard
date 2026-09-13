@@ -109,6 +109,32 @@
         </receiver>
 
         <!--
+          Home-screen widget. The configuration activity is exported because
+          the launcher starts it as the widget's configuration step; it carries
+          no data of its own beyond which buttons one widget shows.
+        -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/widget_settings_title"
+            android:theme="@style/Theme.Switchboard">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".widget.SwitchboardWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/switchboard_widget_info" />
+        </receiver>
+
+        <!--
           How a PackageInstaller session reports back. Not exported: the only
           thing that may send this is the platform, answering a session this
           app created.

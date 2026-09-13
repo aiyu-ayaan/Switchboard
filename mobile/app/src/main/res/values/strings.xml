@@ -4,4 +4,6 @@
       app_name is generated per build type in app/build.gradle.kts, so the dev
       client is labelled apart from the installed one on the same launcher.
     -->
+    <string name="widget_description">Control every paired desktop from the home screen.</string>
+    <string name="widget_settings_title">Widget controls</string>
 </resources>
