@@ -12,3 +12,7 @@
 -dontwarn com.google.errorprone.annotations.CheckReturnValue
 -dontwarn com.google.errorprone.annotations.Immutable
 -dontwarn com.google.errorprone.annotations.RestrictedApi
+
+# Room databases are instantiated via reflection by WorkManager (transitive
+# dependency from Glance). R8 strips the zero-arg constructor otherwise.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
