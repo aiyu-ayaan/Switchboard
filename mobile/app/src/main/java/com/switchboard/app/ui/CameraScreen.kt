@@ -54,6 +54,7 @@ import com.switchboard.app.net.CameraFacing
 import com.switchboard.app.net.CameraQuality
 import com.switchboard.app.net.CameraSettings
 import com.switchboard.app.net.CameraWhiteBalance
+import kotlin.math.roundToInt
 
 /**
  * Drives this device's camera as a webcam for the paired desktop.
@@ -459,6 +460,13 @@ private fun LabelledSlider(
     steps: Int = 0,
     onChange: (Float) -> Unit
 ) {
+    val haptics = LocalHaptics.current
+    var lastNotch by remember { mutableStateOf<Int?>(null) }
+    // Zoom and focus run 0..1 while frame rate runs 5..60, so the notch comes
+    // from the fraction rather than the value: 100 marks across any range, and
+    // a stepped slider snaps to fewer of them on its own.
+    val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
+
     Column(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -473,7 +481,20 @@ private fun LabelledSlider(
         }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
-            onValueChange = onChange,
+            onValueChange = {
+                val notch = ((it - range.start) / span * 100).roundToInt()
+                if (lastNotch != notch) {
+                    lastNotch = notch
+                    haptics.tick()
+                }
+                onChange(it)
+            },
+            onValueChangeFinished = {
+                // The ends are worth more than a tick: they are where the
+                // gesture stops moving whether or not the finger has.
+                if (value <= range.start || value >= range.endInclusive) haptics.confirm()
+                lastNotch = null
+            },
             valueRange = range,
             steps = steps
         )
