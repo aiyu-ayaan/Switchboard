@@ -11,6 +11,12 @@ directories:
 files:
   - dist/**/*
   - package.json
+  # The tray and window icons, which main/index.ts resolves under
+  # `app.getAppPath()`. Without these the tray falls back to a placeholder.
+  - resources/icon.ico
+  - resources/icon.png
+  - resources/tray.ico
+  - resources/tray.png
   - '!**/*.map'
   - '!**/*.ts'
   - '!**/tsconfig*.json'

@@ -849,8 +849,10 @@ async function bootstrap(): Promise<void> {
   // created, hidden — closing the last one would quit the app and take the
   // daemon, and the transfer, down with it — and the tray icon is what keeps
   // that running app visible and quittable.
-  // Similarly, on automatic boot launch with background mode enabled, stay in tray.
-  const shouldShow = coldSendPaths.length === 0 && !(isAutoBoot && runInBackground);
+  // A launch Windows made at login is likewise not a launch the user asked to
+  // look at, whatever the background setting says -- the tray is what makes it
+  // reachable.
+  const shouldShow = coldSendPaths.length === 0 && !isAutoBoot;
   createWindow({ show: shouldShow });
   if (coldSendPaths.length > 0) {
     ensureTray();
