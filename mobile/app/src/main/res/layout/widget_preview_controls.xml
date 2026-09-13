@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the launcher's widget picker shows. Static sample data on purpose: a
+  preview rendered from the real host list would put the user's machine names,
+  and whatever they are playing, into the picker.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/widget_preview_surface"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="8dp">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:src="@drawable/ic_widget_computer"
+            android:tint="@color/widget_preview_accent_color"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Switchboard"
+            android:textSize="14sp"
+            android:textColor="@color/widget_preview_on_surface_color" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/widget_preview_card"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="10dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Desktop-PC"
+            android:textSize="15sp"
+            android:textColor="@color/widget_preview_on_card_color" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp"
+            android:gravity="center_horizontal">
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="10dp"
+                android:src="@drawable/ic_widget_prev"
+                android:tint="@color/widget_preview_accent_color"
+                android:background="@drawable/widget_preview_circle"
+                android:contentDescription="@null" />
+
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:padding="10dp"
+                android:src="@drawable/ic_widget_play"
+                android:tint="@color/widget_preview_accent_color"
+                android:background="@drawable/widget_preview_circle"
+                android:contentDescription="@null" />
+
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:padding="10dp"
+                android:src="@drawable/ic_widget_next"
+                android:tint="@color/widget_preview_accent_color"
+                android:background="@drawable/widget_preview_circle"
+                android:contentDescription="@null" />
+
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="14dp"
+                android:padding="10dp"
+                android:src="@drawable/ic_widget_lock"
+                android:tint="@color/widget_preview_accent_color"
+                android:background="@drawable/widget_preview_circle"
+                android:contentDescription="@null" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

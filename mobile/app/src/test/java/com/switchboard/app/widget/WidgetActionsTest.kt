@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import androidx.compose.ui.unit.dp
 import org.junit.Test
 
 class WidgetActionsTest {
@@ -54,6 +55,24 @@ class WidgetActionsTest {
         assertEquals(45, steppedVolume(50, -5))
         assertEquals(0, steppedVolume(2, -5))
         assertEquals(100, steppedVolume(98, 5))
+    }
+
+    /**
+     * The button row wraps rather than shrinking below Material's 48dp target,
+     * and the rows it wraps into are balanced -- six buttons in a width that
+     * holds four become 3+3, not 4+2.
+     */
+    @Test
+    fun buttonRows_wrapAndBalance() {
+        // Wide enough for everything: one row.
+        assertEquals(6, SwitchboardWidget.buttonsPerRow(320.dp, 6))
+        // Holds four; six buttons split evenly rather than 4 + 2.
+        assertEquals(3, SwitchboardWidget.buttonsPerRow(200.dp, 6))
+        // Holds two; five buttons need three rows of at most two.
+        assertEquals(2, SwitchboardWidget.buttonsPerRow(100.dp, 5))
+        // Never zero, however cramped.
+        assertEquals(1, SwitchboardWidget.buttonsPerRow(0.dp, 3))
+        assertEquals(1, SwitchboardWidget.buttonsPerRow(200.dp, 0))
     }
 
     /** Defaults have to name real controls, or a fresh widget renders blanks. */

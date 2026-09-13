@@ -40,7 +40,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
-import androidx.glance.appwidget.updateAll
 
 /** Everything about the live session that outlives any one Activity. */
 data class ConnectionState(
@@ -139,7 +138,7 @@ class SwitchboardConnection private constructor(context: Context) {
                 .map { it.hosts.map(KnownHost::daemonId) to it.activeHost?.daemonId?.takeIf { _ -> it.status == ConnectionStatus.Connected } }
                 .distinctUntilChanged()
                 .collect {
-                    runCatching { com.switchboard.app.widget.SwitchboardWidget().updateAll(appContext) }
+                    runCatching { com.switchboard.app.widget.updateAllSwitchboardWidgets(appContext) }
                 }
         }
     }
@@ -402,6 +401,7 @@ class SwitchboardConnection private constructor(context: Context) {
             }
 
             is ConnectionEvent.ResourcesLive -> {
+                cacheTelemetryForWidgets(event.live.current)
                 _state.update {
                     val nextPoints = if (it.telemetry.selectedRange == "1m") {
                         val cutoff = event.live.current.timestamp - 60
@@ -486,6 +486,33 @@ class SwitchboardConnection private constructor(context: Context) {
         return host
     }
 
+    /**
+     * Keeps the performance widget's last reading current.
+     *
+     * Readings arrive every couple of seconds, and each write is a preferences
+     * commit plus a redraw of every placed widget, so this is rate-limited
+     * rather than written through. The widget stamps what it shows with the
+     * reading's age, which is what makes a slightly old number honest.
+     */
+    private var lastTelemetryCache = 0L
+
+    private fun cacheTelemetryForWidgets(point: com.switchboard.app.net.MetricPoint) {
+        val now = System.currentTimeMillis()
+        if (now - lastTelemetryCache < com.switchboard.app.widget.WidgetTelemetry.WRITE_INTERVAL_MS) return
+        lastTelemetryCache = now
+
+        val hostName = _state.value.activeHost?.hostName.orEmpty()
+        scope.launch {
+            runCatching {
+                com.switchboard.app.widget.WidgetTelemetry.write(
+                    appContext,
+                    com.switchboard.app.widget.WidgetTelemetry.snapshotOf(hostName, point, now)
+                )
+                com.switchboard.app.widget.updateAllSwitchboardWidgets(appContext)
+            }
+        }
+    }
+
     fun disconnect() {
         connection?.cancel()
         connection = null
@@ -498,6 +525,11 @@ class SwitchboardConnection private constructor(context: Context) {
     /** "Forget system": drops stored keys for a host and leaves it if active. */
     fun forget(host: KnownHost) {
         store.forget(host.daemonId)
+        // The performance widget would otherwise keep showing a machine the
+        // user has just unpaired.
+        if (_state.value.activeHost?.daemonId == host.daemonId) {
+            com.switchboard.app.widget.WidgetTelemetry.clear(appContext)
+        }
         if (_state.value.activeHost?.daemonId == host.daemonId) {
             disconnect()
             artworkId = ""

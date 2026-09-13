@@ -6,4 +6,7 @@
     -->
     <string name="widget_description">Control every paired desktop from the home screen.</string>
     <string name="widget_settings_title">Widget controls</string>
+    <string name="performance_widget_description">Live CPU, memory, GPU and network for your desktop.</string>
+    <string name="controls_widget_label">Switchboard Controls</string>
+    <string name="performance_widget_label">Switchboard Performance</string>
 </resources>

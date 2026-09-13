@@ -125,13 +125,26 @@
 
         <receiver
             android:name=".widget.SwitchboardWidgetReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:label="@string/controls_widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/switchboard_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.PerformanceWidgetReceiver"
+            android:exported="true"
+            android:label="@string/performance_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/switchboard_performance_widget_info" />
         </receiver>
 
         <!--

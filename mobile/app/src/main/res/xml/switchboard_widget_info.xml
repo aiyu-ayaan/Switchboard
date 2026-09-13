@@ -17,4 +17,5 @@
     android:updatePeriodMillis="0"
     android:configure="com.switchboard.app.widget.WidgetConfigActivity"
     android:description="@string/widget_description"
+    android:previewLayout="@layout/widget_preview_controls"
     android:initialLayout="@layout/glance_default_loading_layout" />

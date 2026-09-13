@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  No configuration activity and no update period. The cards show whatever the
+  last reading was, and the session pushes a new one on its own cadence while a
+  desktop is connected; polling from here would wake the phone to redraw the
+  same numbers.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="140dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0"
+    android:description="@string/performance_widget_description"
+    android:previewLayout="@layout/widget_preview_performance"
+    android:initialLayout="@layout/glance_default_loading_layout" />
