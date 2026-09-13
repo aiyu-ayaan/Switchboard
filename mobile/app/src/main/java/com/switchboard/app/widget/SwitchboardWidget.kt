@@ -112,33 +112,39 @@ class SwitchboardWidget : GlanceAppWidget() {
     ) {
         val context = LocalContext.current
         val selected = selectedActionIds(currentState())
+        val density = densityFor(LocalSize.current.height)
 
         Scaffold(
-            titleBar = {
-                TitleBar(
-                    startIcon = ImageProvider(R.drawable.ic_widget_computer),
-                    title = "Switchboard",
-                    iconColor = GlanceTheme.colors.primary,
-                    textColor = GlanceTheme.colors.onSurface,
-                    actions = {
-                        CircleIconButton(
-                            imageProvider = ImageProvider(R.drawable.ic_widget_refresh),
-                            contentDescription = "Refresh",
-                            backgroundColor = null,
-                            contentColor = GlanceTheme.colors.onSurfaceVariant,
-                            onClick = actionRunCallback<RefreshWidgetCallback>()
-                        )
-                        CircleIconButton(
-                            imageProvider = ImageProvider(R.drawable.ic_widget_settings),
-                            contentDescription = "Choose controls",
-                            backgroundColor = null,
-                            contentColor = GlanceTheme.colors.onSurfaceVariant,
-                            onClick = actionStartActivityIntent(
-                                WidgetConfigActivity.reconfigureIntent(context, appWidgetId)
+            // First thing dropped on a short widget: the title bar costs about
+            // 48dp and the desktops are what the widget is for. The settings
+            // screen stays reachable by long-pressing the widget.
+            titleBar = if (!density.showsTitleBar) null else {
+                {
+                    TitleBar(
+                        startIcon = ImageProvider(R.drawable.ic_widget_computer),
+                        title = "Switchboard",
+                        iconColor = GlanceTheme.colors.primary,
+                        textColor = GlanceTheme.colors.onSurface,
+                        actions = {
+                            CircleIconButton(
+                                imageProvider = ImageProvider(R.drawable.ic_widget_refresh),
+                                contentDescription = "Refresh",
+                                backgroundColor = null,
+                                contentColor = GlanceTheme.colors.onSurfaceVariant,
+                                onClick = actionRunCallback<RefreshWidgetCallback>()
                             )
-                        )
-                    }
-                )
+                            CircleIconButton(
+                                imageProvider = ImageProvider(R.drawable.ic_widget_settings),
+                                contentDescription = "Choose controls",
+                                backgroundColor = null,
+                                contentColor = GlanceTheme.colors.onSurfaceVariant,
+                                onClick = actionStartActivityIntent(
+                                    WidgetConfigActivity.reconfigureIntent(context, appWidgetId)
+                                )
+                            )
+                        }
+                    )
+                }
             }
         ) {
             if (hosts.isEmpty()) {
@@ -147,7 +153,7 @@ class SwitchboardWidget : GlanceAppWidget() {
                 LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
                     items(hosts, itemId = { it.daemonId.hashCode().toLong() }) { host ->
                         val connected = host.daemonId == connectedId
-                        HostCard(host, connected, selected, liveHost.takeIf { connected })
+                        HostCard(host, connected, selected, liveHost.takeIf { connected }, density)
                     }
                 }
             }
@@ -177,7 +183,8 @@ class SwitchboardWidget : GlanceAppWidget() {
         host: KnownHost,
         connected: Boolean,
         selected: List<WidgetAction>,
-        liveHost: HostState?
+        liveHost: HostState?,
+        density: WidgetDensity
     ) {
         // Connection is carried by the container's tone rather than a coloured
         // dot: on a widget read at arm's length a filled card is legible and an
@@ -195,7 +202,10 @@ class SwitchboardWidget : GlanceAppWidget() {
                     .fillMaxWidth()
                     .background(container)
                     .cornerRadius(CARD_CORNER)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = if (density == WidgetDensity.Tiny) 6.dp else 10.dp
+                    )
             ) {
                 Row(
                     modifier = GlanceModifier
@@ -215,19 +225,19 @@ class SwitchboardWidget : GlanceAppWidget() {
                         ),
                         modifier = GlanceModifier.defaultWeight()
                     )
-                    StatusPill(connected)
+                    StatusPill(connected, fitsLongStatus(LocalSize.current.width))
                 }
 
                 // The live readout earns its place only when the widget is tall
                 // enough to hold it without pushing the buttons out of reach.
                 // A short placement stays a row of controls.
-                if (liveHost != null && LocalSize.current.height >= DETAIL_MIN_HEIGHT) {
+                if (liveHost != null && fitsHostDetail(LocalSize.current.height)) {
                     Spacer(GlanceModifier.height(8.dp))
                     LiveDetail(liveHost)
                 }
 
                 if (selected.isNotEmpty()) {
-                    Spacer(GlanceModifier.height(10.dp))
+                    Spacer(GlanceModifier.height(if (density == WidgetDensity.Tiny) 6.dp else 10.dp))
                     ActionRows(host, selected, connected)
                 }
             }
@@ -305,7 +315,7 @@ class SwitchboardWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun StatusPill(connected: Boolean) {
+    private fun StatusPill(connected: Boolean, spellItOut: Boolean) {
         Box(
             modifier = GlanceModifier
                 .background(
@@ -316,7 +326,11 @@ class SwitchboardWidget : GlanceAppWidget() {
                 .padding(horizontal = 8.dp, vertical = 3.dp)
         ) {
             Text(
-                text = if (connected) "Live" else "Tap to control",
+                text = when {
+                    connected -> "Live"
+                    spellItOut -> "Tap to control"
+                    else -> "Idle"
+                },
                 maxLines = 1,
                 style = TextStyle(
                     color = if (connected) GlanceTheme.colors.onPrimary
@@ -373,13 +387,6 @@ class SwitchboardWidget : GlanceAppWidget() {
 
     companion object {
         private val CARD_CORNER = 20.dp
-
-        /**
-         * Below this the widget is a remote and nothing else: two more lines
-         * would squeeze the buttons, which are the part that has to stay
-         * pressable.
-         */
-        private val DETAIL_MIN_HEIGHT = 170.dp
 
         /** The widget's own horizontal padding plus the card's, both sides. */
         private val CARD_HORIZONTAL_INSET = 48.dp

@@ -2,12 +2,14 @@ package com.switchboard.app.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -28,6 +30,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -76,29 +79,37 @@ class PerformanceWidget : GlanceAppWidget() {
 
     @Composable
     private fun Body(snapshot: TelemetrySnapshot?, connected: Boolean, now: Long) {
+        val height = LocalSize.current.height
+        val density = densityFor(height)
+
         Scaffold(
-            titleBar = {
-                TitleBar(
-                    startIcon = ImageProvider(R.drawable.ic_widget_speed),
-                    title = snapshot?.hostName?.takeIf { it.isNotEmpty() } ?: "Performance",
-                    iconColor = GlanceTheme.colors.primary,
-                    textColor = GlanceTheme.colors.onSurface,
-                    actions = {
-                        CircleIconButton(
-                            imageProvider = ImageProvider(R.drawable.ic_widget_refresh),
-                            contentDescription = "Refresh",
-                            backgroundColor = null,
-                            contentColor = GlanceTheme.colors.onSurfaceVariant,
-                            onClick = actionRunCallback<RefreshPerformanceCallback>()
-                        )
-                    }
-                )
+            // First thing dropped on a short widget: the title bar costs about
+            // 48dp, and the machine's name is repeated in the age line under
+            // the cards.
+            titleBar = if (!density.showsTitleBar) null else {
+                {
+                    TitleBar(
+                        startIcon = ImageProvider(R.drawable.ic_widget_speed),
+                        title = snapshot?.hostName?.takeIf { it.isNotEmpty() } ?: "Performance",
+                        iconColor = GlanceTheme.colors.primary,
+                        textColor = GlanceTheme.colors.onSurface,
+                        actions = {
+                            CircleIconButton(
+                                imageProvider = ImageProvider(R.drawable.ic_widget_refresh),
+                                contentDescription = "Refresh",
+                                backgroundColor = null,
+                                contentColor = GlanceTheme.colors.onSurfaceVariant,
+                                onClick = actionRunCallback<RefreshPerformanceCallback>()
+                            )
+                        }
+                    )
+                }
             }
         ) {
             if (snapshot == null) {
                 Empty()
             } else {
-                Stats(snapshot, connected, now)
+                Stats(snapshot, connected, now, density, height)
             }
         }
     }
@@ -119,15 +130,25 @@ class PerformanceWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun Stats(snapshot: TelemetrySnapshot, connected: Boolean, now: Long) {
+    private fun Stats(
+        snapshot: TelemetrySnapshot,
+        connected: Boolean,
+        now: Long,
+        density: WidgetDensity,
+        height: Dp
+    ) {
         Column(modifier = GlanceModifier.fillMaxSize()) {
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
+            // Each row takes a share of what is left rather than its own
+            // measured height. That is what keeps the bottom row on screen
+            // when the user drags the widget shorter, instead of slicing it.
+            Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
                 Meter(
                     label = "CPU",
                     value = "${snapshot.cpu.toInt()}%",
                     fraction = snapshot.cpu / 100f,
                     detail = snapshot.cpuTemp?.let { "${it.toInt()}°C" },
                     accent = GlanceTheme.colors.primary,
+                    density = density,
                     modifier = GlanceModifier.defaultWeight()
                 )
                 Spacer(GlanceModifier.width(8.dp))
@@ -139,49 +160,57 @@ class PerformanceWidget : GlanceAppWidget() {
                         "${formatBytes(snapshot.ramUsed)} / ${formatBytes(snapshot.ramTotal)}"
                     else null,
                     accent = GlanceTheme.colors.tertiary,
+                    density = density,
                     modifier = GlanceModifier.defaultWeight()
                 )
-            }
-            Spacer(GlanceModifier.height(8.dp))
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                Meter(
-                    label = "GPU",
-                    value = "${snapshot.gpu.toInt()}%",
-                    fraction = snapshot.gpu / 100f,
-                    detail = snapshot.gpuTemp?.let { "${it.toInt()}°C" }
-                        ?: if (snapshot.gpuMemTotal > 0) "${snapshot.gpuMemPercent.toInt()}% VRAM" else null,
-                    accent = GlanceTheme.colors.secondary,
-                    modifier = GlanceModifier.defaultWeight()
-                )
-                Spacer(GlanceModifier.width(8.dp))
-                NetworkCard(snapshot, modifier = GlanceModifier.defaultWeight())
             }
 
-            Spacer(GlanceModifier.defaultWeight())
-            Row(
-                modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (connected) "Live · ${relativeAge(snapshot.capturedAt, now)}"
-                    else relativeAge(snapshot.capturedAt, now).replaceFirstChar { it.uppercase() },
-                    maxLines = 1,
-                    style = TextStyle(
-                        color = if (connected) GlanceTheme.colors.primary
-                        else GlanceTheme.colors.onSurfaceVariant,
-                        fontSize = 11.sp
-                    ),
-                    modifier = GlanceModifier.defaultWeight()
-                )
-                Text(
-                    text = "Open",
-                    style = TextStyle(
-                        color = GlanceTheme.colors.primary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())
-                )
+            // Half the readings shown properly beats four with two of them cut
+            // off at the edge.
+            if (fitsTwoStatRows(height)) {
+                Spacer(GlanceModifier.height(8.dp))
+                Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
+                    Meter(
+                        label = "GPU",
+                        value = "${snapshot.gpu.toInt()}%",
+                        fraction = snapshot.gpu / 100f,
+                        detail = snapshot.gpuTemp?.let { "${it.toInt()}°C" }
+                            ?: if (snapshot.gpuMemTotal > 0) "${snapshot.gpuMemPercent.toInt()}% VRAM" else null,
+                        accent = GlanceTheme.colors.secondary,
+                        density = density,
+                        modifier = GlanceModifier.defaultWeight()
+                    )
+                    Spacer(GlanceModifier.width(8.dp))
+                    NetworkCard(snapshot, density, modifier = GlanceModifier.defaultWeight())
+                }
+            }
+
+            if (fitsStatFooter(height)) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth().padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (connected) "Live · ${relativeAge(snapshot.capturedAt, now)}"
+                        else relativeAge(snapshot.capturedAt, now).replaceFirstChar { it.uppercase() },
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = if (connected) GlanceTheme.colors.primary
+                            else GlanceTheme.colors.onSurfaceVariant,
+                            fontSize = 11.sp
+                        ),
+                        modifier = GlanceModifier.defaultWeight()
+                    )
+                    Text(
+                        text = "Open",
+                        style = TextStyle(
+                            color = GlanceTheme.colors.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())
+                    )
+                }
             }
         }
     }
@@ -194,22 +223,25 @@ class PerformanceWidget : GlanceAppWidget() {
         fraction: Double,
         detail: String?,
         accent: ColorProvider,
+        density: WidgetDensity,
         modifier: GlanceModifier
     ) {
-        StatCard(modifier) {
+        StatCard(modifier, density) {
             Text(
                 text = label,
+                maxLines = 1,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurfaceVariant,
-                    fontSize = 11.sp,
+                    fontSize = if (density.showsDetail) 11.sp else 10.sp,
                     fontWeight = FontWeight.Medium
                 )
             )
             Text(
                 text = value,
+                maxLines = 1,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurface,
-                    fontSize = 22.sp,
+                    fontSize = if (density.showsDetail) 22.sp else 16.sp,
                     fontWeight = FontWeight.Bold
                 )
             )
@@ -220,7 +252,10 @@ class PerformanceWidget : GlanceAppWidget() {
                 backgroundColor = GlanceTheme.colors.surface,
                 modifier = GlanceModifier.fillMaxWidth().height(4.dp).cornerRadius(2.dp)
             )
-            if (detail != null) {
+            // Temperature and used/total are what a short widget gives up
+            // first: the percentage and its bar still say what the machine is
+            // doing.
+            if (detail != null && density.showsDetail) {
                 Spacer(GlanceModifier.height(4.dp))
                 Text(
                     text = detail,
@@ -237,13 +272,19 @@ class PerformanceWidget : GlanceAppWidget() {
      * would be a decoration, not a reading.
      */
     @Composable
-    private fun NetworkCard(snapshot: TelemetrySnapshot, modifier: GlanceModifier) {
-        StatCard(modifier) {
+    private fun NetworkCard(
+        snapshot: TelemetrySnapshot,
+        density: WidgetDensity,
+        modifier: GlanceModifier
+    ) {
+        val rateSize = if (density.showsDetail) 14.sp else 12.sp
+        StatCard(modifier, density) {
             Text(
                 text = "NETWORK",
+                maxLines = 1,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurfaceVariant,
-                    fontSize = 11.sp,
+                    fontSize = if (density.showsDetail) 11.sp else 10.sp,
                     fontWeight = FontWeight.Medium
                 )
             )
@@ -253,7 +294,7 @@ class PerformanceWidget : GlanceAppWidget() {
                 maxLines = 1,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = rateSize,
                     fontWeight = FontWeight.Medium
                 )
             )
@@ -262,7 +303,7 @@ class PerformanceWidget : GlanceAppWidget() {
                 maxLines = 1,
                 style = TextStyle(
                     color = GlanceTheme.colors.onSurface,
-                    fontSize = 14.sp,
+                    fontSize = rateSize,
                     fontWeight = FontWeight.Medium
                 )
             )
@@ -270,12 +311,23 @@ class PerformanceWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun StatCard(modifier: GlanceModifier, content: @Composable () -> Unit) {
+    private fun StatCard(
+        modifier: GlanceModifier,
+        density: WidgetDensity,
+        content: @Composable () -> Unit
+    ) {
         Column(
+            // Height only. fillMaxSize would set the width to match the parent
+            // and override the weight the row gave this card, which collapses
+            // the card beside it to nothing.
             modifier = modifier
+                .fillMaxHeight()
                 .background(GlanceTheme.colors.surfaceVariant)
-                .cornerRadius(20.dp)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .cornerRadius(if (density.showsDetail) 20.dp else 16.dp)
+                .padding(
+                    horizontal = if (density.showsDetail) 12.dp else 10.dp,
+                    vertical = if (density.showsDetail) 10.dp else 7.dp
+                )
                 .clickable(actionStartActivity<MainActivity>())
         ) { content() }
     }
