@@ -12,7 +12,7 @@ func TestSampleMetrics(t *testing.T) {
 	c := system.NewController()
 	defer c.Close()
 
-	pt, procs, drives, dataUsage, err := c.SampleMetrics()
+	pt, procs, drives, dataUsage, err := c.SampleMetrics(true)
 	if err != nil {
 		t.Fatalf("SampleMetrics failed: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestSampleMetricsCachesSlowSources(t *testing.T) {
 	c := system.NewController()
 	defer c.Close()
 
-	if _, _, _, _, err := c.SampleMetrics(); err != nil {
+	if _, _, _, _, err := c.SampleMetrics(true); err != nil {
 		t.Fatalf("priming sample: %v", err)
 	}
 
@@ -82,11 +82,37 @@ func TestSampleMetricsCachesSlowSources(t *testing.T) {
 	const maxCached = 25 * time.Millisecond
 	for i := range 3 {
 		start := time.Now()
-		if _, _, _, _, err := c.SampleMetrics(); err != nil {
+		if _, _, _, _, err := c.SampleMetrics(true); err != nil {
 			t.Fatalf("sample %d: %v", i, err)
 		}
 		if elapsed := time.Since(start); elapsed > maxCached {
 			t.Errorf("cached sample %d took %v, want under %v: slow sources are being resampled every tick", i, elapsed, maxCached)
 		}
+	}
+}
+
+// TestSampleMetricsLiteSkipsSlowSources covers the no-client path: the loop
+// still records CPU, memory and network so history has no holes, but must not
+// touch the process table, drive table, thermal zone or GPU.
+func TestSampleMetricsLiteSkipsSlowSources(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("telemetry sampling is only implemented on windows")
+	}
+	c := system.NewController()
+	defer c.Close()
+
+	pt, procs, drives, dataUsage, err := c.SampleMetrics(false)
+	if err != nil {
+		t.Fatalf("lite sample: %v", err)
+	}
+	if pt.RAMTotal == 0 {
+		t.Errorf("expected non-zero RAMTotal in lite sample")
+	}
+	if procs != nil || drives != nil || dataUsage != nil {
+		t.Errorf("lite sample returned slow-source data: procs=%d drives=%d dataUsage=%d",
+			len(procs), len(drives), len(dataUsage))
+	}
+	if pt.CPUTemp != nil || pt.GPUTemp != nil || pt.GPU != 0 || pt.GPUMemTotal != 0 {
+		t.Errorf("lite sample read thermal/GPU sources")
 	}
 }

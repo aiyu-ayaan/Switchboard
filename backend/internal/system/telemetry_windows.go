@@ -559,7 +559,7 @@ func cachedDriveTable() []protocol.DriveItem {
 	return cachedDrives
 }
 
-func sampleMetrics() (protocol.MetricPoint, []protocol.ProcessItem, []protocol.DriveItem, []protocol.DataUsageItem, error) {
+func sampleMetrics(full bool) (protocol.MetricPoint, []protocol.ProcessItem, []protocol.DriveItem, []protocol.DataUsageItem, error) {
 	telemetryMu.Lock()
 	defer telemetryMu.Unlock()
 
@@ -567,11 +567,23 @@ func sampleMetrics() (protocol.MetricPoint, []protocol.ProcessItem, []protocol.D
 	ramUsed, ramTotal := sampleMemory()
 	rxBps, txBps, totalRx, totalTx := sampleNetwork()
 
-	drives := cachedDriveTable()
-	procs, dataUsage := cachedProcessTable()
-	cpuTemp := cachedCPUThermal()
-	gpu := cachedGPUSample()
-	gpuUtil, gpuTemp, gpuMemUsed, gpuMemTotal := gpu.util, gpu.temp, gpu.memUsed, gpu.memTotal
+	var (
+		drives      []protocol.DriveItem
+		procs       []protocol.ProcessItem
+		dataUsage   []protocol.DataUsageItem
+		cpuTemp     *float64
+		gpuUtil     float64
+		gpuTemp     *float64
+		gpuMemUsed  uint64
+		gpuMemTotal uint64
+	)
+	if full {
+		drives = cachedDriveTable()
+		procs, dataUsage = cachedProcessTable()
+		cpuTemp = cachedCPUThermal()
+		gpu := cachedGPUSample()
+		gpuUtil, gpuTemp, gpuMemUsed, gpuMemTotal = gpu.util, gpu.temp, gpu.memUsed, gpu.memTotal
+	}
 
 	pt := protocol.MetricPoint{
 		Timestamp:   time.Now().Unix(),

@@ -37,13 +37,32 @@ func (s *Server) broadcastTelemetry(pt protocol.MetricPoint, procs []protocol.Pr
 
 // telemetryLoop samples host telemetry every 2s, saves to SQLite every 30s,
 // broadcasts live events to connected clients, and runs daily pruning.
+//
+// The daemon idles on the user's own machine for most of its life, so a tick
+// with no phone connected does nothing at all unless it is a persistence tick,
+// and that one takes the cheap sample: history stays unbroken while the
+// process table, drive table, thermal zone and GPU are left untouched until
+// someone is actually watching.
 func (s *Server) telemetryLoop(ctx context.Context) {
-	// Sample immediately on start
-	if pt, procs, drives, dataUsage, err := s.control.SampleMetrics(); err == nil {
+	sample := func(live bool, persist bool) {
+		pt, procs, drives, dataUsage, err := s.control.SampleMetrics(live)
+		if err != nil {
+			return
+		}
 		s.recordRecentMetric(pt)
-		_ = s.store.RecordMetrics(pt)
-		s.broadcastTelemetry(pt, procs, drives, dataUsage)
+		if persist {
+			if err := s.store.RecordMetrics(pt); err != nil {
+				log.Printf("telemetry: record metric error: %v", err)
+			}
+		}
+		if live {
+			s.broadcastTelemetry(pt, procs, drives, dataUsage)
+		}
 	}
+
+	// Sample immediately on start to seed history and prime the CPU and
+	// network deltas.
+	sample(s.clientCount() > 0, true)
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -62,20 +81,13 @@ func (s *Server) telemetryLoop(ctx context.Context) {
 			}
 		case <-ticker.C:
 			ticks++
-			pt, procs, drives, dataUsage, err := s.control.SampleMetrics()
-			if err != nil {
+			// Persist every 30 seconds (15 ticks of 2s).
+			persist := ticks%15 == 0
+			live := s.clientCount() > 0
+			if !live && !persist {
 				continue
 			}
-			s.recordRecentMetric(pt)
-
-			// Persist to database every 30 seconds (15 ticks of 2s)
-			if ticks%15 == 0 {
-				if err := s.store.RecordMetrics(pt); err != nil {
-					log.Printf("telemetry: record metric error: %v", err)
-				}
-			}
-
-			s.broadcastTelemetry(pt, procs, drives, dataUsage)
+			sample(live, persist)
 		}
 	}
 }

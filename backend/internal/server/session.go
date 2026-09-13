@@ -134,7 +134,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			c.send(env)
 		}
 	}
-	if pt, procs, drives, dataUsage, err := s.control.SampleMetrics(); err == nil {
+	if pt, procs, drives, dataUsage, err := s.control.SampleMetrics(true); err == nil {
 		push := protocol.ResourcesLivePush{
 			Current:      pt,
 			TopProcesses: procs,
