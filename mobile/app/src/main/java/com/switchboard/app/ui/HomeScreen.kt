@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.MusicNote
@@ -103,6 +104,7 @@ import com.switchboard.app.transfer.RateUnit
 import kotlin.math.roundToInt
 
 enum class Section(val title: String, val icon: ImageVector) {
+    Resources("Resources", Icons.Filled.Memory),
     Displays("Displays", Icons.Filled.Monitor),
     Audio("Audio & Media", Icons.AutoMirrored.Filled.VolumeUp),
     Media("Media", Icons.Filled.MusicNote),
@@ -112,6 +114,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
+        Resources -> true
         Displays -> state.canControlDisplay
         Audio -> state.canControlVolume || state.canControlMedia
         // When media is active/playing or integrated into Audio, hide separate Media row if Audio is available
@@ -125,6 +128,19 @@ enum class Section(val title: String, val icon: ImageVector) {
     }
 
     fun summaryOf(state: UiState): String = when (this) {
+        Resources -> {
+            val cpu = state.telemetry.liveCurrent.cpu
+            val ramUsed = state.telemetry.liveCurrent.ramUsed
+            val ramTotal = state.telemetry.liveCurrent.ramTotal
+            if (ramTotal > 0) {
+                val ramPct = (ramUsed.toDouble() / ramTotal * 100).toInt()
+                val usedGb = String.format(java.util.Locale.US, "%.1f", ramUsed / (1024.0 * 1024 * 1024))
+                val totalGb = String.format(java.util.Locale.US, "%.0f", ramTotal / (1024.0 * 1024 * 1024))
+                "CPU ${String.format(java.util.Locale.US, "%.0f%%", cpu)} • RAM $ramPct% ($usedGb / ${totalGb}GB)"
+            } else {
+                "Host telemetry & 30-day analytics"
+            }
+        }
         Displays -> when (val count = state.host.displays.size) {
             0 -> "No controllable panels"
             1 -> state.host.displays.first().name
@@ -170,7 +186,9 @@ class SectionActions(
     val onRefreshApps: () -> Unit = {},
     val onPower: (action: String, seconds: Int) -> Unit = { _, _ -> },
     val onMicVolume: (level: Int, muted: Boolean) -> Unit = { _, _ -> },
-    val onAudioInput: (deviceId: String) -> Unit = {}
+    val onAudioInput: (deviceId: String) -> Unit = {},
+    val onQueryResources: (String) -> Unit = {},
+    val onOpenAbout: () -> Unit = {}
 )
 
 /**
@@ -1394,11 +1412,196 @@ private fun BentoUtilityGrid(
             )
         }
 
-        // Row 3: Elgato Stream Deck Neo Console Tile (Full Width)
+        // Row 3: Resources & Telemetry Tile (Full Width)
+        ResourcesBentoTile(
+            state = state,
+            onClick = { onOpen(Section.Resources) }
+        )
+
+        // Row 4: Elgato Stream Deck Neo Console Tile (Full Width)
         StreamDeckNeoTile(
             state = state,
             onClick = { onOpen(Section.Deck) }
         )
+    }
+}
+
+/**
+ * Expressive live telemetry card for host system resources.
+ */
+@Composable
+private fun ResourcesBentoTile(
+    state: UiState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val live = state.telemetry.liveCurrent
+    val cpuPct = live.cpu.roundToInt().coerceIn(0, 100)
+    val ramUsed = live.ramUsed
+    val ramTotal = live.ramTotal
+    val ramPct = if (ramTotal > 0) ((ramUsed.toDouble() / ramTotal) * 100).roundToInt().coerceIn(0, 100) else 0
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .bouncyClickable(onClick = onClick)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Memory,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "System Resources",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "LIVE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "CPU, RAM, GPU, Disks & 30-Day History",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open Resources",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // CPU Chip
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF60A5FA))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "CPU",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "$cpuPct%",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF60A5FA)
+                        )
+                    }
+
+                    // RAM Chip
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFA78BFA))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "RAM",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "$ramPct%",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFFA78BFA)
+                        )
+                    }
+
+                    // GPU Chip
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF34D399))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "GPU",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "${live.gpu.roundToInt().coerceIn(0, 100)}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF34D399)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1689,6 +1892,14 @@ private fun SectionBody(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         when (section) {
+            Section.Resources -> {
+                ResourcesScreen(
+                    state = state,
+                    onQueryRange = actions.onQueryResources,
+                    onOpenAbout = actions.onOpenAbout
+                )
+            }
+
             Section.Displays -> {
                 if (state.host.displays.isEmpty()) {
                     EmptyCard(
