@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -94,6 +96,9 @@ fun PairingScreen(
     val haptics = LocalHaptics.current
     var confirmForget by remember { mutableStateOf<KnownHost?>(null) }
     var manualOpen by remember { mutableStateOf(false) }
+    // Collapsed on arrival: with a desktop already paired, adding another is
+    // the rare errand, not the reason the screen was opened.
+    var addOpen by remember { mutableStateOf(false) }
     // Set when the user taps a discovered desktop: the dialog opens with the
     // address already filled, leaving only the code to type.
     var prefilledAddress by remember { mutableStateOf("") }
@@ -108,95 +113,49 @@ fun PairingScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            Card(
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(22.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(46.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.QrCodeScanner,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(24.dp)
-                            )
+        // With nothing paired, pairing is the only thing this screen can do, so
+        // it is the whole screen. Once a desktop is stored, that list is what
+        // the user came back for, and pairing folds away behind one tap.
+        if (hosts.isEmpty()) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(22.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(46.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.QrCodeScanner,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
-                    }
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        text = "Connect a desktop",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Open Switchboard on your computer and scan the pairing code. " +
-                            "Both devices must be on the same local network.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    Button(
-                        onClick = {
-                            haptics.tap()
-                            onScan()
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                    ) {
-                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.height(14.dp))
                         Text(
-                            text = "Scan QR code",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Connect a desktop",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = {
-                            haptics.tap()
-                            manualOpen = true
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(
-                            Icons.Filled.Keyboard,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "Enter code manually",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Spacer(Modifier.height(6.dp))
+                        ConnectContent(onScan = onScan, onManual = { manualOpen = true })
                     }
                 }
             }
         }
 
+        // Above everything either way: an error about a pairing that failed is
+        // no use folded inside a card the user would have to open to read it.
         item {
             AnimatedVisibility(
                 visible = error != null,
@@ -233,44 +192,18 @@ fun PairingScreen(
             }
         }
 
-        // The header stays even with nothing found, because it carries the
-        // rescan button — a user on a network that dropped the first round of
-        // multicast needs a way to ask again.
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 6.dp, start = 4.dp)
-            ) {
-                Text(
-                    text = "Found on this network",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                RescanButton(onRescan = onRescan)
-            }
-        }
-        if (unpaired.isEmpty()) {
+        if (hosts.isEmpty()) {
             item {
-                Text(
-                    text = "No desktops are announcing themselves right now. " +
-                        "Tap refresh, or enter the address manually.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                DiscoverySection(
+                    unpaired = unpaired,
+                    onRescan = onRescan,
+                    onSelect = { found ->
+                        prefilledAddress = found.address
+                        manualOpen = true
+                    }
                 )
             }
         } else {
-            items(unpaired, key = { it.daemonId }) { found ->
-                DiscoveredRow(host = found) {
-                    prefilledAddress = found.address
-                    manualOpen = true
-                }
-            }
-        }
-
-        if (hosts.isNotEmpty()) {
             item {
                 Row(
                     modifier = Modifier.padding(top = 6.dp, start = 4.dp),
@@ -304,6 +237,20 @@ fun PairingScreen(
                     onConnect = { onConnect(host) },
                     onForget = { confirmForget = host }
                 )
+            }
+            item {
+                AddDesktopCard(expanded = addOpen, onToggle = { addOpen = !addOpen }) {
+                    ConnectContent(onScan = onScan, onManual = { manualOpen = true })
+                    Spacer(Modifier.height(4.dp))
+                    DiscoverySection(
+                        unpaired = unpaired,
+                        onRescan = onRescan,
+                        onSelect = { found ->
+                            prefilledAddress = found.address
+                            manualOpen = true
+                        }
+                    )
+                }
             }
         }
 
@@ -423,6 +370,208 @@ fun PairingScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * What "connect a desktop" actually offers, minus the heading above it.
+ *
+ * It reads twice on this screen — as the whole card when nothing is paired, and
+ * folded inside [AddDesktopCard] when something is — and the heading differs
+ * between the two, so only the buttons are shared.
+ */
+@Composable
+private fun ConnectContent(onScan: () -> Unit, onManual: () -> Unit) {
+    val haptics = LocalHaptics.current
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = "Open Switchboard on your computer and scan the pairing code. " +
+                "Both devices must be on the same local network.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(20.dp))
+        Button(
+            onClick = {
+                haptics.tap()
+                onScan()
+            },
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+        ) {
+            Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Scan QR code",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(
+            onClick = {
+                haptics.tap()
+                onManual()
+            },
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+        ) {
+            Icon(
+                Icons.Filled.Keyboard,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Enter code manually",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+/**
+ * The desktops announcing themselves, with the rescan button.
+ *
+ * The header stays even with nothing found, because it carries that button — a
+ * user on a network that dropped the first round of multicast needs a way to
+ * ask again. A plain Column rather than lazy items: a local network turns up a
+ * handful of machines, and this has to nest inside a card as readily as it sits
+ * on the screen.
+ */
+@Composable
+private fun DiscoverySection(
+    unpaired: List<DiscoveredHost>,
+    onRescan: () -> Unit,
+    onSelect: (DiscoveredHost) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 6.dp, start = 4.dp)
+        ) {
+            Text(
+                text = "Found on this network",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            RescanButton(onRescan = onRescan)
+        }
+        if (unpaired.isEmpty()) {
+            Text(
+                text = "No desktops are announcing themselves right now. " +
+                    "Tap refresh, or enter the address manually.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+        } else {
+            unpaired.forEach { found ->
+                DiscoveredRow(host = found) { onSelect(found) }
+            }
+        }
+    }
+}
+
+/** Pairing, folded away under its own heading once a desktop is already stored. */
+@Composable
+private fun AddDesktopCard(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val haptics = LocalHaptics.current
+    val chevron by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        label = "addDesktopChevron"
+    )
+
+    Card(
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bouncyClickable(haptic = false) {
+                        // A section opening or closing has a direction, unlike a
+                        // button, so it says which way it went.
+                        haptics.toggle(!expanded)
+                        onToggle()
+                    }
+                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                    .semantics { role = Role.Button },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.QrCodeScanner,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Connect a desktop",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Scan a code, or pick one found on this network",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .graphicsLayer { rotationZ = chevron }
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 18.dp)
+                ) { content() }
+            }
+        }
     }
 }
 
