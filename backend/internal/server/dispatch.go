@@ -408,6 +408,34 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		}
 		s.reply(c, env, map[string]string{"status": "ok"})
 
+	case protocol.ActionResourcesQuery:
+		var req protocol.ResourcesQuery
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		rangeStr := req.Range
+		if rangeStr == "" {
+			rangeStr = "1h"
+		}
+		points, err := s.store.QueryMetrics(rangeStr)
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, protocol.ResourcesResponse{
+			Range:  rangeStr,
+			Points: points,
+		})
+
+	case protocol.ActionAboutQuery:
+		about, err := s.control.AboutSystem()
+		if err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, about)
+
 	default:
 		c.send(protocol.Errorf(env.ID, env.Action, "unknown action"))
 	}

@@ -134,6 +134,16 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			c.send(env)
 		}
 	}
+	if pt, procs, drives, err := s.control.SampleMetrics(); err == nil {
+		push := protocol.ResourcesLivePush{
+			Current:      pt,
+			TopProcesses: procs,
+			Drives:       drives,
+		}
+		if env, err := protocol.New(protocol.TypeEvent, protocol.ActionResourcesLive, push); err == nil {
+			c.send(env)
+		}
+	}
 
 	s.readLoop(c)
 }

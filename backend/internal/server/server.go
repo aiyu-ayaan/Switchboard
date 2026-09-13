@@ -126,6 +126,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		s.http.Shutdown(shutdown)
 	}()
 
+	go s.telemetryLoop(ctx)
+
 	log.Printf("switchboard daemon %s listening on %s", s.daemonID, s.http.Addr)
 	if err := s.http.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
