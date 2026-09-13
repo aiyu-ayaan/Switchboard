@@ -87,6 +87,35 @@ type processEntry32W struct {
 	szExeFile           [260]uint16
 }
 
+// Live telemetry ticks every 2s, so anything sampled here is paid for 30
+// times a minute on the user's own machine. CPU, memory and the interface
+// table are plain syscalls and cheap enough to read every tick; the rest are
+// not, and are resampled on their own cadence instead:
+//
+//   - nvidia-smi is a process spawn (~100ms+ of host CPU) — 10s, and never
+//     again once it is clear the machine has no NVIDIA GPU.
+//   - thermal zones go through WMI, which wakes WmiPrvSE — 10s, and dropped
+//     after a few misses since a host without the counter never grows one.
+//   - the process table opens a handle per process (~300 handles, 3 calls
+//     each) — 6s.
+//   - drive capacity does not meaningfully move in 2s, and the call can block
+//     on a disconnected network drive — 60s.
+const (
+	gpuTTL           = 10 * time.Second
+	thermalTTL       = 10 * time.Second
+	thermalMaxMisses = 3
+	procsTTL         = 6 * time.Second
+	drivesTTL        = 60 * time.Second
+)
+
+type gpuSample struct {
+	util     float64
+	temp     *float64
+	memUsed  uint64
+	memTotal uint64
+	ok       bool
+}
+
 var (
 	telemetryMu sync.Mutex
 
@@ -95,8 +124,21 @@ var (
 	prevKernelTime uint64
 	prevUserTime   uint64
 
-	prevNetRx uint64
-	prevNetTx uint64
+	prevNetTime time.Time
+	prevNetRx   uint64
+	prevNetTx   uint64
+
+	cachedGPU      gpuSample
+	cachedGPUAt    time.Time
+	gpuAbsent      bool
+	cachedTemp     *float64
+	cachedTempAt   time.Time
+	thermalMisses  int
+	cachedProcs    []protocol.ProcessItem
+	cachedData     []protocol.DataUsageItem
+	cachedProcsAt  time.Time
+	cachedDrives   []protocol.DriveItem
+	cachedDrivesAt time.Time
 )
 
 func fileTimeToUint64(ft *syscall.Filetime) uint64 {
@@ -227,7 +269,10 @@ func sampleDrives() []protocol.DriveItem {
 	return drives
 }
 
-func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64, totalRx uint64, totalTx uint64) {
+// sampleNetwork rates the interface counters over the time actually elapsed
+// since the previous read rather than an assumed tick length, so a paused or
+// delayed loop reports the real average instead of a spike.
+func sampleNetwork() (rxBps uint64, txBps uint64, totalRx uint64, totalTx uint64) {
 	if procGetIfTable2.Find() != nil {
 		return 0, 0, 0, 0
 	}
@@ -265,7 +310,11 @@ func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64, totalRx uin
 		}
 	}
 
-	if prevNetRx == 0 && prevNetTx == 0 {
+	now := time.Now()
+	elapsed := now.Sub(prevNetTime).Seconds()
+	first := prevNetTime.IsZero()
+	prevNetTime = now
+	if first {
 		prevNetRx = totalRx
 		prevNetTx = totalTx
 		return 0, 0, totalRx, totalTx
@@ -283,9 +332,9 @@ func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64, totalRx uin
 	prevNetRx = totalRx
 	prevNetTx = totalTx
 
-	if intervalSec > 0 {
-		rxBps = uint64(float64(deltaRx) / intervalSec)
-		txBps = uint64(float64(deltaTx) / intervalSec)
+	if elapsed > 0 {
+		rxBps = uint64(float64(deltaRx) / elapsed)
+		txBps = uint64(float64(deltaTx) / elapsed)
 	}
 	return rxBps, txBps, totalRx, totalTx
 }
@@ -456,18 +505,73 @@ func sampleNvidiaGPU() (gpuUtil float64, gpuTemp *float64, memUsed uint64, memTo
 	return util, tPtr, mUsedMiB * 1024 * 1024, mTotalMiB * 1024 * 1024, true
 }
 
+// cachedCPUThermal reads the thermal zone at most once per thermalTTL, and
+// gives up entirely once the host has missed thermalMaxMisses times: the
+// counter is absent on most consumer hardware, and each attempt is two WMI
+// round trips.
+func cachedCPUThermal() *float64 {
+	if thermalMisses >= thermalMaxMisses || time.Since(cachedTempAt) < thermalTTL {
+		return cachedTemp
+	}
+	cachedTempAt = time.Now()
+	cachedTemp = sampleCPUThermal()
+	if cachedTemp == nil {
+		thermalMisses++
+	} else {
+		thermalMisses = 0
+	}
+	return cachedTemp
+}
+
+// cachedGPUSample spawns nvidia-smi at most once per gpuTTL, and stops for
+// good on the first failure — a machine without an NVIDIA GPU will not grow
+// one, and the spawn is the most expensive thing in the sampler.
+func cachedGPUSample() gpuSample {
+	if gpuAbsent || time.Since(cachedGPUAt) < gpuTTL {
+		return cachedGPU
+	}
+	cachedGPUAt = time.Now()
+	util, temp, memUsed, memTotal, ok := sampleNvidiaGPU()
+	if !ok {
+		gpuAbsent = true
+		cachedGPU = gpuSample{}
+		return cachedGPU
+	}
+	cachedGPU = gpuSample{util: util, temp: temp, memUsed: memUsed, memTotal: memTotal, ok: true}
+	return cachedGPU
+}
+
+func cachedProcessTable() ([]protocol.ProcessItem, []protocol.DataUsageItem) {
+	if time.Since(cachedProcsAt) < procsTTL {
+		return cachedProcs, cachedData
+	}
+	cachedProcsAt = time.Now()
+	cachedProcs, cachedData = sampleProcesses()
+	return cachedProcs, cachedData
+}
+
+func cachedDriveTable() []protocol.DriveItem {
+	if time.Since(cachedDrivesAt) < drivesTTL {
+		return cachedDrives
+	}
+	cachedDrivesAt = time.Now()
+	cachedDrives = sampleDrives()
+	return cachedDrives
+}
+
 func sampleMetrics() (protocol.MetricPoint, []protocol.ProcessItem, []protocol.DriveItem, []protocol.DataUsageItem, error) {
 	telemetryMu.Lock()
 	defer telemetryMu.Unlock()
 
 	cpu := sampleCPU()
 	ramUsed, ramTotal := sampleMemory()
-	drives := sampleDrives()
-	rxBps, txBps, totalRx, totalTx := sampleNetwork(2.0)
-	procs, dataUsage := sampleProcesses()
-	cpuTemp := sampleCPUThermal()
+	rxBps, txBps, totalRx, totalTx := sampleNetwork()
 
-	gpuUtil, gpuTemp, gpuMemUsed, gpuMemTotal, _ := sampleNvidiaGPU()
+	drives := cachedDriveTable()
+	procs, dataUsage := cachedProcessTable()
+	cpuTemp := cachedCPUThermal()
+	gpu := cachedGPUSample()
+	gpuUtil, gpuTemp, gpuMemUsed, gpuMemTotal := gpu.util, gpu.temp, gpu.memUsed, gpu.memTotal
 
 	pt := protocol.MetricPoint{
 		Timestamp:   time.Now().Unix(),

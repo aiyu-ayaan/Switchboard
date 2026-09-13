@@ -1,7 +1,9 @@
 package system_test
 
 import (
+	"runtime"
 	"testing"
+	"time"
 
 	"switchboard/backend/internal/system"
 )
@@ -59,4 +61,32 @@ func TestAboutSystem(t *testing.T) {
 	t.Logf("About System: OS=%s (%s), CPU=%s (%d cores, %d threads), RAM=%d MB, BatteryPresent=%v",
 		about.OS.Name, about.OS.Build, about.CPU.Model, about.CPU.Cores, about.CPU.Threads,
 		about.Memory.TotalBytes/(1024*1024), about.Battery.Present)
+}
+
+// TestSampleMetricsCachesSlowSources guards the sampling cadence: the live
+// loop calls SampleMetrics every 2s, so once the slow sources (nvidia-smi,
+// WMI thermal, the process table, drive capacity) are primed, a tick must
+// cost a handful of syscalls rather than tens of milliseconds of host CPU.
+func TestSampleMetricsCachesSlowSources(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("telemetry sampling is only implemented on windows")
+	}
+	c := system.NewController()
+	defer c.Close()
+
+	if _, _, _, _, err := c.SampleMetrics(); err != nil {
+		t.Fatalf("priming sample: %v", err)
+	}
+
+	// Generous bound: a cached sample measures ~1.5ms, an uncached one ~80ms.
+	const maxCached = 25 * time.Millisecond
+	for i := range 3 {
+		start := time.Now()
+		if _, _, _, _, err := c.SampleMetrics(); err != nil {
+			t.Fatalf("sample %d: %v", i, err)
+		}
+		if elapsed := time.Since(start); elapsed > maxCached {
+			t.Errorf("cached sample %d took %v, want under %v: slow sources are being resampled every tick", i, elapsed, maxCached)
+		}
+	}
 }
