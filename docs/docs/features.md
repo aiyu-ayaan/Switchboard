@@ -190,3 +190,17 @@ Turn your mobile device into a versatile remote keyboard and clipboard bridge.
 - **Unicode Remote Typing**: Type text, passwords, and emojis into your PC using your native mobile keyboard or voice-to-text.
 - **Universal Clipboard Sync**: One-tap "Send Clipboard" pushes Android clipboard contents directly into the Windows clipboard via Win32 `CF_UNICODETEXT`.
 
+
+---
+
+## 11. Home-Screen Widget
+
+Control every paired desktop from the Android home screen, without opening the app.
+
+### Highlights:
+- **Self-maintaining list**: The widget shows whatever the app has paired. Pair a machine and it appears; forget one and it goes.
+- **Buttons you choose, per widget**: Media transport, volume, mute, lock, screen off, sleep and shutdown. Place two widgets and give them different rows.
+- **Live session marker**: The desktop currently connected is marked, so you know which tap is instant and which pays for a handshake.
+- **No background polling**: `updatePeriodMillis` is zero — the widget redraws on interaction and when the app reports a change, not on a timer.
+
+👉 Learn more in the [Home-Screen Widget Documentation](/home-screen-widget).

@@ -34,6 +34,7 @@ const sidebars: SidebarsConfig = {
         'audio-mixer',
         'air-mouse',
         'stream-deck-neo',
+        'home-screen-widget',
         'file-transfer',
         'wifi-camera',
       ],
