@@ -120,7 +120,11 @@ fun ResourceLineChart(
     }
 
     LaunchedEffect(scrubPoint?.timestamp) {
-        if (scrubPoint != null && scrubPoint.timestamp != lastScrubTimestamp) {
+        if (scrubPoint == null) {
+            // Forgotten on lift, or the next press on the same reading is
+            // silent: the finger has left the chart, so nothing is "still here".
+            lastScrubTimestamp = null
+        } else if (scrubPoint.timestamp != lastScrubTimestamp) {
             lastScrubTimestamp = scrubPoint.timestamp
             haptics.tick()
         }
