@@ -1,11 +1,11 @@
 package com.switchboard.app
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -86,12 +87,14 @@ import android.net.Uri
 import android.os.Build
 import com.switchboard.app.ui.TouchpadActions
 import com.switchboard.app.ui.LocalHaptics
+import com.switchboard.app.auth.DeviceAuthManager
+import com.switchboard.app.data.SecurityPreferences
 import com.switchboard.app.ui.SwitchboardTheme
 import com.switchboard.app.ui.rememberHaptics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val pendingSharedUris = MutableStateFlow<List<Uri>?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -188,10 +191,16 @@ fun SwitchboardApp(
     val connected = state.status == ConnectionStatus.Connected
     val context = LocalContext.current
     val haptics = LocalHaptics.current
+    val securityPreferences = remember { SecurityPreferences.get(context) }
+    val warnNoDeviceLock by securityPreferences.warnNoDeviceLock.collectAsState()
+    val requireAuthToLock by securityPreferences.requireAuthToLock.collectAsState()
+    val authManager = remember(context) {
+        (context as? FragmentActivity)?.let { DeviceAuthManager(it) }
+    }
 
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
     var showConnectionInfo by remember { mutableStateOf(false) }
-    var showLockConfirmDialog by remember { mutableStateOf(false) }
+    var showNoDeviceLockWarningDialog by remember { mutableStateOf(false) }
     var showLandscapePromptDialog by remember { mutableStateOf(false) }
     val homeListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
@@ -262,7 +271,7 @@ fun SwitchboardApp(
     LaunchedEffect(connected) {
         if (!connected) {
             showConnectionInfo = false
-            showLockConfirmDialog = false
+            showNoDeviceLockWarningDialog = false
             showLandscapePromptDialog = false
             if (currentScreen is AppScreen.Detail) {
                 if ((currentScreen as AppScreen.Detail).section == Section.Deck) {
@@ -314,7 +323,27 @@ fun SwitchboardApp(
             onLockSystem = {
                 val live = latestState.value
                 if (!live.host.locked) {
-                    showLockConfirmDialog = true
+                    val hostName = live.activeHost?.hostName ?: "the workstation"
+                    if (!requireAuthToLock) {
+                        haptics.confirm()
+                        viewModel.lockSystem()
+                    } else if (authManager?.isDeviceSecure != true) {
+                        if (warnNoDeviceLock) {
+                            showNoDeviceLockWarningDialog = true
+                        } else {
+                            haptics.confirm()
+                            viewModel.lockSystem()
+                        }
+                    } else {
+                        authManager.authenticate(
+                            title = "Lock $hostName",
+                            subtitle = "Authenticate to lock the workstation",
+                            onSuccess = {
+                                haptics.confirm()
+                                viewModel.lockSystem()
+                            }
+                        )
+                    }
                 }
             },
             onDeckAction = viewModel::triggerDeckAction,
@@ -546,6 +575,10 @@ fun SwitchboardApp(
                             onSetHaptics = hapticPreferences::setEnabled,
                             onSetSaveDirectory = viewModel.transferPreferences::setSaveDirectory,
                             onSetRateUnit = viewModel.transferPreferences::setRateUnit,
+                            requireAuthToLock = requireAuthToLock,
+                            onSetRequireAuthToLock = securityPreferences::setRequireAuthToLock,
+                            warnNoDeviceLock = warnNoDeviceLock,
+                            onSetWarnNoDeviceLock = securityPreferences::setWarnNoDeviceLock,
                             onOpenUpdates = { currentScreen = AppScreen.Updates },
                             onBack = { currentScreen = AppScreen.Main }
                         )
@@ -627,10 +660,10 @@ fun SwitchboardApp(
         )
     }
 
-    if (showLockConfirmDialog && connected) {
+    if (showNoDeviceLockWarningDialog && connected) {
         val hostName = state.activeHost?.hostName ?: "the workstation"
         AlertDialog(
-            onDismissRequest = { showLockConfirmDialog = false },
+            onDismissRequest = { showNoDeviceLockWarningDialog = false },
             shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             icon = {
@@ -642,42 +675,59 @@ fun SwitchboardApp(
             },
             title = {
                 Text(
-                    text = "Lock $hostName?",
+                    text = "No Screen Lock Set",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = "This will immediately lock the desktop screen and require the user's password or PIN to sign back in.",
+                    text = "Your device does not have a screen lock (PIN, pattern, password, or fingerprint) set up. Anyone who picks up this phone can lock or control $hostName.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        // Not a tap: locking the desktop is the end of an
-                        // errand, and it should not feel like opening a menu.
-                        haptics.confirm()
-                        showLockConfirmDialog = false
-                        viewModel.lockSystem()
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Lock Workstation",
-                        fontWeight = FontWeight.Bold
-                    )
+                    TextButton(
+                        onClick = {
+                            haptics.confirm()
+                            securityPreferences.setWarnNoDeviceLock(false)
+                            showNoDeviceLockWarningDialog = false
+                            viewModel.lockSystem()
+                        }
+                    ) {
+                        Text(
+                            text = "Never show again",
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            haptics.confirm()
+                            showNoDeviceLockWarningDialog = false
+                            viewModel.lockSystem()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text(
+                            text = "Lock",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = {
                         haptics.tap()
-                        showLockConfirmDialog = false
+                        showNoDeviceLockWarningDialog = false
                     }
                 ) {
                     Text("Cancel")

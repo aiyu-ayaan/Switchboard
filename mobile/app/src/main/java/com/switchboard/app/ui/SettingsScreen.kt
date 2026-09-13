@@ -104,6 +104,10 @@ fun SettingsScreen(
     onSetHaptics: (Boolean) -> Unit,
     onSetSaveDirectory: (String) -> Unit,
     onSetRateUnit: (RateUnit) -> Unit,
+    requireAuthToLock: Boolean = true,
+    onSetRequireAuthToLock: (Boolean) -> Unit = {},
+    warnNoDeviceLock: Boolean = true,
+    onSetWarnNoDeviceLock: (Boolean) -> Unit = {},
     onOpenUpdates: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -437,6 +441,60 @@ fun SettingsScreen(
                             selected = transferConfig.rateUnit == unit,
                             onClick = { onSetRateUnit(unit) }
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Security",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
+            )
+        }
+
+        item {
+            SettingsCard {
+                Column {
+                    SwitchRow(
+                        icon = Icons.Filled.Security,
+                        title = "Authenticate Before Locking",
+                        description = "Require biometric (fingerprint) or device PIN/password to lock your workstation.",
+                        checked = requireAuthToLock,
+                        onCheckedChange = onSetRequireAuthToLock
+                    )
+
+                    if (!warnNoDeviceLock) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .bouncyClickable(onClick = tapping { onSetWarnNoDeviceLock(true) })
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            color = Color.Transparent
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Reset Lock Warnings",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Re-enable the security warning shown when the device has no screen lock set.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                TextButton(onClick = tapping { onSetWarnNoDeviceLock(true) }) {
+                                    Text("Reset")
+                                }
+                            }
+                        }
                     }
                 }
             }
