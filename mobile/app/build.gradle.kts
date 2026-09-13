@@ -44,7 +44,7 @@ android {
     defaultConfig {
         applicationId = "com.switchboard.app"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 35
         versionCode = releaseVersionCode
         versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

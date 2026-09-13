@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,7 +52,8 @@ import java.util.Locale
 enum class ChartMetricCategory(val label: String) {
     CPU_GPU("CPU & GPU"),
     MEMORY("Memory"),
-    NETWORK("Network")
+    NETWORK("Network"),
+    TEMPERATURE("Temperature")
 }
 
 object ChartMath {
@@ -110,9 +112,18 @@ fun ResourceLineChart(
     category: ChartMetricCategory,
     modifier: Modifier = Modifier
 ) {
+    val haptics = LocalHaptics.current
     var touchX by remember { mutableStateOf<Float?>(null) }
+    var lastScrubTimestamp by remember { mutableStateOf<Long?>(null) }
     val scrubPoint = remember(points, touchX) {
         touchX?.let { x -> ChartMath.findNearestPoint(points, x, 1000f) }
+    }
+
+    LaunchedEffect(scrubPoint?.timestamp) {
+        if (scrubPoint != null && scrubPoint.timestamp != lastScrubTimestamp) {
+            lastScrubTimestamp = scrubPoint.timestamp
+            haptics.tick()
+        }
     }
 
     // Tokyo Night expressive colors
@@ -121,6 +132,8 @@ fun ResourceLineChart(
     val ramColor = Color(0xFFBB9AF7)    // Tertiary Purple
     val netRxColor = Color(0xFF2AC3DE)  // Cyan
     val netTxColor = Color(0xFFFF9E64)  // Orange
+    val cpuTempColor = Color(0xFFFF7A93) // Warm Coral / Pink
+    val gpuTempColor = Color(0xFFFFB454) // Warm Amber / Orange
     val gridColor = Color(0xFF282B3A)
 
     Card(
@@ -157,11 +170,23 @@ fun ResourceLineChart(
 
                     when (category) {
                         ChartMetricCategory.CPU_GPU -> {
+                            val cpuText = buildString {
+                                append(String.format(Locale.US, "CPU %.1f%%", activePoint?.cpu ?: 0.0))
+                                if (activePoint?.cpuTemp != null) {
+                                    append(" (${activePoint.cpuTemp.toInt()}°C)")
+                                }
+                            }
+                            val gpuText = buildString {
+                                append(String.format(Locale.US, "GPU %.1f%%", activePoint?.gpu ?: 0.0))
+                                if (activePoint?.gpuTemp != null) {
+                                    append(" (${activePoint.gpuTemp.toInt()}°C)")
+                                }
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(8.dp).background(cpuColor, CircleShape))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "CPU ${String.format(Locale.US, "%.1f%%", activePoint?.cpu ?: 0.0)}",
+                                    text = cpuText,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     fontFamily = FontFamily.Monospace,
@@ -171,11 +196,36 @@ fun ResourceLineChart(
                                 Box(modifier = Modifier.size(8.dp).background(gpuColor, CircleShape))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "GPU ${String.format(Locale.US, "%.1f%%", activePoint?.gpu ?: 0.0)}",
+                                    text = gpuText,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     fontFamily = FontFamily.Monospace,
                                     color = gpuColor
+                                )
+                            }
+                        }
+                        ChartMetricCategory.TEMPERATURE -> {
+                            val cTemp = activePoint?.cpuTemp
+                            val gTemp = activePoint?.gpuTemp
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(8.dp).background(cpuTempColor, CircleShape))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "CPU ${if (cTemp != null) String.format(Locale.US, "%.1f°C", cTemp) else "N/A"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = cpuTempColor
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Box(modifier = Modifier.size(8.dp).background(gpuTempColor, CircleShape))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "GPU ${if (gTemp != null) String.format(Locale.US, "%.1f°C", gTemp) else "N/A"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = gpuTempColor
                                 )
                             }
                         }
@@ -281,7 +331,7 @@ fun ResourceLineChart(
                         )
                     }
 
-                    if (w <= 0f || points.size < 2) {
+                    if (w <= 0f || points.isEmpty()) {
                         return@Canvas
                     }
 
@@ -293,6 +343,30 @@ fun ResourceLineChart(
                         strokeColor: Color,
                         gradientColor: Color
                     ) {
+                        if (values.isEmpty()) return
+
+                        if (values.size == 1) {
+                            val y = ChartMath.normalizeY(values[0], minVal, maxVal, h)
+                            drawLine(
+                                color = strokeColor,
+                                start = Offset(0f, y),
+                                end = Offset(w, y),
+                                strokeWidth = 2.5f
+                            )
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(gradientColor.copy(alpha = 0.25f), Color.Transparent),
+                                    startY = y,
+                                    endY = h
+                                ),
+                                topLeft = Offset(0f, y),
+                                size = androidx.compose.ui.geometry.Size(w, (h - y).coerceAtLeast(0f))
+                            )
+                            drawCircle(Color.White, radius = 5f, center = Offset(w, y))
+                            drawCircle(strokeColor, radius = 3.5f, center = Offset(w, y))
+                            return
+                        }
+
                         val path = Path()
                         val fillPath = Path()
 
@@ -352,6 +426,15 @@ fun ResourceLineChart(
                             drawSeries(points.map { it.netRx.toDouble() }, 0.0, maxNet, netRxColor, netRxColor)
                             drawSeries(points.map { it.netTx.toDouble() }, 0.0, maxNet, netTxColor, netTxColor)
                         }
+                        ChartMetricCategory.TEMPERATURE -> {
+                            val maxTemp = maxOf(
+                                points.mapNotNull { it.cpuTemp }.maxOrNull() ?: 80.0,
+                                points.mapNotNull { it.gpuTemp }.maxOrNull() ?: 80.0,
+                                60.0
+                            )
+                            drawSeries(points.map { it.cpuTemp ?: 0.0 }, 0.0, maxTemp, cpuTempColor, cpuTempColor)
+                            drawSeries(points.map { it.gpuTemp ?: 0.0 }, 0.0, maxTemp, gpuTempColor, gpuTempColor)
+                        }
                     }
 
                     // 2. Draw scrubber indicator if active
@@ -366,7 +449,11 @@ fun ResourceLineChart(
                         )
 
                         // Highlight point on curves
-                        val idx = ((clampedX / w) * (points.size - 1)).toInt().coerceIn(0, points.size - 1)
+                        val idx = if (points.size > 1) {
+                            ((clampedX / w) * (points.size - 1)).toInt().coerceIn(0, points.size - 1)
+                        } else {
+                            0
+                        }
                         val pt = points[idx]
 
                         when (category) {
@@ -377,6 +464,23 @@ fun ResourceLineChart(
                                 drawCircle(cpuColor, radius = 3.5f, center = Offset(clampedX, cy))
                                 drawCircle(Color.White, radius = 5f, center = Offset(clampedX, gy))
                                 drawCircle(gpuColor, radius = 3.5f, center = Offset(clampedX, gy))
+                            }
+                            ChartMetricCategory.TEMPERATURE -> {
+                                val maxTemp = maxOf(
+                                    points.mapNotNull { it.cpuTemp }.maxOrNull() ?: 80.0,
+                                    points.mapNotNull { it.gpuTemp }.maxOrNull() ?: 80.0,
+                                    60.0
+                                )
+                                if (pt.cpuTemp != null) {
+                                    val cty = ChartMath.normalizeY(pt.cpuTemp, 0.0, maxTemp, h)
+                                    drawCircle(Color.White, radius = 5f, center = Offset(clampedX, cty))
+                                    drawCircle(cpuTempColor, radius = 3.5f, center = Offset(clampedX, cty))
+                                }
+                                if (pt.gpuTemp != null) {
+                                    val gty = ChartMath.normalizeY(pt.gpuTemp, 0.0, maxTemp, h)
+                                    drawCircle(Color.White, radius = 5f, center = Offset(clampedX, gty))
+                                    drawCircle(gpuTempColor, radius = 3.5f, center = Offset(clampedX, gty))
+                                }
                             }
                             ChartMetricCategory.MEMORY -> {
                                 val maxRam = points.maxOfOrNull { it.ramTotal }?.toDouble() ?: 1.0
@@ -409,8 +513,13 @@ fun ResourceLineChart(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    val startTimestamp = if (rangeStr == "1m" && (points.size < 2 || points.first().timestamp == points.last().timestamp)) {
+                        points.last().timestamp - 60
+                    } else {
+                        points.first().timestamp
+                    }
                     Text(
-                        text = ChartMath.formatTime(points.first().timestamp, rangeStr),
+                        text = ChartMath.formatTime(startTimestamp, rangeStr),
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

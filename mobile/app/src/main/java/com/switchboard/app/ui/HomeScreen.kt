@@ -909,6 +909,7 @@ private fun InlineVolumeSlider(
     onVolume: (Int, Boolean) -> Unit
 ) {
     var dragging by remember { mutableFloatStateOf(Float.NaN) }
+    var lastHapticStep by remember { mutableStateOf<Int?>(null) }
     val shown = if (dragging.isNaN()) level.toFloat() else dragging
     val haptics = LocalHaptics.current
 
@@ -940,11 +941,23 @@ private fun InlineVolumeSlider(
         Spacer(Modifier.width(10.dp))
         Slider(
             value = shown,
-            onValueChange = { dragging = it },
+            onValueChange = {
+                dragging = it
+                val step = it.roundToInt()
+                if (lastHapticStep != step) {
+                    lastHapticStep = step
+                    haptics.tick()
+                }
+            },
             onValueChangeFinished = {
                 if (!dragging.isNaN()) {
-                    onVolume(dragging.roundToInt(), muted)
+                    val finalVal = dragging.roundToInt()
+                    if (finalVal == 0 || finalVal == 100) {
+                        haptics.confirm()
+                    }
+                    onVolume(finalVal, muted)
                     dragging = Float.NaN
+                    lastHapticStep = null
                 }
             },
             valueRange = 0f..100f,

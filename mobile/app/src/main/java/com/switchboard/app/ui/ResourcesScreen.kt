@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -68,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.switchboard.app.UiState
+import com.switchboard.app.net.DataUsageItem
 import com.switchboard.app.net.DriveItem
 import com.switchboard.app.net.MetricPoint
 import com.switchboard.app.net.ProcessItem
@@ -90,6 +93,7 @@ fun ResourcesScreen(
     onOpenAbout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptics = LocalHaptics.current
     val telemetry = state.telemetry
     var selectedCategory by remember { mutableStateOf(ChartMetricCategory.CPU_GPU) }
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -97,15 +101,9 @@ fun ResourcesScreen(
     // Display label for selected range
     val currentLabel = RANGE_OPTIONS.find { it.second == telemetry.selectedRange }?.first ?: "1 hour"
 
-    // Query points on range change or initial load, and poll every 60s if 1m view
+    // Query points on range change or initial load
     LaunchedEffect(telemetry.selectedRange) {
         onQueryRange(telemetry.selectedRange)
-        if (telemetry.selectedRange == "1m") {
-            while (true) {
-                delay(60_000L)
-                onQueryRange("1m")
-            }
-        }
     }
 
     LazyColumn(
@@ -128,7 +126,10 @@ fun ResourcesScreen(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { dropdownExpanded = true }
+                            .clickable {
+                                haptics.tap()
+                                dropdownExpanded = true
+                            }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -172,7 +173,7 @@ fun ResourcesScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         if (isSelected) {
-                                            Icon(
+                                             Icon(
                                                 imageVector = Icons.Filled.Check,
                                                 contentDescription = "Selected",
                                                 tint = MaterialTheme.colorScheme.primary,
@@ -191,6 +192,7 @@ fun ResourcesScreen(
                                     }
                                 },
                                 onClick = {
+                                    haptics.tap()
                                     dropdownExpanded = false
                                     onQueryRange(code)
                                 }
@@ -201,7 +203,10 @@ fun ResourcesScreen(
 
                 // About System Action Chip
                 OutlinedButton(
-                    onClick = onOpenAbout,
+                    onClick = {
+                        haptics.tap()
+                        onOpenAbout()
+                    },
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -229,10 +234,16 @@ fun ResourcesScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                val cpuSub = buildString {
+                    if (live.cpuTemp != null) {
+                        append("${live.cpuTemp.toInt()}°C • ")
+                    }
+                    append("Processor")
+                }
                 KpiCard(
                     title = "CPU",
                     value = String.format(Locale.US, "%.1f%%", live.cpu),
-                    subtitle = if (live.cpuTemp != null) "${live.cpuTemp.toInt()}°C" else "Processor",
+                    subtitle = cpuSub,
                     color = Color(0xFF9ECE6A),
                     modifier = Modifier.weight(1f)
                 )
@@ -250,34 +261,61 @@ fun ResourcesScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                val gpuSub = buildString {
+                    if (live.gpuTemp != null) {
+                        append("${live.gpuTemp.toInt()}°C • ")
+                    }
+                    if (live.gpuMemUsed > 0) {
+                        append(ChartMath.formatBytes(live.gpuMemUsed))
+                    } else {
+                        append("3D Engine")
+                    }
+                }
                 KpiCard(
                     title = "GPU",
                     value = String.format(Locale.US, "%.1f%%", live.gpu),
-                    subtitle = if (live.gpuMemUsed > 0) ChartMath.formatBytes(live.gpuMemUsed) else "3D Engine",
+                    subtitle = gpuSub,
                     color = Color(0xFF7AA2F7),
                     modifier = Modifier.weight(1f)
                 )
+                val netSub = if (telemetry.totalNetRx > 0L || telemetry.totalNetTx > 0L) {
+                    "↑ ${ChartMath.formatRate(live.netTx)} • ${ChartMath.formatBytes(telemetry.totalNetRx + telemetry.totalNetTx)}"
+                } else {
+                    "↑ ${ChartMath.formatRate(live.netTx)}"
+                }
                 KpiCard(
                     title = "Network",
                     value = ChartMath.formatRate(live.netRx),
-                    subtitle = "↑ ${ChartMath.formatRate(live.netTx)}",
+                    subtitle = netSub,
                     color = Color(0xFF2AC3DE),
                     modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        // 3. Filter Category Chips
+        // 3. Filter Category Chips (Horizontal scroll prevents wrapping like "Temperatur \n e")
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ChartMetricCategory.entries.forEach { cat ->
                     FilterChip(
                         selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat },
-                        label = { Text(cat.label, style = MaterialTheme.typography.labelMedium) },
+                        onClick = {
+                            haptics.tap()
+                            selectedCategory = cat
+                        },
+                        label = {
+                            Text(
+                                text = cat.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        },
                         shape = RoundedCornerShape(10.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -309,7 +347,10 @@ fun ResourcesScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpenAbout() },
+                    .clickable {
+                        haptics.tap()
+                        onOpenAbout()
+                    },
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -388,7 +429,120 @@ fun ResourcesScreen(
             }
         }
 
-        // 7. Top Processes
+        // 7. Data Usage Section (App data usage & network monitoring)
+        if (telemetry.dataUsage.isNotEmpty() || telemetry.totalNetRx > 0L || telemetry.totalNetTx > 0L) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Data Usage",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (telemetry.totalNetRx > 0L || telemetry.totalNetTx > 0L) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Text(
+                                text = "${ChartMath.formatBytes(telemetry.totalNetRx + telemetry.totalNetTx)} Total",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Summary Card: Total Downloaded and Total Uploaded
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFF2AC3DE), CircleShape)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Downloaded",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = ChartMath.formatBytes(telemetry.totalNetRx),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFF2AC3DE)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(32.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        )
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFFFF9E64), CircleShape)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Uploaded",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = ChartMath.formatBytes(telemetry.totalNetTx),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFFFF9E64)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Per-app data usage breakdown with progress bars
+            val maxUsage = telemetry.dataUsage.maxOfOrNull { it.totalBytes } ?: 1L
+            items(telemetry.dataUsage) { item ->
+                DataUsageRow(item = item, maxBytes = maxUsage)
+            }
+        }
+
+        // 8. Top Processes
         if (telemetry.topProcesses.isNotEmpty()) {
             item {
                 Text(
@@ -575,6 +729,68 @@ private fun ProcessRow(proc: ProcessItem) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DataUsageRow(item: DataUsageItem, maxBytes: Long) {
+    val fraction = if (maxBytes > 0) (item.totalBytes.toFloat() / maxBytes.toFloat()).coerceIn(0f, 1f) else 0f
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "PID ${item.pid} • ↓ ${ChartMath.formatBytes(item.rxBytes)} • ↑ ${ChartMath.formatBytes(item.txBytes)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(
+                        text = ChartMath.formatBytes(item.totalBytes),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(CircleShape),
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
         }
     }
 }

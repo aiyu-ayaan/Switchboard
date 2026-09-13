@@ -62,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -141,7 +142,9 @@ fun LevelRow(
     enabled: Boolean = true,
     onChange: (Int) -> Unit
 ) {
+    val haptics = LocalHaptics.current
     var dragging by remember { mutableFloatStateOf(Float.NaN) }
+    var lastHapticStep by remember { mutableStateOf<Int?>(null) }
     val shown = if (dragging.isNaN()) value.toFloat() else dragging
     val percent = if (max > min) ((shown - min) / (max - min) * 100).roundToInt() else 0
 
@@ -163,11 +166,23 @@ fun LevelRow(
         Spacer(Modifier.width(12.dp))
         Slider(
             value = shown,
-            onValueChange = { dragging = it },
+            onValueChange = {
+                dragging = it
+                val step = it.roundToInt()
+                if (lastHapticStep != step) {
+                    lastHapticStep = step
+                    haptics.tick()
+                }
+            },
             onValueChangeFinished = {
                 if (!dragging.isNaN()) {
-                    onChange(dragging.roundToInt())
+                    val finalVal = dragging.roundToInt()
+                    if (finalVal == min || finalVal == max) {
+                        haptics.confirm()
+                    }
+                    onChange(finalVal)
                     dragging = Float.NaN
+                    lastHapticStep = null
                 }
             },
             valueRange = min.toFloat()..max.toFloat(),
@@ -392,7 +407,9 @@ fun DisplayCard(
  */
 @Composable
 fun VolumeCard(level: Int, muted: Boolean, onVolume: (Int, Boolean) -> Unit) {
+    val haptics = LocalHaptics.current
     var dragging by remember { mutableFloatStateOf(Float.NaN) }
+    var lastVolumeStep by remember { mutableStateOf<Int?>(null) }
     val shown = if (dragging.isNaN()) level.toFloat() else dragging
 
     SectionCard {
@@ -451,11 +468,23 @@ fun VolumeCard(level: Int, muted: Boolean, onVolume: (Int, Boolean) -> Unit) {
 
             Slider(
                 value = shown,
-                onValueChange = { dragging = it },
+                onValueChange = {
+                    dragging = it
+                    val step = it.roundToInt()
+                    if (lastVolumeStep != step) {
+                        lastVolumeStep = step
+                        haptics.tick()
+                    }
+                },
                 onValueChangeFinished = {
                     if (!dragging.isNaN()) {
-                        onVolume(dragging.roundToInt(), muted)
+                        val finalVal = dragging.roundToInt()
+                        if (finalVal == 0 || finalVal == 100) {
+                            haptics.confirm()
+                        }
+                        onVolume(finalVal, muted)
                         dragging = Float.NaN
+                        lastVolumeStep = null
                     }
                 },
                 valueRange = 0f..100f,
@@ -483,6 +512,7 @@ fun MicrophoneCard(
     onMicVolume: (Int, Boolean) -> Unit
 ) {
     var dragging by remember { mutableFloatStateOf(Float.NaN) }
+    var lastMicStep by remember { mutableStateOf<Int?>(null) }
     val shown = if (dragging.isNaN()) level.toFloat() else dragging
     val haptics = LocalHaptics.current
 
@@ -555,11 +585,23 @@ fun MicrophoneCard(
 
             Slider(
                 value = shown,
-                onValueChange = { dragging = it },
+                onValueChange = {
+                    dragging = it
+                    val step = it.roundToInt()
+                    if (lastMicStep != step) {
+                        lastMicStep = step
+                        haptics.tick()
+                    }
+                },
                 onValueChangeFinished = {
                     if (!dragging.isNaN()) {
-                        onMicVolume(dragging.roundToInt(), muted)
+                        val finalVal = dragging.roundToInt()
+                        if (finalVal == 0 || finalVal == 100) {
+                            haptics.confirm()
+                        }
+                        onMicVolume(finalVal, muted)
                         dragging = Float.NaN
+                        lastMicStep = null
                     }
                 },
                 valueRange = 0f..100f,

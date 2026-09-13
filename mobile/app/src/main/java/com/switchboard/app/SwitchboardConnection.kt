@@ -63,6 +63,9 @@ data class TelemetryState(
     val liveCurrent: com.switchboard.app.net.MetricPoint = com.switchboard.app.net.MetricPoint(),
     val topProcesses: List<com.switchboard.app.net.ProcessItem> = emptyList(),
     val drives: List<com.switchboard.app.net.DriveItem> = emptyList(),
+    val dataUsage: List<com.switchboard.app.net.DataUsageItem> = emptyList(),
+    val totalNetRx: Long = 0L,
+    val totalNetTx: Long = 0L,
     val aboutSystem: com.switchboard.app.net.AboutSystemResponse? = null,
     val isLoadingHistory: Boolean = false
 )
@@ -385,7 +388,10 @@ class SwitchboardConnection private constructor(context: Context) {
             is ConnectionEvent.ResourcesLive -> {
                 _state.update {
                     val nextPoints = if (it.telemetry.selectedRange == "1m") {
-                        listOf(event.live.current)
+                        val cutoff = event.live.current.timestamp - 60
+                        (it.telemetry.points.filter { pt -> pt.timestamp >= cutoff } + event.live.current)
+                            .distinctBy { pt -> pt.timestamp }
+                            .sortedBy { pt -> pt.timestamp }
                     } else {
                         it.telemetry.points
                     }
@@ -394,6 +400,9 @@ class SwitchboardConnection private constructor(context: Context) {
                             liveCurrent = event.live.current,
                             topProcesses = event.live.topProcesses,
                             drives = event.live.drives,
+                            dataUsage = event.live.dataUsage,
+                            totalNetRx = if (event.live.totalNetRx > 0L) event.live.totalNetRx else event.live.current.netTotalRx,
+                            totalNetTx = if (event.live.totalNetTx > 0L) event.live.totalNetTx else event.live.current.netTotalTx,
                             points = nextPoints
                         )
                     )

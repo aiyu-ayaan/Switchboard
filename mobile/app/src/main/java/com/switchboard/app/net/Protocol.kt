@@ -670,6 +670,8 @@ data class MetricPoint(
     val diskWrite: Long = 0L,
     val netRx: Long = 0L,
     val netTx: Long = 0L,
+    val netTotalRx: Long = 0L,
+    val netTotalTx: Long = 0L,
     val cpuTemp: Double? = null,
     val gpuTemp: Double? = null
 )
@@ -680,6 +682,15 @@ data class ProcessItem(
     val pid: Int = 0,
     val cpu: Double = 0.0,
     val ramBytes: Long = 0L
+)
+
+@Serializable
+data class DataUsageItem(
+    val name: String = "",
+    val pid: Int = 0,
+    val rxBytes: Long = 0L,
+    val txBytes: Long = 0L,
+    val totalBytes: Long = 0L
 )
 
 @Serializable
@@ -705,7 +716,10 @@ data class ResourcesResponse(
 data class ResourcesLivePush(
     val current: MetricPoint = MetricPoint(),
     val topProcesses: List<ProcessItem> = emptyList(),
-    val drives: List<DriveItem> = emptyList()
+    val drives: List<DriveItem> = emptyList(),
+    val dataUsage: List<DataUsageItem> = emptyList(),
+    val totalNetRx: Long = 0L,
+    val totalNetTx: Long = 0L
 ) : WirePayload
 
 @Serializable

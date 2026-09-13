@@ -3,6 +3,7 @@ package com.switchboard.app
 import com.switchboard.app.net.AboutSystemResponse
 import com.switchboard.app.net.BatteryInfo
 import com.switchboard.app.net.CpuInfo
+import com.switchboard.app.net.DataUsageItem
 import com.switchboard.app.net.DriveItem
 import com.switchboard.app.net.MetricPoint
 import com.switchboard.app.net.OsInfo
@@ -27,6 +28,8 @@ class TelemetryViewModelTest {
             gpu = 30.0,
             netRx = 1048576L,
             netTx = 524288L,
+            netTotalRx = 1842986296L,
+            netTotalTx = 987654321L,
             cpuTemp = 48.0
         )
         val response = ResourcesResponse(
@@ -41,17 +44,26 @@ class TelemetryViewModelTest {
         assertEquals(1, decoded.points.size)
         assertEquals(42.5, decoded.points[0].cpu, 0.001)
         assertEquals(48.0, decoded.points[0].cpuTemp ?: 0.0, 0.001)
+        assertEquals(1842986296L, decoded.points[0].netTotalRx)
+        assertEquals(987654321L, decoded.points[0].netTotalTx)
 
         val live = ResourcesLivePush(
             current = pt,
             topProcesses = listOf(ProcessItem(name = "chrome.exe", pid = 1234, cpu = 12.0, ramBytes = 500000000L)),
-            drives = listOf(DriveItem(device = "C:", label = "Windows", totalBytes = 1000000000L, freeBytes = 400000000L))
+            drives = listOf(DriveItem(device = "C:", label = "Windows", totalBytes = 1000000000L, freeBytes = 400000000L)),
+            dataUsage = listOf(DataUsageItem(name = "chrome.exe", pid = 1234, rxBytes = 5000000L, txBytes = 3000000L, totalBytes = 8000000L)),
+            totalNetRx = 1842986296L,
+            totalNetTx = 987654321L
         )
         val liveStr = SwitchboardJson.encodeToString(ResourcesLivePush.serializer(), live)
         val decodedLive = SwitchboardJson.decodeFromString(ResourcesLivePush.serializer(), liveStr)
         assertEquals(1, decodedLive.topProcesses.size)
         assertEquals("chrome.exe", decodedLive.topProcesses[0].name)
         assertEquals("C:", decodedLive.drives[0].device)
+        assertEquals(1, decodedLive.dataUsage.size)
+        assertEquals("chrome.exe", decodedLive.dataUsage[0].name)
+        assertEquals(8000000L, decodedLive.dataUsage[0].totalBytes)
+        assertEquals(1842986296L, decodedLive.totalNetRx)
 
         val about = AboutSystemResponse(
             os = OsInfo(name = "Windows 11", build = "22631", uptimeSeconds = 7200L),

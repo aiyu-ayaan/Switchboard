@@ -55,6 +55,25 @@ class HostDiscovery(context: Context) {
      * asking costs no multicast traffic and no wakeups.
      */
     fun hosts(): Flow<List<DiscoveredHost>> = callbackFlow {
+        if (SwitchboardClient.isEmulator()) {
+            // Multicast DNS (mDNS) does not cross the QEMU virtual NAT gateway in Android
+            // emulators. Calling discoverServices() on modern Android emulators can also trigger
+            // the system NsdPickerActivity modal dialog that hangs indefinitely.
+            // Surface the standard emulator host gateway (10.0.2.2) directly instead.
+            trySend(
+                listOf(
+                    DiscoveredHost(
+                        daemonId = "emulator-host",
+                        hostName = "Host Machine (Emulator 10.0.2.2)",
+                        host = "10.0.2.2",
+                        port = SwitchboardConnection.DEFAULT_PORT
+                    )
+                )
+            )
+            awaitClose { }
+            return@callbackFlow
+        }
+
         // Touched from NSD's callback thread and from resolve coroutines.
         val found = linkedMapOf<String, DiscoveredHost>()
 
@@ -91,7 +110,12 @@ class HostDiscovery(context: Context) {
             }
         }
 
-        nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+        try {
+            nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+        } catch (e: Exception) {
+            close()
+            return@callbackFlow
+        }
         publish()
 
         awaitClose { runCatching { nsd.stopServiceDiscovery(listener) } }
