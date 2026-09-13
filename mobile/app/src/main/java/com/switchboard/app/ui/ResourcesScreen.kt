@@ -97,8 +97,9 @@ fun ResourcesScreen(
     // Display label for selected range
     val currentLabel = RANGE_OPTIONS.find { it.second == telemetry.selectedRange }?.first ?: "1 hour"
 
-    // If 1 minute view is active, poll live data every 60s
+    // Query points on range change or initial load, and poll every 60s if 1m view
     LaunchedEffect(telemetry.selectedRange) {
+        onQueryRange(telemetry.selectedRange)
         if (telemetry.selectedRange == "1m") {
             while (true) {
                 delay(60_000L)
@@ -317,7 +318,8 @@ fun ResourcesScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val isBatteryPresent = about?.battery?.present ?: false
+                    val battery = about?.battery
+                    val isBatteryPresent = battery != null && battery.present && battery.designCapacityMwh > 0L
                     Surface(
                         shape = CircleShape,
                         color = if (isBatteryPresent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
@@ -326,7 +328,7 @@ fun ResourcesScreen(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = if (isBatteryPresent) {
-                                    if (about.battery.charging) Icons.Filled.BatteryChargingFull else Icons.Filled.BatteryFull
+                                    if (battery.charging) Icons.Filled.BatteryChargingFull else Icons.Filled.BatteryFull
                                 } else {
                                     Icons.Filled.Computer
                                 },
@@ -342,7 +344,7 @@ fun ResourcesScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (isBatteryPresent) {
-                                "Battery Health • ${100 - (about.battery.wearPercent).toInt()}%"
+                                "Battery Health • ${100 - (battery.wearPercent).toInt()}%"
                             } else {
                                 "Desktop Hardware Specs"
                             },
@@ -351,7 +353,7 @@ fun ResourcesScreen(
                         )
                         Text(
                             text = if (isBatteryPresent) {
-                                "${about.battery.percent}% • ${if (about.battery.charging) "Charging" else "On Battery"} • ${about.battery.cycleCount} cycles"
+                                "${battery.percent}% • ${if (battery.charging) "Charging" else "On Battery"} • ${battery.cycleCount} cycles"
                             } else {
                                 about?.os?.name ?: "Tap to inspect full hardware specifications"
                             },

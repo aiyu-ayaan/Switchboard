@@ -281,7 +281,7 @@ fun ResourceLineChart(
                         )
                     }
 
-                    if (points.size < 2) {
+                    if (w <= 0f || points.size < 2) {
                         return@Canvas
                     }
 

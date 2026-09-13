@@ -1874,6 +1874,15 @@ fun SectionScreen(
         )
         return
     }
+    if (section == Section.Resources) {
+        ResourcesScreen(
+            state = state,
+            onQueryRange = actions.onQueryResources,
+            onOpenAbout = actions.onOpenAbout,
+            modifier = modifier
+        )
+        return
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1893,11 +1902,7 @@ private fun SectionBody(
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         when (section) {
             Section.Resources -> {
-                ResourcesScreen(
-                    state = state,
-                    onQueryRange = actions.onQueryResources,
-                    onOpenAbout = actions.onOpenAbout
-                )
+                // Handled directly in SectionScreen to prevent nested scrollable containers
             }
 
             Section.Displays -> {
