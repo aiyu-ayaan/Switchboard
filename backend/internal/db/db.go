@@ -66,6 +66,23 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS system_metrics (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp           INTEGER NOT NULL,
+    cpu_percent         REAL NOT NULL,
+    ram_used_bytes      INTEGER NOT NULL,
+    ram_total_bytes     INTEGER NOT NULL,
+    gpu_percent         REAL NOT NULL,
+    gpu_mem_used_bytes  INTEGER NOT NULL,
+    gpu_mem_total_bytes INTEGER NOT NULL,
+    disk_read_bps       INTEGER NOT NULL,
+    disk_write_bps      INTEGER NOT NULL,
+    net_rx_bps          INTEGER NOT NULL,
+    net_tx_bps          INTEGER NOT NULL,
+    cpu_temp            REAL,
+    gpu_temp            REAL
+);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_ts ON system_metrics(timestamp);
 DROP TABLE IF EXISTS unlock_keys;
 `
 
