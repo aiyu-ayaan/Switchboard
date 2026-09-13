@@ -18,8 +18,10 @@ type MetricPoint struct {
 	GPUMemTotal uint64   `json:"gpuMemTotal"` // bytes
 	DiskRead    uint64   `json:"diskRead"`    // bytes/sec
 	DiskWrite   uint64   `json:"diskWrite"`   // bytes/sec
-	NetRx       uint64   `json:"netRx"`       // bytes/sec
-	NetTx       uint64   `json:"netTx"`       // bytes/sec
+	NetRx       uint64   `json:"netRx"`                 // bytes/sec
+	NetTx       uint64   `json:"netTx"`                 // bytes/sec
+	NetTotalRx  uint64   `json:"netTotalRx,omitempty"`  // cumulative bytes received
+	NetTotalTx  uint64   `json:"netTotalTx,omitempty"`  // cumulative bytes transmitted
 	CPUTemp     *float64 `json:"cpuTemp,omitempty"`
 	GPUTemp     *float64 `json:"gpuTemp,omitempty"`
 }
@@ -30,6 +32,15 @@ type ProcessItem struct {
 	PID      int     `json:"pid"`
 	CPU      float64 `json:"cpu"`      // percent
 	RAMBytes uint64  `json:"ramBytes"` // working set bytes
+}
+
+// DataUsageItem describes the network and I/O data usage of an application.
+type DataUsageItem struct {
+	Name       string `json:"name"`
+	PID        int    `json:"pid"`
+	RxBytes    uint64 `json:"rxBytes"`
+	TxBytes    uint64 `json:"txBytes"`
+	TotalBytes uint64 `json:"totalBytes"`
 }
 
 // DriveItem describes a storage partition or drive volume.
@@ -53,9 +64,12 @@ type ResourcesResponse struct {
 
 // ResourcesLivePush delivers the latest 1-min snapshot and top processes.
 type ResourcesLivePush struct {
-	Current      MetricPoint   `json:"current"`
-	TopProcesses []ProcessItem `json:"topProcesses"`
-	Drives       []DriveItem   `json:"drives"`
+	Current      MetricPoint     `json:"current"`
+	TopProcesses []ProcessItem   `json:"topProcesses"`
+	Drives       []DriveItem     `json:"drives"`
+	DataUsage    []DataUsageItem `json:"dataUsage,omitempty"`
+	TotalNetRx   uint64          `json:"totalNetRx,omitempty"`
+	TotalNetTx   uint64          `json:"totalNetTx,omitempty"`
 }
 
 // BatteryInfo details the host's battery health and power supply state.

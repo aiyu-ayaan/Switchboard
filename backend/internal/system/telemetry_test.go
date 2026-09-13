@@ -10,7 +10,7 @@ func TestSampleMetrics(t *testing.T) {
 	c := system.NewController()
 	defer c.Close()
 
-	pt, procs, drives, err := c.SampleMetrics()
+	pt, procs, drives, dataUsage, err := c.SampleMetrics()
 	if err != nil {
 		t.Fatalf("SampleMetrics failed: %v", err)
 	}
@@ -25,8 +25,13 @@ func TestSampleMetrics(t *testing.T) {
 		t.Errorf("expected non-zero Timestamp, got %d", pt.Timestamp)
 	}
 
-	t.Logf("Sampled metric: CPU=%.1f%%, RAM=%d/%d MB, DiskRead=%d, NetRx=%d, Drives=%d, Procs=%d",
-		pt.CPU, pt.RAMUsed/(1024*1024), pt.RAMTotal/(1024*1024), pt.DiskRead, pt.NetRx, len(drives), len(procs))
+	t.Logf("Sampled metric: CPU=%.1f%%, RAM=%d/%d MB, NetRx=%d B/s, NetTotalRx=%d bytes, Drives=%d, Procs=%d, DataUsageApps=%d",
+		pt.CPU, pt.RAMUsed/(1024*1024), pt.RAMTotal/(1024*1024), pt.NetRx, pt.NetTotalRx, len(drives), len(procs), len(dataUsage))
+
+	if len(dataUsage) > 0 {
+		t.Logf("Top data usage app: %s (PID %d) - Total: %d bytes (Rx: %d, Tx: %d)",
+			dataUsage[0].Name, dataUsage[0].PID, dataUsage[0].TotalBytes, dataUsage[0].RxBytes, dataUsage[0].TxBytes)
+	}
 }
 
 func TestAboutSystem(t *testing.T) {

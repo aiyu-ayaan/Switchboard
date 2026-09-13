@@ -9,11 +9,14 @@ import (
 )
 
 // broadcastTelemetry sends live telemetry to every connected device.
-func (s *Server) broadcastTelemetry(pt protocol.MetricPoint, procs []protocol.ProcessItem, drives []protocol.DriveItem) {
+func (s *Server) broadcastTelemetry(pt protocol.MetricPoint, procs []protocol.ProcessItem, drives []protocol.DriveItem, dataUsage []protocol.DataUsageItem) {
 	push := protocol.ResourcesLivePush{
 		Current:      pt,
 		TopProcesses: procs,
 		Drives:       drives,
+		DataUsage:    dataUsage,
+		TotalNetRx:   pt.NetTotalRx,
+		TotalNetTx:   pt.NetTotalTx,
 	}
 	env, err := protocol.New(protocol.TypeEvent, protocol.ActionResourcesLive, push)
 	if err != nil {
@@ -32,21 +35,23 @@ func (s *Server) broadcastTelemetry(pt protocol.MetricPoint, procs []protocol.Pr
 	}
 }
 
-// telemetryLoop samples host telemetry every 60s, saves it to SQLite,
+// telemetryLoop samples host telemetry every 2s, saves to SQLite every 30s,
 // broadcasts live events to connected clients, and runs daily pruning.
 func (s *Server) telemetryLoop(ctx context.Context) {
 	// Sample immediately on start
-	if pt, procs, drives, err := s.control.SampleMetrics(); err == nil {
+	if pt, procs, drives, dataUsage, err := s.control.SampleMetrics(); err == nil {
+		s.recordRecentMetric(pt)
 		_ = s.store.RecordMetrics(pt)
-		s.broadcastTelemetry(pt, procs, drives)
+		s.broadcastTelemetry(pt, procs, drives, dataUsage)
 	}
 
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	pruneTicker := time.NewTicker(24 * time.Hour)
 	defer pruneTicker.Stop()
 
+	ticks := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -56,14 +61,43 @@ func (s *Server) telemetryLoop(ctx context.Context) {
 				log.Printf("telemetry: pruned %d samples older than 30 days", deleted)
 			}
 		case <-ticker.C:
-			pt, procs, drives, err := s.control.SampleMetrics()
+			ticks++
+			pt, procs, drives, dataUsage, err := s.control.SampleMetrics()
 			if err != nil {
 				continue
 			}
-			if err := s.store.RecordMetrics(pt); err != nil {
-				log.Printf("telemetry: record metric error: %v", err)
+			s.recordRecentMetric(pt)
+
+			// Persist to database every 30 seconds (15 ticks of 2s)
+			if ticks%15 == 0 {
+				if err := s.store.RecordMetrics(pt); err != nil {
+					log.Printf("telemetry: record metric error: %v", err)
+				}
 			}
-			s.broadcastTelemetry(pt, procs, drives)
+
+			s.broadcastTelemetry(pt, procs, drives, dataUsage)
 		}
 	}
+}
+
+func (s *Server) recordRecentMetric(pt protocol.MetricPoint) {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	s.recentMetrics = append(s.recentMetrics, pt)
+	cutoff := pt.Timestamp - 60
+	start := 0
+	for start < len(s.recentMetrics) && s.recentMetrics[start].Timestamp < cutoff {
+		start++
+	}
+	if start > 0 {
+		s.recentMetrics = s.recentMetrics[start:]
+	}
+}
+
+func (s *Server) getRecentMetrics() []protocol.MetricPoint {
+	s.metricsMu.RLock()
+	defer s.metricsMu.RUnlock()
+	res := make([]protocol.MetricPoint, len(s.recentMetrics))
+	copy(res, s.recentMetrics)
+	return res
 }

@@ -49,6 +49,9 @@ type Server struct {
 	pairing  pairingToken
 	settings Settings
 	clients  map[string]*client // by connection ID
+
+	metricsMu     sync.RWMutex
+	recentMetrics []protocol.MetricPoint
 }
 
 type pairingToken struct {

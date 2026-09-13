@@ -418,10 +418,19 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 		if rangeStr == "" {
 			rangeStr = "1h"
 		}
-		points, err := s.store.QueryMetrics(rangeStr)
-		if err != nil {
-			s.fail(c, env, err)
-			return
+		var points []protocol.MetricPoint
+		if rangeStr == "1m" {
+			points = s.getRecentMetrics()
+			if len(points) == 0 {
+				points, _ = s.store.QueryMetrics(rangeStr)
+			}
+		} else {
+			var err error
+			points, err = s.store.QueryMetrics(rangeStr)
+			if err != nil {
+				s.fail(c, env, err)
+				return
+			}
 		}
 		s.reply(c, env, protocol.ResourcesResponse{
 			Range:  rangeStr,

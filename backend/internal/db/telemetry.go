@@ -46,30 +46,58 @@ func (d *Database) QueryMetrics(rangeStr string) ([]protocol.MetricPoint, error)
 			disk_read_bps, disk_write_bps, net_rx_bps, net_tx_bps,
 			cpu_temp, gpu_temp
 			FROM system_metrics
-			ORDER BY timestamp DESC
-			LIMIT 1`
-		row := d.sql.QueryRow(query)
-		var pt protocol.MetricPoint
-		var cpuTemp, gpuTemp sql.NullFloat64
-		err := row.Scan(
-			&pt.Timestamp, &pt.CPU, &pt.RAMUsed, &pt.RAMTotal,
-			&pt.GPU, &pt.GPUMemUsed, &pt.GPUMemTotal,
-			&pt.DiskRead, &pt.DiskWrite, &pt.NetRx, &pt.NetTx,
-			&cpuTemp, &gpuTemp,
-		)
-		if err == sql.ErrNoRows {
-			return []protocol.MetricPoint{}, nil
-		}
+			WHERE timestamp >= ?
+			ORDER BY timestamp ASC`
+		rows, err := d.sql.Query(query, now-60)
 		if err != nil {
 			return nil, fmt.Errorf("db: query 1m metric: %w", err)
 		}
-		if cpuTemp.Valid {
-			pt.CPUTemp = &cpuTemp.Float64
+		defer rows.Close()
+		var pts []protocol.MetricPoint
+		for rows.Next() {
+			var pt protocol.MetricPoint
+			var cpuTemp, gpuTemp sql.NullFloat64
+			if err := rows.Scan(
+				&pt.Timestamp, &pt.CPU, &pt.RAMUsed, &pt.RAMTotal,
+				&pt.GPU, &pt.GPUMemUsed, &pt.GPUMemTotal,
+				&pt.DiskRead, &pt.DiskWrite, &pt.NetRx, &pt.NetTx,
+				&cpuTemp, &gpuTemp,
+			); err != nil {
+				return nil, fmt.Errorf("db: scan 1m metric: %w", err)
+			}
+			if cpuTemp.Valid {
+				pt.CPUTemp = &cpuTemp.Float64
+			}
+			if gpuTemp.Valid {
+				pt.GPUTemp = &gpuTemp.Float64
+			}
+			pts = append(pts, pt)
 		}
-		if gpuTemp.Valid {
-			pt.GPUTemp = &gpuTemp.Float64
+		if len(pts) == 0 {
+			lastRow := d.sql.QueryRow(`SELECT timestamp, cpu_percent, ram_used_bytes, ram_total_bytes,
+				gpu_percent, gpu_mem_used_bytes, gpu_mem_total_bytes,
+				disk_read_bps, disk_write_bps, net_rx_bps, net_tx_bps,
+				cpu_temp, gpu_temp
+				FROM system_metrics
+				ORDER BY timestamp DESC LIMIT 1`)
+			var pt protocol.MetricPoint
+			var cpuTemp, gpuTemp sql.NullFloat64
+			if err := lastRow.Scan(
+				&pt.Timestamp, &pt.CPU, &pt.RAMUsed, &pt.RAMTotal,
+				&pt.GPU, &pt.GPUMemUsed, &pt.GPUMemTotal,
+				&pt.DiskRead, &pt.DiskWrite, &pt.NetRx, &pt.NetTx,
+				&cpuTemp, &gpuTemp,
+			); err == nil {
+				if cpuTemp.Valid {
+					pt.CPUTemp = &cpuTemp.Float64
+				}
+				if gpuTemp.Valid {
+					pt.GPUTemp = &gpuTemp.Float64
+				}
+				pts = append(pts, pt)
+			}
 		}
-		return []protocol.MetricPoint{pt}, nil
+		return pts, nil
 	}
 
 	// For longer ranges, define window and bucket size (seconds)

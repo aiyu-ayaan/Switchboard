@@ -3,7 +3,11 @@
 package system
 
 import (
+	"context"
+	"os/exec"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -33,7 +37,17 @@ var (
 	procFreeMibTable = modIphlpapi.NewProc("FreeMibTable")
 
 	procGetProcessMemoryInfo = modPsapi.NewProc("GetProcessMemoryInfo")
+	procGetProcessIoCounters = modKernel32.NewProc("GetProcessIoCounters")
 )
+
+type ioCounters struct {
+	ReadOperationCount  uint64
+	WriteOperationCount uint64
+	OtherOperationCount uint64
+	ReadTransferCount   uint64
+	WriteTransferCount  uint64
+	OtherTransferCount  uint64
+}
 
 type memoryStatusEx struct {
 	cbSize                  uint32
@@ -213,38 +227,39 @@ func sampleDrives() []protocol.DriveItem {
 	return drives
 }
 
-func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64) {
+func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64, totalRx uint64, totalTx uint64) {
 	if procGetIfTable2.Find() != nil {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
 
 	var pTable uintptr
 	r, _, _ := procGetIfTable2.Call(uintptr(unsafe.Pointer(&pTable)))
 	if r != 0 || pTable == 0 {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
 	defer procFreeMibTable.Call(pTable)
 
 	numEntries := *(*uint32)(unsafe.Pointer(pTable))
 	if numEntries == 0 {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
 
-	// MIB_IF_ROW2 structure size on 64-bit windows is 1352 bytes
-	// We dynamically inspect InOctets (offset 552) and OutOctets (offset 560)
-	// Or we scan the table safely.
-	// For high stability, sum InOctets and OutOctets from row entries.
+	// MIB_IF_ROW2 structure size on 64-bit windows is 1352 bytes.
+	// We read OperStatus (offset 1156), IfType (offset 1128), Flags (offset 1152),
+	// InOctets (offset 1208), and OutOctets (offset 1280).
 	const rowSize = 1352
 	entriesPtr := pTable + 8
 
-	var totalRx, totalTx uint64
 	for i := uint32(0); i < numEntries; i++ {
 		rowPtr := entriesPtr + uintptr(i*rowSize)
-		// OperStatus is at offset 536 (uint32). 1 = IfOperStatusUp
-		operStatus := *(*uint32)(unsafe.Pointer(rowPtr + 536))
-		if operStatus == 1 {
-			inOctets := *(*uint64)(unsafe.Pointer(rowPtr + 552))
-			outOctets := *(*uint64)(unsafe.Pointer(rowPtr + 560))
+		operStatus := *(*uint32)(unsafe.Pointer(rowPtr + 1156))
+		ifType := *(*uint32)(unsafe.Pointer(rowPtr + 1128))
+		flags := *(*byte)(unsafe.Pointer(rowPtr + 1152))
+
+		// Only include UP interfaces, non-loopback (24), and exclude NDIS Lightweight Filters (flags&2 == 0)
+		if operStatus == 1 && ifType != 24 && (flags&2 == 0) {
+			inOctets := *(*uint64)(unsafe.Pointer(rowPtr + 1208))
+			outOctets := *(*uint64)(unsafe.Pointer(rowPtr + 1280))
 			totalRx += inOctets
 			totalTx += outOctets
 		}
@@ -253,7 +268,7 @@ func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64) {
 	if prevNetRx == 0 && prevNetTx == 0 {
 		prevNetRx = totalRx
 		prevNetTx = totalTx
-		return 0, 0
+		return 0, 0, totalRx, totalTx
 	}
 
 	deltaRx := uint64(0)
@@ -272,14 +287,14 @@ func sampleNetwork(intervalSec float64) (rxBps uint64, txBps uint64) {
 		rxBps = uint64(float64(deltaRx) / intervalSec)
 		txBps = uint64(float64(deltaTx) / intervalSec)
 	}
-	return rxBps, txBps
+	return rxBps, txBps, totalRx, totalTx
 }
 
-func sampleTopProcesses() []protocol.ProcessItem {
+func sampleProcesses() ([]protocol.ProcessItem, []protocol.DataUsageItem) {
 	const TH32CS_SNAPPROCESS = 0x00000002
 	hSnap, _, _ := procCreateToolhelp32.Call(TH32CS_SNAPPROCESS, 0)
 	if hSnap == 0 || hSnap == uintptr(syscall.InvalidHandle) {
-		return nil
+		return nil, nil
 	}
 	defer procCloseHandle.Call(hSnap)
 
@@ -288,18 +303,22 @@ func sampleTopProcesses() []protocol.ProcessItem {
 
 	r, _, _ := procProcess32First.Call(hSnap, uintptr(unsafe.Pointer(&entry)))
 	if r == 0 {
-		return nil
+		return nil, nil
 	}
 
 	const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 	const PROCESS_VM_READ = 0x0010
 
 	var procs []protocol.ProcessItem
+	var dataItems []protocol.DataUsageItem
+
 	for {
 		pid := int(entry.th32ProcessID)
 		name := syscall.UTF16ToString(entry.szExeFile[:])
 
 		var ramBytes uint64
+		var rxBytes, txBytes uint64
+
 		if pid > 4 {
 			hProc, _, _ := procOpenProcess.Call(
 				PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_READ,
@@ -317,6 +336,17 @@ func sampleTopProcesses() []protocol.ProcessItem {
 				if rMem != 0 {
 					ramBytes = uint64(pmc.workingSetSize)
 				}
+
+				var io ioCounters
+				rIo, _, _ := procGetProcessIoCounters.Call(
+					hProc,
+					uintptr(unsafe.Pointer(&io)),
+				)
+				if rIo != 0 {
+					rxBytes = io.ReadTransferCount
+					txBytes = io.WriteTransferCount
+				}
+
 				procCloseHandle.Call(hProc)
 			}
 		}
@@ -329,6 +359,17 @@ func sampleTopProcesses() []protocol.ProcessItem {
 			})
 		}
 
+		totalBytes := rxBytes + txBytes
+		if totalBytes > 0 {
+			dataItems = append(dataItems, protocol.DataUsageItem{
+				Name:       name,
+				PID:        pid,
+				RxBytes:    rxBytes,
+				TxBytes:    txBytes,
+				TotalBytes: totalBytes,
+			})
+		}
+
 		rNext, _, _ := procProcess32Next.Call(hSnap, uintptr(unsafe.Pointer(&entry)))
 		if rNext == 0 {
 			break
@@ -338,14 +379,42 @@ func sampleTopProcesses() []protocol.ProcessItem {
 	sort.Slice(procs, func(i, j int) bool {
 		return procs[i].RAMBytes > procs[j].RAMBytes
 	})
-
 	if len(procs) > 5 {
 		procs = procs[:5]
 	}
-	return procs
+
+	sort.Slice(dataItems, func(i, j int) bool {
+		return dataItems[i].TotalBytes > dataItems[j].TotalBytes
+	})
+	if len(dataItems) > 8 {
+		dataItems = dataItems[:8]
+	}
+
+	return procs, dataItems
 }
 
-func sampleThermal() (cpuTemp *float64) {
+func sampleCPUThermal() (cpuTemp *float64) {
+	// 1. Try Win32_PerfFormattedData_Counters_ThermalZoneInformation in root\cimv2 (Standard, non-admin)
+	_ = withWMI(`root\cimv2`, func(service *ole.IDispatch) error {
+		return wmiQuery(service, "SELECT HighPrecisionTemperature, Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation", func(instance *ole.IDispatch) error {
+			if hpt, ok := wmiInt(instance, "HighPrecisionTemperature"); ok && hpt > 2732 {
+				c := (float64(hpt) - 2732.0) / 10.0
+				cpuTemp = &c
+				return nil
+			}
+			if tKelvin, ok := wmiInt(instance, "Temperature"); ok && tKelvin > 273 {
+				c := float64(tKelvin - 273)
+				cpuTemp = &c
+				return nil
+			}
+			return nil
+		})
+	})
+	if cpuTemp != nil {
+		return cpuTemp
+	}
+
+	// 2. Fallback to root\wmi MSAcpi_ThermalZoneTemperature (if elevated)
 	_ = withWMI(`root\wmi`, func(service *ole.IDispatch) error {
 		return wmiQuery(service, "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature", func(instance *ole.IDispatch) error {
 			if tempKelvinTenths, ok := wmiInt(instance, "CurrentTemperature"); ok && tempKelvinTenths > 2732 {
@@ -358,26 +427,63 @@ func sampleThermal() (cpuTemp *float64) {
 	return cpuTemp
 }
 
-func sampleMetrics() (protocol.MetricPoint, []protocol.ProcessItem, []protocol.DriveItem, error) {
+func sampleNvidiaGPU() (gpuUtil float64, gpuTemp *float64, memUsed uint64, memTotal uint64, ok bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total", "--format=csv,noheader,nounits")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, nil, 0, 0, false
+	}
+
+	parts := strings.Split(strings.TrimSpace(string(out)), ",")
+	if len(parts) < 4 {
+		return 0, nil, 0, 0, false
+	}
+
+	util, _ := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	temp, errTemp := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+	mUsedMiB, _ := strconv.ParseUint(strings.TrimSpace(parts[2]), 10, 64)
+	mTotalMiB, _ := strconv.ParseUint(strings.TrimSpace(parts[3]), 10, 64)
+
+	var tPtr *float64
+	if errTemp == nil && temp > 0 {
+		tPtr = &temp
+	}
+
+	return util, tPtr, mUsedMiB * 1024 * 1024, mTotalMiB * 1024 * 1024, true
+}
+
+func sampleMetrics() (protocol.MetricPoint, []protocol.ProcessItem, []protocol.DriveItem, []protocol.DataUsageItem, error) {
 	telemetryMu.Lock()
 	defer telemetryMu.Unlock()
 
 	cpu := sampleCPU()
 	ramUsed, ramTotal := sampleMemory()
 	drives := sampleDrives()
-	rxBps, txBps := sampleNetwork(1.0)
-	procs := sampleTopProcesses()
-	cpuTemp := sampleThermal()
+	rxBps, txBps, totalRx, totalTx := sampleNetwork(2.0)
+	procs, dataUsage := sampleProcesses()
+	cpuTemp := sampleCPUThermal()
+
+	gpuUtil, gpuTemp, gpuMemUsed, gpuMemTotal, _ := sampleNvidiaGPU()
 
 	pt := protocol.MetricPoint{
-		Timestamp: time.Now().Unix(),
-		CPU:       cpu,
-		RAMUsed:   ramUsed,
-		RAMTotal:  ramTotal,
-		NetRx:     rxBps,
-		NetTx:     txBps,
-		CPUTemp:   cpuTemp,
+		Timestamp:   time.Now().Unix(),
+		CPU:         cpu,
+		RAMUsed:     ramUsed,
+		RAMTotal:    ramTotal,
+		GPU:         gpuUtil,
+		GPUMemUsed:  gpuMemUsed,
+		GPUMemTotal: gpuMemTotal,
+		NetRx:       rxBps,
+		NetTx:       txBps,
+		NetTotalRx:  totalRx,
+		NetTotalTx:  totalTx,
+		CPUTemp:     cpuTemp,
+		GPUTemp:     gpuTemp,
 	}
 
-	return pt, procs, drives, nil
+	return pt, procs, drives, dataUsage, nil
 }
