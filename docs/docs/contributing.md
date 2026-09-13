@@ -72,12 +72,35 @@ go run cmd/server/main.go
 pnpm dev:frontend
 ```
 
+### Running beside an installed Switchboard
+
+`pnpm dev` runs the checkout as the **dev profile**, so you do not have to quit
+an installed copy first. The profile moves everything the two would otherwise
+fight over:
+
+| | Installed app | `pnpm dev` |
+| :--- | :--- | :--- |
+| Daemon port | `9427` | `9428` |
+| Database | `switchboard.db` | `switchboard-dev.db` |
+| Host name on the phone | `MY-PC` | `MY-PC (dev)` |
+| Electron app name / userData | `Switchboard` | `Switchboard Dev` |
+| Android application id | `com.switchboard.app` | `com.switchboard.app.dev` |
+
+The Android **debug** build is the dev client: it installs beside the release
+one, is labelled *Switchboard Dev*, and dials `9428` when an address carries no
+port. Pair it with the desktop checkout; the two stores are separate, so dev
+pairings never touch real ones.
+
+Set `SWITCHBOARD_PROFILE=` (empty) to make a checkout bind the shipped port
+instead.
+
 ### Environment Variables
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `SWITCHBOARD_PORT` | `9427` | The local network port the Go daemon binds to for mobile WebSocket & HTTP connections. |
 | `SWITCHBOARD_DB` | OS AppData (`%APPDATA%/switchboard/host.db`) | SQLite database path for persistent pairing keys and device registrations. |
+| `SWITCHBOARD_PROFILE` | `dev` under `pnpm dev`, otherwise unset | Names a parallel installation. Moves the port, the database and the advertised host name aside. |
 | `SWITCHBOARD_DEV` | `0` | Set to `1` when developing to reload Vite dev server and unpackaged daemon binaries. |
 
 ---
