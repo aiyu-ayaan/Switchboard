@@ -69,6 +69,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.switchboard.app.data.HapticPreferences
 import com.switchboard.app.data.ThemePreferences
+import com.switchboard.app.ui.AboutSystemScreen
 import com.switchboard.app.ui.ConnectionInfoSheet
 import com.switchboard.app.ui.HomeScreen
 import com.switchboard.app.ui.PairingScreen
@@ -163,6 +164,7 @@ sealed interface AppScreen {
     data class Detail(val section: Section) : AppScreen
     data object Settings : AppScreen
     data object Updates : AppScreen
+    data object AboutSystem : AppScreen
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -275,9 +277,12 @@ fun SwitchboardApp(
         if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
             (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
-        // Updates is reached from Settings, so back goes there rather than
-        // dropping two levels to the home surface.
-        currentScreen = if (currentScreen is AppScreen.Updates) AppScreen.Settings else AppScreen.Main
+        // Updates is reached from Settings, AboutSystem is reached from Resources
+        currentScreen = when (currentScreen) {
+            is AppScreen.Updates -> AppScreen.Settings
+            is AppScreen.AboutSystem -> AppScreen.Detail(Section.Resources)
+            else -> AppScreen.Main
+        }
     }
 
     // The lock control lives on the home surfaces only, so its click needs the
@@ -317,7 +322,12 @@ fun SwitchboardApp(
             onRefreshApps = viewModel::refreshInstalledApps,
             onPower = viewModel::sendPower,
             onMicVolume = viewModel::setMicVolume,
-            onAudioInput = viewModel::setInputDevice
+            onAudioInput = viewModel::setInputDevice,
+            onQueryResources = viewModel::queryResources,
+            onOpenAbout = {
+                viewModel.queryAboutSystem()
+                currentScreen = AppScreen.AboutSystem
+            }
         )
     }
 
@@ -341,10 +351,10 @@ fun SwitchboardApp(
                                 if (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck) {
                                     (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                                 }
-                                currentScreen = if (currentScreen is AppScreen.Updates) {
-                                    AppScreen.Settings
-                                } else {
-                                    AppScreen.Main
+                                currentScreen = when (currentScreen) {
+                                    is AppScreen.Updates -> AppScreen.Settings
+                                    is AppScreen.AboutSystem -> AppScreen.Detail(Section.Resources)
+                                    else -> AppScreen.Main
                                 }
                             },
                             modifier = Modifier.size(48.dp)
@@ -386,6 +396,18 @@ fun SwitchboardApp(
                                     )
                                     Text(
                                         text = "Released on GitHub, installed by Android",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                is AppScreen.AboutSystem -> {
+                                    Text(
+                                        text = "About System",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = state.activeHost?.hostName ?: "Hardware & Battery Specs",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -530,6 +552,13 @@ fun SwitchboardApp(
                     }
                     is AppScreen.Updates -> {
                         UpdateScreen()
+                    }
+                    is AppScreen.AboutSystem -> {
+                        AboutSystemScreen(
+                            state = state,
+                            onRefresh = viewModel::queryAboutSystem,
+                            onBack = { currentScreen = AppScreen.Detail(Section.Resources) }
+                        )
                     }
                     is AppScreen.Detail -> {
                         SectionScreen(
