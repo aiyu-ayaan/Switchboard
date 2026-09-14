@@ -144,6 +144,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.biometric)
+    // Declared only to outrank the fragment 1.2.5 biometric pulls in; see the
+    // note beside its version in the catalog.
+    implementation(libs.androidx.fragment)
     // ponytail: deprecated; kept only so HostStore can read the pre-Keystore
     // prefs file during migration. Drop one release after that ships.
     implementation(libs.androidx.security.crypto)
