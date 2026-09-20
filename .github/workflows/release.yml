@@ -21,9 +21,15 @@
 # key on every launch would silently un-pair every phone. See
 # frontend/electron-builder.yml.
 #
-# No macOS or Linux desktop build: the system, audio and camera backends are
-# Windows-only and return ErrUnsupported elsewhere, so those installers would
-# ship an app whose controls all fail. They arrive with the backends.
+# No macOS desktop build: the system, audio and camera backends there still
+# return ErrUnsupported, so the installer would ship an app whose controls all
+# fail. It arrives with the backend.
+#
+# Linux ships an AppImage and a .deb. Both carry the same daemon the Windows
+# installer does, built for linux/amd64, and drive displays, audio, media,
+# telemetry and the pointer natively. What is still missing there -- clipboard
+# push, power actions, the Stream Deck -- reports its capability as absent, so
+# the phone hides those controls rather than offering ones that fail.
 #
 # The APKs are unsigned when ANDROID_KEYSTORE_BASE64 is absent, so a fork can
 # run this without being handed a signing key.
@@ -219,12 +225,33 @@ jobs:
           if-no-files-found: error
 
   desktop:
-    name: Desktop installer
+    name: Desktop ${{ matrix.label }}
     needs: plan
     if: needs.plan.outputs.release == 'true'
-    # Windows because the daemon is: the system, audio and camera backends are
-    # built from _windows.go files and cross-compiling them is not on offer.
-    runs-on: windows-latest
+    # Each host builds its own daemon. The backends are per-GOOS files reaching
+    # native APIs -- WASAPI and WMI on Windows, PulseAudio, D-Bus and XTEST on
+    # Linux -- and Electron itself is packaged per platform, so neither half
+    # cross-compiles from the other.
+    strategy:
+      # One platform failing should not hide what the other produced.
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows installer
+            os: windows-latest
+            artifact: desktop-windows
+            script: 'package:win'
+            cache: |
+              ~\AppData\Local\electron\Cache
+              ~\AppData\Local\electron-builder\Cache
+          - label: Linux packages
+            os: ubuntu-latest
+            artifact: desktop-linux
+            script: 'package:linux'
+            cache: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -250,12 +277,12 @@ jobs:
       - run: pnpm build:frontend
 
       # The Electron zip is over 100 MB from GitHub's release CDN and is the
-      # one step here that fails for reasons unrelated to this repository.
+      # one step here that fails for reasons unrelated to this repository. The
+      # Linux cache also covers appimagetool and fpm, which electron-builder
+      # fetches from the same place on first use.
       - uses: actions/cache@v4
         with:
-          path: |
-            ~\AppData\Local\electron\Cache
-            ~\AppData\Local\electron-builder\Cache
+          path: ${{ matrix.cache }}
           key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: electron-${{ runner.os }}-
 
@@ -267,6 +294,8 @@ jobs:
           # electron-builder takes the version from frontend/package.json. The
           # NSIS version field is numeric-only, so a pre-release suffix is
           # dropped here and lives on in the release title and the file name.
+          # Debian would accept the suffix, but both platforms are kept on the
+          # same number so a release is one version everywhere.
           core="${VERSION%%-*}"
           node -e "
             const fs = require('fs');
@@ -277,35 +306,61 @@ jobs:
             }
           "
 
+      # bash on both, rather than pwsh on one: the retry is the same on each
+      # platform, and windows-latest runs bash perfectly well -- the version
+      # step above has always relied on that.
       - name: Package
+        shell: bash
         env:
-          # No code-signing certificate. Without this electron-builder goes
-          # looking for one in the machine store and fails on what it finds.
+          # No code-signing certificate on either platform. Without this
+          # electron-builder goes looking for one in the machine store and
+          # fails on what it finds.
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        shell: pwsh
         # A cold cache drops often enough to sink a release on its own.
         run: |
-          for ($i = 1; $i -le 3; $i++) {
-            pnpm --filter frontend package
-            if ($LASTEXITCODE -eq 0) { exit 0 }
-            Write-Host "Package attempt $i failed; retrying."
-            Start-Sleep -Seconds 15
-          }
+          for attempt in 1 2 3; do
+            if pnpm --filter frontend ${{ matrix.script }}; then exit 0; fi
+            echo "Package attempt $attempt failed; retrying."
+            sleep 15
+          done
           exit 1
 
-      - name: Name the installer after the version
+      # electron-builder names its output from the version in package.json,
+      # which had any pre-release suffix stripped above because NSIS will not
+      # take one. The suffix belongs in the file name a user downloads, so it
+      # is put back here. Windows produces one file and Linux two, so this
+      # walks whatever was built rather than assuming a count.
+      - name: Name the artifacts after the version
         shell: bash
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
+          set -eu
+          shopt -s nullglob
           mkdir -p "$RUNNER_TEMP/out"
-          src=$(ls frontend/release/*.exe | head -1)
-          cp "$src" "$RUNNER_TEMP/out/Switchboard-Setup-${VERSION}.exe"
+
+          for src in frontend/release/*.exe; do
+            cp "$src" "$RUNNER_TEMP/out/Switchboard-Setup-${VERSION}.exe"
+          done
+          for src in frontend/release/*.AppImage; do
+            cp "$src" "$RUNNER_TEMP/out/Switchboard-${VERSION}.AppImage"
+          done
+          for src in frontend/release/*.deb; do
+            cp "$src" "$RUNNER_TEMP/out/Switchboard-${VERSION}.deb"
+          done
+
+          # An empty directory here would otherwise surface as the upload's
+          # error, which says nothing about which platform produced nothing.
+          if [ -z "$(ls -A "$RUNNER_TEMP/out")" ]; then
+            echo "::error::Packaging produced no artifacts. frontend/release held:"
+            ls -la frontend/release || true
+            exit 1
+          fi
           ls -la "$RUNNER_TEMP/out"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop
+          name: ${{ matrix.artifact }}
           path: ${{ runner.temp }}/out/*
           if-no-files-found: error
 
@@ -325,7 +380,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: '{android-*,desktop}'
+          pattern: '{android-*,desktop-*}'
           merge-multiple: true
 
       - run: ls -la artifacts
