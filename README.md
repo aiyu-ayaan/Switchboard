@@ -137,11 +137,26 @@ You don't need to build from source to use Switchboard! Pre-compiled, ready-to-r
 
 ### Step 1: Download & Install Desktop (PC)
 1. Head to the **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** page on your PC.
-2. Under **Assets**, download the desktop installer:
-   - **Windows**: `Switchboard-Setup.exe` (or the standalone portable archive).
-3. Run the installer or launch the executable.
-4. Switchboard starts the background Go control daemon and sits conveniently in your Windows system tray.
+2. Under **Assets**, download the build for your system:
+   - **Windows**: `Switchboard-Setup-<version>.exe`
+   - **Debian / Ubuntu / Mint**: `Switchboard-<version>.deb`, installed with `sudo apt install ./Switchboard-<version>.deb`
+   - **Any other Linux**: `Switchboard-<version>.AppImage`
+3. Run the installer, or the AppImage once it is `chmod +x`'d.
+4. Switchboard starts the background Go control daemon and sits in your system tray.
    *(If prompted by Windows Defender Firewall, check **Private networks** and click **Allow access**).*
+
+On Linux the AppImage can install itself — launcher entry, icon and a
+`switchboard` command included — in one line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scripts/install.sh | sh
+```
+
+Run it again to update, or with `--uninstall` to remove it; either way your
+paired phones survive. [`scripts/install.sh`](scripts/install.sh) takes
+`--pre`, `--version`, `--prefix` and `--help`, and the
+**[Linux host page](https://aiyu-ayaan.github.io/Switchboard/linux-host)** has
+the detail.
 
 ### Step 2: Download & Install Mobile (Android)
 1. On your Android device, open **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** in your browser.

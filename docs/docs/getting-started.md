@@ -48,6 +48,35 @@ Switchboard communicates strictly over your local Wi-Fi or LAN. An active intern
 - **Firewall Prompt**: On first launch, Windows Defender Firewall may ask for permission for the Switchboard daemon to communicate on private networks. Check **Private networks** and click **Allow access**.
 - **System Tray**: When you close the desktop window, Switchboard minimizes to your Windows system tray so your phone remains connected in the background. Right-click the tray icon to restore or quit.
 
+### Linux: one line instead of the download page
+
+The AppImage can install itself, which saves finding it in ~/Downloads every
+time you want to launch it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scripts/install.sh | sh
+```
+
+It takes the AppImage from the latest release and puts it under `~/.local`: the
+app in `~/.local/lib/switchboard`, a `switchboard` command in `~/.local/bin`,
+and an entry in your applications menu with the right icon.
+
+- **To update**, run the same line again — it says so when you already have the
+  newest build.
+- **To remove it**, run it with `--uninstall`:
+
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scripts/install.sh | sh -s -- --uninstall
+  ```
+
+- **Other options**: `--pre` takes the newest alpha or beta, `--version 1.2.3`
+  pins a release, `--prefix /opt/switchboard` installs somewhere else, and
+  `--help` lists them all.
+
+Installing, updating and uninstalling all leave `~/.config/Switchboard` alone —
+the host key and every paired phone live there, so none of the three un-pairs
+anything.
+
 ### Linux notes
 
 Install the `.deb` with `apt` rather than by double-clicking it, so the

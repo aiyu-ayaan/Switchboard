@@ -38,6 +38,15 @@ A development build is never offered an update — there is no installed copy fo
 a release to replace. Settings will say so.
 :::
 
+:::info On Linux
+The desktop updater applies the Windows installer, and a release carries no
+Linux equivalent it can run unattended — so **Settings → Updates** finds nothing
+to offer on a Linux host. Update it the way you installed it: re-run
+`scripts/install.sh` for the AppImage, or `sudo apt install ./Switchboard-<version>.deb`
+for the package. Both keep your pairings. The
+**[Linux host page](/linux-host)** has the commands.
+:::
+
 ---
 
 ## 📱 On Android

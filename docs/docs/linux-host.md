@@ -28,6 +28,49 @@ your `PATH`.
 The AppImage needs FUSE 2 on Ubuntu 24.04 and newer, which is no longer
 installed by default: `sudo apt install libfuse2t64`.
 
+### The AppImage, installed for you
+
+An AppImage is one file and no install step, which is its appeal and its
+nuisance: nothing gives it a launcher entry, an icon or a name you can type.
+[`scripts/install.sh`](https://github.com/aiyu-ayaan/Switchboard/blob/master/scripts/install.sh)
+does those three things and nothing more:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scripts/install.sh | sh
+```
+
+| It writes | Which is |
+| --------- | -------- |
+| `~/.local/lib/switchboard/Switchboard.AppImage` | the app, plus a `version` file next to it |
+| `~/.local/bin/switchboard` | a symlink, so `switchboard` starts it from a terminal |
+| `~/.local/share/applications/switchboard.desktop` | the launcher entry |
+| `~/.local/share/icons/hicolor/…/switchboard.png` | the icon set, read out of the AppImage itself |
+
+Run as root — `curl … | sudo sh` — it installs into `/usr/local` instead, for
+every user on the machine.
+
+| Flag | Does |
+| ---- | ---- |
+| *(none)* | the newest stable release |
+| `--pre` | the newest build of any channel, alpha and beta included |
+| `--version 1.2.3` | that release, whether or not it is the newest |
+| `--prefix DIR` | installs under `DIR` rather than `~/.local` |
+| `--force` | reinstalls a version that is already here |
+| `--uninstall` | removes all four paths above |
+
+Re-running it is the update: it compares the release against the `version` file
+and stops if there is nothing to do. It refuses while Switchboard is running,
+because replacing the file under a mounted AppImage takes the running copy down
+with it — quit it from the tray first.
+
+Nothing it does touches `~/.config/Switchboard`, so installing, updating and
+uninstalling all keep the host key and every pairing. `--uninstall` prints the
+one command that does remove them, for when that is what you meant.
+
+The desktop app's own updater is Windows-only for now — it looks for the NSIS
+installer and a release carries no Linux equivalent it could run unattended — so
+on Linux this script, or `apt`, is the update path.
+
 Your pairings live in `~/.config/Switchboard/switchboard.db`, not beside the
 app, so switching between the AppImage and the `.deb` — or updating either —
 keeps every paired phone.
