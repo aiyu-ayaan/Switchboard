@@ -16,10 +16,13 @@
 #
 # WHAT IT DOES NOT DO
 #
-# No portable desktop build, deliberately: the daemon keeps its host identity
-# key in SQLite beside the install, and a portable copy that regenerates that
-# key on every launch would silently un-pair every phone. See
-# frontend/electron-builder.yml.
+# No portable desktop build, deliberately -- though not for the reason this
+# comment used to give. The identity key is not beside the install:
+# config.defaultDBPath resolves to os.UserConfigDir()/Switchboard, so a portable
+# copy would find the same database and the same host key. The real reasons are
+# duller: Start Menu and desktop shortcuts, the uninstaller that removes the
+# Explorer verb the app registers at launch, and elevation to replace a running
+# daemon holding port 9427. See frontend/electron-builder.yml.
 #
 # No macOS desktop build: the system, audio and camera backends there still
 # return ErrUnsupported, so the installer would ship an app whose controls all
