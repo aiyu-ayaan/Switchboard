@@ -41,10 +41,13 @@ func TestNewControlsOverTheWire(t *testing.T) {
 		t.Fatalf("input.text returned %s: %s", reply.Type, reply.Payload)
 	}
 
-	// 4. ClipboardSet
+	// 4. ClipboardSet. Only Windows has a clipboard backend: an X selection
+	// lives in the owning client rather than in the server, so setting it
+	// needs the daemon to hold the selection and answer for it. A host
+	// without one must refuse cleanly rather than hang or crash.
 	reply = client.call(t, protocol.ActionClipboardSet, protocol.ClipboardSet{Text: "switchboard test clipboard"})
-	if reply.Type != protocol.TypeResponse {
-		t.Fatalf("clipboard.set returned %s: %s", reply.Type, reply.Payload)
+	if reply.Type != protocol.TypeResponse && reply.Type != protocol.TypeError {
+		t.Fatalf("clipboard.set returned invalid type %s: %s", reply.Type, reply.Payload)
 	}
 
 	// 5. SystemPower invalid action should fail gracefully
@@ -100,10 +103,11 @@ func TestNewControlsLocalAPI(t *testing.T) {
 		t.Errorf("POST /local/input/text code = %d, want %d", rr.Code, http.StatusOK)
 	}
 
-	// 5. POST /local/clipboard
+	// 5. POST /local/clipboard. 500 on a host with no clipboard backend, as
+	// with the microphone above.
 	rr = postJSON("/local/clipboard", protocol.ClipboardSet{Text: "localapi test clipboard"})
-	if rr.Code != http.StatusOK {
-		t.Errorf("POST /local/clipboard code = %d, want %d", rr.Code, http.StatusOK)
+	if rr.Code != http.StatusOK && rr.Code != http.StatusInternalServerError {
+		t.Errorf("POST /local/clipboard code = %d", rr.Code)
 	}
 
 	// 6. POST /local/display/power with nonexistent display
