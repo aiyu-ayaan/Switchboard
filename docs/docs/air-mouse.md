@@ -179,10 +179,19 @@ and it is the user's decision to make.
 
 ## 🧭 Other platforms
 
-`inputSupported()` reports `false` on macOS and Linux, so the Touchpad section
-does not appear. The host surface those backends need is four functions —
-`moveMouse`, `mouseButton`, `scrollMouse`, `shellGesture` — because the gesture
-engine never left the phone.
+Linux injects through the X11 XTEST extension, which is the same idea at a
+different layer: events enter the X server's ordinary dispatch path rather than
+the Windows message queue. The host surface each backend needs is four
+functions — `moveMouse`, `mouseButton`, `scrollMouse`, `shellGesture` —
+because the gesture engine never left the phone, which is what made that
+backend a contained piece of work rather than a port.
+
+The gesture chords differ there, because the desktops do, and XTEST reaches
+only X clients: in a Wayland session that means Xwayland-hosted applications
+and not the compositor's own surfaces. See [`linux-host.md`](./linux-host.md).
+
+`inputSupported()` still reports `false` on macOS, and on a Linux host with no
+reachable X display, so the Touchpad section does not appear there.
 
 ---
 

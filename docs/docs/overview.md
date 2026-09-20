@@ -47,7 +47,8 @@ Switchboard operates with a strict **local-first, zero-trust philosophy**:
 ### Desktop Host
 - **Supported Operating Systems**:
   - **Windows 10 / 11** (Full feature set: DDC/CI, WMI internal display, WASAPI mixer, SMTC media transport).
-  - **Linux / macOS** (Architecture supports modular OS drivers).
+  - **Linux** (DDC/CI and kernel backlight displays, PulseAudio/PipeWire audio, MPRIS media transport, procfs telemetry, XTEST air mouse. Power actions, the Stream Deck and clipboard push are not yet implemented — see [`linux-host.md`](./linux-host.md)).
+  - **macOS** (Architecture supports modular OS drivers; no backend yet).
 - **Display Compatibility**:
   - Any external display supporting **DDC/CI** connected via DisplayPort, HDMI, or USB-C.
   - Internal laptop displays supported via Windows WMI brightness controls.

@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'displays-ddcci',
         'audio-mixer',
+        'linux-host',
         'air-mouse',
         'stream-deck-neo',
         'home-screen-widget',
