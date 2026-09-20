@@ -90,6 +90,7 @@ appdir="${prefix}/lib/switchboard"
 appimage="${appdir}/Switchboard.AppImage"
 stamp="${appdir}/version"
 bin="${prefix}/bin/switchboard"
+launcher="${appdir}/switchboard-launch"
 entry="${prefix}/share/applications/switchboard.desktop"
 icons="${prefix}/share/icons"
 
@@ -128,8 +129,8 @@ if [ "$uninstall" = yes ]; then
 	fi
 
 	rm -rf "$appdir"
-	# Only our own symlink: a `switchboard` on PATH that came from the .deb is
-	# not ours to delete.
+	# Only our own link: a `switchboard` on PATH that came from the .deb is not
+	# ours to delete. Ours is a symlink into $appdir, which is already gone.
 	if [ -L "$bin" ]; then rm -f "$bin"; fi
 	rm -f "$entry"
 	find "${icons}/hicolor" -name 'switchboard.png' -type f -delete 2>/dev/null || true
@@ -267,7 +268,32 @@ mkdir -p "$appdir" "${prefix}/bin" "${prefix}/share/applications"
 mv "${tmp}/app" "${appimage}.new"
 mv -f "${appimage}.new" "$appimage"
 
-ln -sfn "$appimage" "$bin"
+# The AppImage is not started directly. Chromium's sandbox needs either
+# unprivileged user namespaces or a root-owned setuid helper, and an AppImage
+# can offer neither where the distribution has restricted them: Ubuntu 24.04
+# and everything built on it (Mint 22, Pop!_OS 24.04) set
+# kernel.apparmor_restrict_unprivileged_userns=1, and chrome-sandbox cannot be
+# root-owned inside a FUSE mount. The result is "The SUID sandbox helper binary
+# was found, but is not configured correctly" and a core dump.
+#
+# So the sandbox is dropped only where it cannot start, decided at launch rather
+# than at install because the sysctl can change under an installed copy. Where
+# user namespaces work the app keeps its sandbox. The .deb is unaffected: its
+# post-install script makes chrome-sandbox setuid.
+cat > "$launcher" <<EOF
+#!/bin/sh
+restricted=no
+[ "\$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] && restricted=yes
+[ "\$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null)" = 0 ] && restricted=yes
+[ "\$(cat /proc/sys/user/max_user_namespaces 2>/dev/null)" = 0 ] && restricted=yes
+if [ "\$restricted" = yes ]; then
+	exec "${appimage}" --no-sandbox "\$@"
+fi
+exec "${appimage}" "\$@"
+EOF
+chmod 755 "$launcher"
+
+ln -sfn "$launcher" "$bin"
 
 icon_name=switchboard
 if [ -d "${tmp}/squashfs-root/usr/share/icons" ]; then
@@ -287,7 +313,8 @@ elif [ -f "${tmp}/squashfs-root/switchboard.png" ]; then
 	cp -f "${tmp}/squashfs-root/switchboard.png" "${icons}/hicolor/512x512/apps/switchboard.png"
 fi
 
-# Exec is quoted because $prefix may contain spaces. StartupWMClass is
+# Exec goes through the launcher for the sandbox reason above, and is quoted
+# because $prefix may contain spaces. StartupWMClass is
 # Switchboard, the productName the window actually carries -- without it the
 # running window is a second, iconless entry in the taskbar.
 cat > "$entry" <<EOF
@@ -296,8 +323,8 @@ Type=Application
 Name=Switchboard
 GenericName=Remote desktop control
 Comment=Control your desktop from your phone
-Exec="${appimage}" %U
-TryExec=${appimage}
+Exec="${launcher}" %U
+TryExec=${launcher}
 Icon=${icon_name}
 Terminal=false
 Categories=Utility;
