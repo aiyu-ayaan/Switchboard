@@ -188,10 +188,32 @@ function startDaemon(): Promise<void> {
   return daemonStart;
 }
 
+/**
+ * Polls until the daemon answers, for up to `seconds`. False if it never does.
+ *
+ * Generous on purpose. A freshly installed Windows binary waits on Defender, and
+ * the first launch of a Linux AppImage reads the Go binary through a FUSE mount
+ * of a maximum-compression image -- measured at about fifteen seconds cold. Giving
+ * up early is worse than waiting: the renderer's next poll would then start a
+ * second daemon, which fails to bind and exits.
+ */
+async function waitForDaemon(seconds: number): Promise<boolean> {
+  for (let attempt = 0; attempt < seconds * 4 && !quitting; attempt += 1) {
+    if (await daemonRunning()) return true;
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  return false;
+}
+
 async function launchDaemon(): Promise<void> {
   if (quitting) return;
   if (await daemonRunning()) {
     console.log('[switchboard] using the daemon already listening on', DAEMON_PORT);
+    return;
+  }
+  // Ours, spawned, and still starting: wait for it rather than spawn a twin.
+  if (daemon && daemon.exitCode === null) {
+    await waitForDaemon(60);
     return;
   }
   const bin = daemonPath();
@@ -215,15 +237,9 @@ async function launchDaemon(): Promise<void> {
     daemon = null;
   });
 
-  // A freshly installed binary pays for Defender to read it before it listens,
-  // which is why this mattered most right after an update. Returning early left
-  // the first /state of the session refused and the window stuck on "Waiting
-  // for the Switchboard daemon".
-  for (let attempt = 0; attempt < 20 && !quitting; attempt += 1) {
-    if (await daemonRunning()) return;
-    await new Promise((done) => setTimeout(done, 250));
+  if (!(await waitForDaemon(60))) {
+    console.warn('[switchboard] daemon did not answer on', DAEMON_PORT);
   }
-  console.warn('[switchboard] daemon did not answer on', DAEMON_PORT);
 }
 
 function stopDaemon(): void {
