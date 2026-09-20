@@ -29,6 +29,23 @@ func requireX11(t *testing.T) *x11Conn {
 	return conn
 }
 
+// resetResidual clears the sub-pixel accumulator moveMouse and scrollMouse
+// carry between frames.
+//
+// It is package-level state shared by every test in this file, and it is
+// deliberately lossy: a fractional delta is held back until it is worth a
+// whole pixel. So a test that asserts an exact pixel count has to start from a
+// known carry, or it inherits whatever fraction the previous test left -- ten
+// frames of 0.2 leave an epsilon, which is enough to turn a 20-pixel nudge
+// into 19 and fail somewhere unrelated to what is being tested.
+func resetResidual(t *testing.T) {
+	t.Helper()
+	residual.Lock()
+	residual.moveX, residual.moveY = 0, 0
+	residual.scrollX, residual.scrollY = 0, 0
+	residual.Unlock()
+}
+
 func TestX11HandshakeDiscoversXTest(t *testing.T) {
 	conn := requireX11(t)
 
@@ -79,6 +96,7 @@ func TestGestureKeysymsResolve(t *testing.T) {
 // the pointer, confirms it landed, and puts it back where the user left it.
 func TestMoveMouseActuallyMoves(t *testing.T) {
 	conn := requireX11(t)
+	resetResidual(t)
 
 	startX, startY, err := conn.queryPointer()
 	if err != nil {
@@ -126,10 +144,7 @@ func TestMoveMouseActuallyMoves(t *testing.T) {
 // truncating each independently would make the cursor refuse to creep at all.
 func TestMoveMouseAccumulatesSubPixelDeltas(t *testing.T) {
 	conn := requireX11(t)
-
-	residual.Lock()
-	residual.moveX, residual.moveY = 0, 0
-	residual.Unlock()
+	resetResidual(t)
 
 	startX, _, err := conn.queryPointer()
 	if err != nil {
@@ -217,10 +232,7 @@ func TestInputTextEmptyIsANoOp(t *testing.T) {
 // spend real time sending thousands of them.
 func TestScrollRejectsRunawayFrames(t *testing.T) {
 	requireX11(t)
-
-	residual.Lock()
-	residual.scrollX, residual.scrollY = 0, 0
-	residual.Unlock()
+	resetResidual(t)
 
 	start := time.Now()
 	if err := scrollMouse(0, 100000, false); err != nil {
@@ -325,6 +337,7 @@ func TestSetKeycodeRoundTrips(t *testing.T) {
 // never recovers.
 func TestInjectionSurvivesAMappingChange(t *testing.T) {
 	conn := requireX11(t)
+	resetResidual(t)
 	if conn.spareKeycode == 0 {
 		t.Skip("this layout uses every keycode; nothing is free to borrow")
 	}
