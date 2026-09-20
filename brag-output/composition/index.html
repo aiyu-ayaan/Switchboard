@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080, height=1920">
+<title>Switchboard</title>
+<script src="assets/vendor/gsap.min.js"></script>
+<style>
+@font-face{font-family:"Inter";font-weight:500;src:url(assets/fonts/inter-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:600;src:url(assets/fonts/inter-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:700;src:url(assets/fonts/inter-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:800;src:url(assets/fonts/inter-latin-800-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:500;src:url(assets/fonts/jetbrains-mono-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:700;src:url(assets/fonts/jetbrains-mono-latin-700-normal.woff2) format("woff2")}
+:root{--canvas:#1a1b26;--card:#21222d;--raised:#292b38;--edge:#2f3140;--ink:#c8d1f0;--dim:#8b93b8;--blue:#7aa2f7;--green:#9ece6a}
+*{box-sizing:border-box}
+body{margin:0;background:#1a1b26;font-family:"Inter",system-ui,sans-serif;color:var(--ink)}
+#root{position:relative;width:100%;height:100%;overflow:hidden;background:var(--canvas)}
+.bg,.grid,.glow-a,.glow-b{position:absolute;pointer-events:none}
+.bg{inset:0;background:var(--canvas)}
+.grid{inset:0;background-image:radial-gradient(#2f3140 2px,transparent 2px);background-size:60px 60px;opacity:.45;-webkit-mask-image:linear-gradient(#000,transparent 85%);mask-image:linear-gradient(#000,transparent 85%)}
+.glow-a{left:-260px;top:-300px;width:1100px;height:1100px;border-radius:50%;background:radial-gradient(circle,rgba(122,162,247,.42),rgba(122,162,247,0) 66%)}
+.glow-b{right:-320px;bottom:-260px;width:1100px;height:1100px;border-radius:50%;background:radial-gradient(circle,rgba(158,206,106,.26),rgba(158,206,106,0) 66%)}
+.scene{position:absolute;inset:0}
+.inner{position:absolute;inset:0}
+.stage{position:absolute;inset:0}
+.copy{position:absolute;left:72px;right:72px;top:190px}
+.k{font:700 30px/1 "JetBrains Mono",monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--green);margin-bottom:26px}
+.hl{margin:0;font:800 104px/1.03 "Inter",sans-serif;letter-spacing:-.035em;color:var(--ink)}
+.ln{display:block}
+.ln.big{font-size:164px;line-height:1.02;letter-spacing:-.04em}
+.ln.g{color:var(--green)}
+.sub{margin:28px 0 0;font:500 42px/1.3 "Inter",sans-serif;color:var(--dim);max-width:900px}
+.brandrow{display:flex;align-items:center;gap:26px}
+.brandrow img{width:124px;height:124px;display:block}
+.wm{font:800 104px/1 "Inter",sans-serif;letter-spacing:-.04em;color:var(--ink)}
+.desk{position:absolute;left:70px;top:700px;width:940px}
+.dw{border-radius:22px;overflow:hidden;border:2px solid var(--edge);box-shadow:0 40px 90px rgba(0,0,0,.55)}
+.dw img{display:block;width:100%}
+.ph{position:absolute;padding:12px;border-radius:64px;background:#0a0a10;border:2px solid #3a3d52;box-shadow:0 50px 100px rgba(0,0,0,.6),0 0 0 1px #000}
+.screen{position:relative;border-radius:52px;overflow:hidden;background:#111}
+.screen img{display:block;width:100%}
+.ph.b{left:602px;top:1000px;width:430px}
+.ph.r{left:560px;top:740px;width:472px}
+.ph.hero{left:220px;top:860px;width:640px}
+.chips{position:absolute;display:flex;gap:16px}
+.chips.col{left:48px;top:1370px;width:520px;flex-direction:column}
+.chips.wide{left:48px;right:48px;top:1300px;flex-direction:column}
+.chips.wide.row{top:1500px;flex-direction:row;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:16px;height:84px;padding:0 26px;border-radius:24px;background:var(--card);border:2px solid var(--edge);font:700 27px/1 "JetBrains Mono",monospace;color:var(--ink);white-space:nowrap}
+.chip .dot{display:block;width:14px;height:14px;border-radius:50%;background:var(--green);flex:none;box-shadow:0 0 14px rgba(158,206,106,.7)}
+.chip.meter{flex-direction:column;align-items:stretch;justify-content:center;height:124px;gap:16px}
+.meter .row{display:flex;justify-content:space-between;align-items:baseline;font-size:25px}
+.meter .row span{color:var(--dim)}
+.meter .cnt{font-size:36px;color:var(--green);font-variant-numeric:tabular-nums}
+.bar{display:block;height:14px;border-radius:7px;background:var(--edge);overflow:hidden}
+.bar u{display:block;height:100%;width:100%;background:var(--green);border-radius:7px;transform-origin:0 50%}
+.chip.big{height:100px;font-size:34px;padding:0 40px;border-radius:30px}
+.chip.mono span{color:var(--blue)}
+.gcards{position:absolute;left:48px;top:780px;width:476px;display:flex;flex-direction:column;gap:20px}
+.gc{padding:28px 30px;border-radius:28px;background:var(--card);border:2px solid var(--edge)}
+.gt{font:700 33px/1.15 "Inter",sans-serif;color:var(--ink)}
+.gd{margin-top:10px;font:500 26px/1.3 "Inter",sans-serif;color:var(--dim)}
+.mcard{position:absolute;left:60px;top:700px;width:960px;height:720px;border-radius:40px;overflow:hidden;border:2px solid var(--edge);box-shadow:0 40px 90px rgba(0,0,0,.55),0 0 80px rgba(158,206,106,.12)}
+.mcard img{position:absolute;left:-28px;top:-470px;width:1016px;display:block}
+.dk{position:absolute;left:40px;top:700px;width:1000px;padding:12px;border-radius:52px;background:#0a0a10;border:2px solid #3a3d52;box-shadow:0 50px 100px rgba(0,0,0,.6)}
+.dk .screen{border-radius:40px}
+.keyhl{position:absolute;left:255px;top:225px;width:227px;height:112px;border-radius:18px;border:4px solid var(--green);box-shadow:0 0 30px rgba(158,206,106,.7);opacity:0}
+.finger,.trail{position:absolute;left:0;top:0;border-radius:50%;opacity:0}
+.finger{width:70px;height:70px;margin:-35px 0 0 -35px;background:radial-gradient(circle,rgba(158,206,106,.95),rgba(158,206,106,.35) 60%,rgba(158,206,106,0) 72%)}
+.trail{width:110px;height:110px;margin:-55px 0 0 -55px;background:radial-gradient(circle,rgba(122,162,247,.5),rgba(122,162,247,0) 70%)}
+.rip{position:absolute;left:0;top:0;width:90px;height:90px;margin:-45px 0 0 -45px;border-radius:50%;border:4px solid var(--green);opacity:0}
+.pcards{position:absolute;left:48px;right:48px;top:700px;display:flex;flex-direction:column;gap:24px}
+.pc{display:flex;align-items:center;gap:36px;height:270px;padding:0 44px;border-radius:36px;background:var(--card);border:2px solid var(--edge)}
+.pi{width:120px;height:120px;flex:none}
+.pi svg{width:100%;height:100%;display:block}
+.pn{font:800 54px/1.1 "Inter",sans-serif;letter-spacing:-.02em;color:var(--ink)}
+.pd{margin-top:12px;font:500 31px/1.3 "Inter",sans-serif;color:var(--dim)}
+.oicon{position:absolute;left:0;right:0;top:470px;display:flex;justify-content:center}
+.oicon img{width:280px;height:280px;display:block}
+.oword{position:absolute;left:0;right:0;top:800px;text-align:center;font:800 138px/1 "Inter",sans-serif;letter-spacing:-.045em;color:var(--ink)}
+.otag{position:absolute;left:0;right:0;top:985px;text-align:center;font:600 54px/1.2 "Inter",sans-serif;color:var(--green)}
+.opills{position:absolute;left:0;right:0;top:1150px;display:flex;flex-direction:column;align-items:center;gap:24px}
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1080" data-height="1920" data-duration="48.01">
+  <div class="bg"></div><div class="grid"></div><div class="glow-a" id="glowA"></div><div class="glow-b" id="glowB"></div>
+
+  <section id="s-intro" class="clip scene intro" data-layout-allow-overlap data-layout-allow-overflow data-start="0" data-len="7.35" data-duration="7.7" data-track-index="1">
+   <div class="inner">
+    <div class="copy" id="hookA">
+      <span class="ln big">Your PC.</span>
+      <span class="ln big g">in your</span>
+      <span class="ln big g">pocket.</span>
+    </div>
+    <div class="copy" id="introB">
+      <div class="k" id="introK">Introducing</div>
+      <div class="brandrow" id="brand"><img src="assets/img/icon.svg" alt=""><span class="wm">Switchboard</span></div>
+      <p class="sub" id="introSub">Displays. Audio. Files.<br>From your phone.</p>
+    </div>
+    <div class="stage">
+      
+      <div class="desk" id="desk-intro">
+        <div class="dw"><img src="assets/img/desktop_main.png" alt=""></div>
+      </div>
+      
+      <div class="ph hero" id="hero-phone">
+        <div class="screen"><img src="assets/img/android_main.jpg" alt=""></div>
+      </div>
+    </div>
+    <div class="chips col" id="introChips">
+      <div class="chip"><i class="dot"></i><span>Local Wi-Fi only</span></div><div class="chip"><i class="dot"></i><span>End-to-end encrypted</span></div><div class="chip"><i class="dot"></i><span>No accounts</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-displays" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="7.35" data-len="4.67" data-duration="5.02" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">01 · Displays</div>
+      <h2 class="hl"><span class="ln">Real monitor</span><span class="ln">brightness.</span></h2>
+      <p class="sub">The real backlight, via DDC/CI.</p>
+    </div>
+    <div class="stage">
+      <div class="desk" >
+        <div class="dw"><img src="assets/img/desktop_displays.png" alt=""></div>
+      </div>
+      <div class="ph b" >
+        <div class="screen"><img src="assets/img/android_displays.jpg" alt=""></div>
+      </div></div>
+    <div class="chips col">
+      <div class="chip meter"><div class="row"><span>EK240Y P6 · brightness</span><b class="cnt">100%</b></div><i class="bar"><u></u></i></div><div class="chip"><i class="dot"></i><span>DDC/CI · VESA MCCS</span></div><div class="chip"><i class="dot"></i><span>Brightness + contrast</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-audio" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="12.02" data-len="4.91" data-duration="5.26" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">02 · Audio mixer</div>
+      <h2 class="hl"><span class="ln">Per-app</span><span class="ln">volume.</span></h2>
+      <p class="sub">Turn Chrome down. Change output.</p>
+    </div>
+    <div class="stage">
+      <div class="desk" >
+        <div class="dw"><img src="assets/img/desktop_audio.png" alt=""></div>
+      </div>
+      <div class="ph b" >
+        <div class="screen"><img src="assets/img/android_audio.jpg" alt=""></div>
+      </div></div>
+    <div class="chips col">
+      <div class="chip meter"><div class="row"><span>Chrome · volume</span><b class="cnt">100%</b></div><i class="bar"><u></u></i></div><div class="chip"><i class="dot"></i><span>Switch output device</span></div><div class="chip"><i class="dot"></i><span>Master + every app</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-media" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="16.93" data-len="3.26" data-duration="3.61" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">03 · Media</div>
+      <h2 class="hl"><span class="ln">Play. Pause.</span><span class="ln">Skip.</span></h2>
+      <p class="sub">Track, artist, album art. Live.</p>
+    </div>
+    <div class="stage">
+      <div class="mcard"><img src="assets/img/android_main.jpg" alt=""></div>
+    </div>
+    <div class="chips wide row">
+      <div class="chip"><i class="dot"></i><span>Play · Pause · Skip</span></div><div class="chip"><i class="dot"></i><span>Full-res album art</span></div><div class="chip"><i class="dot"></i><span>Live track + artist</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-files" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="20.19" data-len="4.37" data-duration="4.72" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">04 · File transfer</div>
+      <h2 class="hl"><span class="ln">Send files.</span><span class="ln">Encrypted.</span></h2>
+      <p class="sub">Drop on either side. SHA-256 verified.</p>
+    </div>
+    <div class="stage">
+      <div class="desk" >
+        <div class="dw"><img src="assets/img/desktop_files.png" alt=""></div>
+      </div>
+      <div class="ph b" >
+        <div class="screen"><img src="assets/img/android_files.jpg" alt=""></div>
+      </div></div>
+    <div class="chips col">
+      <div class="chip"><i class="dot"></i><span>Drag &amp; drop to send</span></div><div class="chip"><i class="dot"></i><span>AES-256-GCM in transit</span></div><div class="chip"><i class="dot"></i><span>No cloud, no cable</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-mouse" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="24.56" data-len="3.27" data-duration="3.62" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">05 · Air mouse</div>
+      <h2 class="hl"><span class="ln">Your phone is</span><span class="ln">the trackpad.</span></h2>
+      <p class="sub">Tap, scroll, pinch, three-finger gestures.</p>
+    </div>
+    <div class="stage">
+      <div class="ph r" id="ph-mouse">
+        <div class="screen"><img src="assets/img/android_touchpad.jpg" alt="">
+          <i class="trail"></i><i class="finger"></i><i class="rip"></i></div>
+      </div></div>
+    <div class="gcards">
+      <div class="gc"><div class="gt">Tap</div><div class="gd">One finger clicks. Two fingers right-click.</div></div>
+      <div class="gc"><div class="gt">Scroll and pinch</div><div class="gd">Two fingers, just like a laptop.</div></div>
+      <div class="gc"><div class="gt">Three fingers</div><div class="gd">Task View and desktop switching.</div></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-deck" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="27.83" data-len="3.27" data-duration="3.62" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">06 · Control deck</div>
+      <h2 class="hl"><span class="ln">Your own</span><span class="ln">control deck.</span></h2>
+      <p class="sub">Eight keys. Synced with your desktop.</p>
+    </div>
+    <div class="stage">
+      <div class="dk"><div class="screen"><img src="assets/img/android_deck.jpg" alt=""><i class="keyhl"></i><i class="rip"></i></div></div>
+    </div>
+    <div class="chips wide">
+      <div class="chip"><i class="dot"></i><span>Launch apps and sites in one tap</span></div><div class="chip"><i class="dot"></i><span>Pages: Essentials, System &amp; Media</span></div><div class="chip"><i class="dot"></i><span>Edit from phone or desktop</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-webcam" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="31.1" data-len="3.28" data-duration="3.63" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">07 · Wi-Fi camera</div>
+      <h2 class="hl"><span class="ln">Your phone,</span><span class="ln">now a webcam.</span></h2>
+      <p class="sub">Streams to your PC over local Wi-Fi.</p>
+    </div>
+    <div class="stage">
+      <div class="ph r" >
+        <div class="screen"><img src="assets/img/android_camera.jpg" alt=""></div>
+      </div></div>
+    <div class="gcards">
+      <div class="gc"><div class="gt">Full · 720p · 480p</div><div class="gd">Up to 30 fps.</div></div>
+      <div class="gc"><div class="gt">Zoom, rotate, mirror</div><div class="gd">Framing from the phone.</div></div>
+      <div class="gc"><div class="gt">Virtual camera</div><div class="gd">Windows, OBS and VLC.</div></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-pair" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="34.38" data-len="4.91" data-duration="5.26" data-track-index="1">
+   <div class="inner">
+    
+    <div class="copy">
+      <div class="k">08 · Pairing &amp; security</div>
+      <h2 class="hl"><span class="ln">Scan once.</span><span class="ln">Paired.</span></h2>
+      <p class="sub">No accounts. No passwords. No cloud.</p>
+    </div>
+    <div class="stage">
+      <div class="desk" >
+        <div class="dw"><img src="assets/img/desktop_devices.png" alt=""></div>
+      </div>
+      <div class="ph b" >
+        <div class="screen"><img src="assets/img/android_host_info.jpg" alt=""></div>
+      </div></div>
+    <div class="chips col">
+      <div class="chip"><i class="dot"></i><span>X25519 · AES-256-GCM</span></div><div class="chip"><i class="dot"></i><span>Multi-PC, one tap</span></div><div class="chip"><i class="dot"></i><span>Forget any time</span></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-platforms" class="clip scene std" data-layout-allow-overlap data-layout-allow-overflow data-start="39.29" data-len="4.36" data-duration="4.71" data-track-index="1">
+   <div class="inner">
+    <div class="copy">
+      <div class="k">Platforms</div>
+      <h2 class="hl"><span class="ln">Wherever</span><span class="ln">you work.</span></h2>
+      <p class="sub">Local Wi-Fi only. No cloud, no accounts.</p>
+    </div>
+    <div class="pcards">
+      <div class="pc"><div class="pi"><svg viewBox="0 0 64 64"><rect x="6" y="6" width="25" height="25" rx="3" fill="#7aa2f7"/><rect x="33" y="6" width="25" height="25" rx="3" fill="#7aa2f7"/><rect x="6" y="33" width="25" height="25" rx="3" fill="#7aa2f7"/><rect x="33" y="33" width="25" height="25" rx="3" fill="#7aa2f7"/></svg></div><div class="pt"><div class="pn">Windows 10 / 11</div><div class="pd">Displays, mixer, media, files, deck</div></div></div>
+      <div class="pc"><div class="pi"><svg viewBox="0 0 64 64"><rect x="5" y="9" width="54" height="46" rx="8" fill="none" stroke="#e0af68" stroke-width="5"/><path d="M17 26l10 8-10 8" fill="none" stroke="#e0af68" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M33 43h14" stroke="#e0af68" stroke-width="5" stroke-linecap="round"/></svg></div><div class="pt"><div class="pn">Linux</div><div class="pd">.deb · AppImage. Full remote control</div></div></div>
+      <div class="pc"><div class="pi"><svg viewBox="0 0 64 64"><rect x="17" y="4" width="30" height="56" rx="8" fill="none" stroke="#9ece6a" stroke-width="5"/><circle cx="32" cy="49" r="4" fill="#9ece6a"/><path d="M27 13h10" stroke="#9ece6a" stroke-width="5" stroke-linecap="round"/></svg></div><div class="pt"><div class="pn">Android 8.0+</div><div class="pd">Kotlin, Jetpack Compose, Material You</div></div></div>
+    </div>
+   </div>
+  </section>
+
+  <section id="s-outro" class="clip scene outro" data-layout-allow-overlap data-layout-allow-overflow data-start="43.65" data-len="4.36" data-duration="4.36" data-track-index="1">
+   <div class="inner">
+    <div class="oicon" id="oicon"><img src="assets/img/icon.svg" alt=""></div>
+    <div class="oword" id="oword">Switchboard</div>
+    <div class="otag" id="otag">Your PC, in your pocket.</div>
+    <div class="opills">
+      <div class="chip big" id="op1"><i class="dot"></i><span>Free · Open source · MIT</span></div>
+      <div class="chip big mono" id="op2"><span>github.com/aiyu-ayaan/Switchboard</span></div>
+    </div>
+   </div>
+  </section>
+
+  <audio id="bed" src="assets/music/bed.mp3" data-start="0" data-duration="48.01" data-track-index="20" data-volume="0.4"
+    data-automation='{"version":1,"lanes":[{"target":"volume","points":[{"t":0,"v":0},{"t":0.5,"v":1},{"t":45.4,"v":1},{"t":48.01,"v":0}]}]}'></audio>
+    <audio id="sfx0" src="assets/sfx/impactSoft_medium_001.ogg" data-start="0.3" data-track-index="21" data-volume="0.5"></audio>
+    <audio id="sfx1" src="assets/sfx/impactSoft_medium_002.ogg" data-start="1.55" data-track-index="21" data-volume="0.5"></audio>
+    <audio id="sfx2" src="assets/sfx/impactBell_heavy_000.ogg" data-start="4.1" data-track-index="21" data-volume="0.45"></audio>
+    <audio id="sfx3" src="assets/sfx/card-slide-1.ogg" data-start="7.65" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx4" src="assets/sfx/card-slide-1.ogg" data-start="12.32" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx5" src="assets/sfx/card-slide-1.ogg" data-start="17.23" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx6" src="assets/sfx/card-slide-1.ogg" data-start="20.49" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx7" src="assets/sfx/card-slide-1.ogg" data-start="24.86" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx8" src="assets/sfx/card-slide-1.ogg" data-start="28.13" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx9" src="assets/sfx/card-slide-1.ogg" data-start="31.4" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx10" src="assets/sfx/card-slide-1.ogg" data-start="34.68" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx11" src="assets/sfx/card-slide-1.ogg" data-start="39.59" data-track-index="22" data-volume="0.32"></audio>
+    <audio id="sfx12" src="assets/sfx/click2.ogg" data-start="8.35" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx13" src="assets/sfx/click2.ogg" data-start="8.73" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx14" src="assets/sfx/click2.ogg" data-start="9.11" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx15" src="assets/sfx/click2.ogg" data-start="13.02" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx16" src="assets/sfx/click2.ogg" data-start="13.4" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx17" src="assets/sfx/click2.ogg" data-start="13.78" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx18" src="assets/sfx/click2.ogg" data-start="17.93" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx19" src="assets/sfx/click2.ogg" data-start="18.31" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx20" src="assets/sfx/click2.ogg" data-start="18.69" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx21" src="assets/sfx/click2.ogg" data-start="21.19" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx22" src="assets/sfx/click2.ogg" data-start="21.57" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx23" src="assets/sfx/click2.ogg" data-start="21.95" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx24" src="assets/sfx/click2.ogg" data-start="28.83" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx25" src="assets/sfx/click2.ogg" data-start="29.21" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx26" src="assets/sfx/click2.ogg" data-start="29.59" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx27" src="assets/sfx/click2.ogg" data-start="35.38" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx28" src="assets/sfx/click2.ogg" data-start="35.76" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx29" src="assets/sfx/click2.ogg" data-start="36.14" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx30" src="assets/sfx/click2.ogg" data-start="25.56" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx31" src="assets/sfx/click2.ogg" data-start="25.94" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx32" src="assets/sfx/click2.ogg" data-start="26.32" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx33" src="assets/sfx/click2.ogg" data-start="32.1" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx34" src="assets/sfx/click2.ogg" data-start="32.48" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx35" src="assets/sfx/click2.ogg" data-start="32.86" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx36" src="assets/sfx/click2.ogg" data-start="5" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx37" src="assets/sfx/click2.ogg" data-start="5.4" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx38" src="assets/sfx/click2.ogg" data-start="5.8" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx39" src="assets/sfx/rollover2.ogg" data-start="40.19" data-track-index="24" data-volume="0.3"></audio>
+    <audio id="sfx40" src="assets/sfx/rollover2.ogg" data-start="40.57" data-track-index="24" data-volume="0.3"></audio>
+    <audio id="sfx41" src="assets/sfx/rollover2.ogg" data-start="40.95" data-track-index="24" data-volume="0.3"></audio>
+    <audio id="sfx42" src="assets/sfx/impactBell_heavy_000.ogg" data-start="43.8" data-track-index="21" data-volume="0.5"></audio>
+    <audio id="sfx43" src="assets/sfx/click2.ogg" data-start="45.2" data-track-index="23" data-volume="0.3"></audio>
+    <audio id="sfx44" src="assets/sfx/click2.ogg" data-start="45.6" data-track-index="23" data-volume="0.3"></audio>
+</div>
+<script>
+const AUDIO_DATA={"fps":30,"n":1455,"rms":[0.35,0.5,0.51,0.54,0.57,0.54,0.58,0.56,0.53,0.39,0.25,0.15,0.1,0.06,0.04,0.03,0.17,0.43,0.5,0.53,0.57,0.53,0.56,0.53,0.5,0.43,0.28,0.17,0.12,0.33,0.44,0.45,0.45,0.43,0.28,0.17,0.11,0.3,0.3,0.21,0.24,0.36,0.39,0.41,0.41,0.36,0.25,0.16,0.1,0.41,0.47,0.49,0.5,0.46,0.33,0.2,0.19,0.37,0.47,0.52,0.53,0.52,0.52,0.51,0.5,0.53,0.53,0.53,0.53,0.51,0.49,0.49,0.47,0.41,0.36,0.27,0.18,0.12,0.08,0.05,0.04,0.07,0.41,0.52,0.54,0.55,0.54,0.52,0.51,0.48,0.42,0.3,0.19,0.13,0.3,0.41,0.46,0.48,0.53,0.36,0.23,0.14,0.2,0.2,0.14,0.09,0.32,0.46,0.5,0.51,0.49,0.39,0.25,0.15,0.33,0.49,0.53,0.53,0.51,0.48,0.39,0.28,0.32,0.46,0.52,0.55,0.58,0.58,0.58,0.51,0.39,0.53,0.49,0.45,0.43,0.4,0.38,0.39,0.4,0.42,0.35,0.24,0.15,0.1,0.07,0.05,0.03,0.23,0.42,0.52,0.55,0.6,0.53,0.49,0.47,0.43,0.35,0.23,0.15,0.14,0.32,0.42,0.47,0.45,0.44,0.3,0.18,0.14,0.31,0.25,0.17,0.17,0.34,0.38,0.38,0.4,0.32,0.22,0.14,0.1,0.36,0.44,0.48,0.47,0.41,0.28,0.17,0.18,0.35,0.43,0.48,0.5,0.5,0.48,0.48,0.48,0.61,0.63,0.6,0.56,0.57,0.54,0.41,0.25,0.26,0.25,0.18,0.12,0.08,0.06,0.04,0.03,0.18,0.47,0.54,0.55,0.55,0.57,0.58,0.56,0.53,0.43,0.29,0.18,0.12,0.3,0.38,0.44,0.46,0.56,0.39,0.25,0.16,0.31,0.45,0.51,0.45,0.53,0.55,0.53,0.51,0.51,0.46,0.33,0.23,0.37,0.52,0.57,0.58,0.57,0.53,0.41,0.29,0.37,0.49,0.55,0.58,0.58,0.56,0.44,0.3,0.31,0.49,0.56,0.63,0.63,0.59,0.63,0.56,0.57,0.53,0.4,0.29,0.19,0.13,0.1,0.07,0.11,0.39,0.5,0.59,0.57,0.56,0.58,0.54,0.55,0.49,0.35,0.24,0.16,0.17,0.35,0.49,0.52,0.56,0.54,0.42,0.29,0.25,0.29,0.28,0.23,0.31,0.42,0.42,0.46,0.46,0.36,0.25,0.21,0.25,0.49,0.53,0.57,0.55,0.52,0.43,0.35,0.3,0.43,0.5,0.53,0.54,0.54,0.53,0.51,0.49,0.58,0.57,0.59,0.61,0.6,0.58,0.56,0.51,0.44,0.36,0.24,0.16,0.11,0.07,0.05,0.04,0.22,0.48,0.57,0.62,0.61,0.6,0.58,0.53,0.44,0.34,0.24,0.16,0.11,0.33,0.42,0.49,0.54,0.6,0.44,0.29,0.18,0.19,0.16,0.11,0.13,0.33,0.46,0.52,0.56,0.55,0.43,0.37,0.33,0.49,0.6,0.63,0.64,0.63,0.59,0.46,0.36,0.42,0.51,0.58,0.61,0.61,0.61,0.59,0.5,0.44,0.54,0.61,0.6,0.62,0.57,0.53,0.53,0.51,0.48,0.34,0.21,0.14,0.09,0.07,0.05,0.12,0.35,0.53,0.59,0.65,0.6,0.59,0.59,0.52,0.45,0.32,0.21,0.15,0.21,0.45,0.52,0.57,0.6,0.51,0.36,0.24,0.19,0.28,0.24,0.17,0.31,0.41,0.49,0.53,0.5,0.34,0.23,0.17,0.24,0.49,0.57,0.59,0.57,0.44,0.37,0.32,0.34,0.45,0.52,0.55,0.55,0.55,0.56,0.57,0.54,0.63,0.6,0.62,0.63,0.61,0.59,0.55,0.37,0.35,0.28,0.18,0.12,0.09,0.06,0.04,0.03,0.29,0.51,0.53,0.56,0.58,0.55,0.55,0.55,0.51,0.39,0.26,0.17,0.13,0.32,0.42,0.47,0.5,0.58,0.4,0.26,0.16,0.25,0.22,0.15,0.14,0.38,0.5,0.57,0.59,0.56,0.45,0.37,0.3,0.46,0.54,0.57,0.61,0.63,0.54,0.41,0.32,0.37,0.49,0.55,0.57,0.58,0.59,0.6,0.58,0.6,0.76,0.71,0.69,0.65,0.62,0.61,0.55,0.53,0.36,0.21,0.13,0.08,0.05,0.03,0.02,0.13,0.45,0.53,0.55,0.54,0.51,0.52,0.5,0.46,0.35,0.21,0.12,0.07,0.22,0.39,0.46,0.57,0.64,0.6,0.45,0.32,0.23,0.28,0.19,0.12,0.16,0.33,0.43,0.47,0.47,0.41,0.26,0.15,0.28,0.47,0.51,0.54,0.51,0.43,0.28,0.17,0.1,0.34,0.45,0.5,0.53,0.54,0.54,0.53,0.53,0.62,0.6,0.6,0.6,0.59,0.57,0.56,0.54,0.41,0.25,0.14,0.08,0.05,0.03,0.02,0.01,0.42,0.55,0.57,0.58,0.6,0.59,0.57,0.55,0.4,0.24,0.14,0.08,0.05,0.3,0.42,0.46,0.56,0.71,0.54,0.39,0.26,0.29,0.22,0.14,0.08,0.26,0.39,0.45,0.48,0.46,0.35,0.25,0.18,0.45,0.54,0.59,0.59,0.61,0.56,0.39,0.27,0.35,0.42,0.45,0.45,0.46,0.46,0.46,0.46,0.6,0.63,0.53,0.52,0.48,0.43,0.44,0.4,0.39,0.33,0.21,0.13,0.08,0.05,0.03,0.02,0.15,0.47,0.58,0.61,0.61,0.59,0.59,0.57,0.56,0.5,0.31,0.18,0.1,0.22,0.35,0.38,0.42,0.62,0.54,0.41,0.29,0.26,0.27,0.19,0.12,0.15,0.31,0.33,0.37,0.36,0.25,0.16,0.1,0.33,0.51,0.5,0.52,0.48,0.41,0.27,0.16,0.1,0.31,0.42,0.46,0.48,0.49,0.5,0.5,0.52,0.65,0.64,0.6,0.56,0.53,0.52,0.41,0.26,0.15,0.09,0.05,0.03,0.02,0.01,0.01,0.01,0.3,0.44,0.51,0.53,0.53,0.55,0.55,0.54,0.5,0.33,0.19,0.11,0.11,0.3,0.4,0.45,0.55,0.6,0.48,0.35,0.25,0.3,0.22,0.14,0.1,0.32,0.42,0.47,0.49,0.5,0.39,0.26,0.23,0.49,0.57,0.6,0.61,0.59,0.5,0.35,0.25,0.38,0.47,0.53,0.55,0.58,0.57,0.49,0.35,0.53,0.69,0.68,0.68,0.66,0.66,0.66,0.64,0.61,0.5,0.36,0.25,0.16,0.16,0.13,0.1,0.26,0.49,0.57,0.6,0.65,0.61,0.65,0.61,0.57,0.43,0.33,0.27,0.2,0.23,0.46,0.53,0.54,0.75,0.63,0.47,0.33,0.3,0.29,0.23,0.19,0.24,0.38,0.43,0.43,0.4,0.28,0.18,0.12,0.38,0.55,0.56,0.54,0.52,0.42,0.31,0.25,0.2,0.39,0.5,0.54,0.56,0.57,0.59,0.57,0.53,0.66,0.62,0.6,0.55,0.52,0.53,0.51,0.5,0.43,0.33,0.27,0.21,0.18,0.14,0.1,0.08,0.42,0.49,0.54,0.56,0.56,0.55,0.56,0.54,0.53,0.5,0.42,0.34,0.31,0.45,0.52,0.56,0.66,0.74,0.54,0.38,0.25,0.31,0.26,0.2,0.19,0.39,0.47,0.51,0.53,0.5,0.37,0.26,0.27,0.52,0.55,0.55,0.52,0.5,0.44,0.37,0.24,0.35,0.47,0.53,0.56,0.59,0.58,0.59,0.56,0.72,0.75,0.78,0.71,0.69,0.64,0.6,0.61,0.57,0.46,0.36,0.26,0.17,0.14,0.11,0.09,0.29,0.51,0.59,0.61,0.64,0.63,0.61,0.62,0.59,0.48,0.34,0.27,0.21,0.36,0.46,0.55,0.54,0.73,0.76,0.6,0.43,0.38,0.34,0.26,0.2,0.24,0.38,0.45,0.47,0.48,0.42,0.31,0.22,0.47,0.53,0.55,0.56,0.52,0.45,0.3,0.2,0.22,0.35,0.42,0.47,0.49,0.52,0.53,0.52,0.55,0.7,0.69,0.64,0.6,0.58,0.52,0.39,0.25,0.24,0.23,0.21,0.17,0.17,0.15,0.12,0.1,0.39,0.51,0.56,0.57,0.59,0.56,0.52,0.52,0.48,0.38,0.29,0.23,0.26,0.41,0.48,0.48,0.48,0.43,0.28,0.17,0.1,0.1,0.12,0.14,0.15,0.16,0.17,0.18,0.19,0.19,0.2,0.2,0.32,0.43,0.36,0.3,0.29,0.46,0.4,0.32,0.25,0.38,0.36,0.39,0.35,0.34,0.25,0.26,0.27,0.56,0.68,0.69,0.67,0.68,0.63,0.63,0.6,0.57,0.48,0.39,0.32,0.28,0.26,0.24,0.2,0.42,0.65,0.71,0.64,0.6,0.62,0.55,0.55,0.49,0.36,0.23,0.15,0.1,0.36,0.46,0.53,0.57,0.72,0.71,0.55,0.37,0.34,0.35,0.25,0.18,0.3,0.42,0.46,0.48,0.49,0.42,0.34,0.21,0.51,0.66,0.66,0.62,0.6,0.48,0.36,0.28,0.36,0.5,0.55,0.59,0.61,0.61,0.6,0.58,0.61,0.73,0.75,0.68,0.64,0.64,0.63,0.61,0.54,0.42,0.33,0.28,0.24,0.17,0.12,0.09,0.15,0.48,0.64,0.65,0.63,0.64,0.64,0.62,0.58,0.44,0.28,0.17,0.11,0.29,0.46,0.54,0.58,0.73,0.64,0.54,0.38,0.31,0.32,0.27,0.22,0.33,0.47,0.57,0.62,0.63,0.57,0.42,0.31,0.34,0.59,0.62,0.67,0.64,0.63,0.55,0.39,0.28,0.46,0.55,0.6,0.62,0.63,0.64,0.62,0.56,0.71,0.66,0.62,0.57,0.51,0.51,0.49,0.46,0.48,0.41,0.33,0.29,0.26,0.24,0.23,0.22,0.45,0.63,0.66,0.63,0.62,0.6,0.6,0.62,0.58,0.45,0.35,0.29,0.27,0.47,0.56,0.54,0.57,0.72,0.65,0.5,0.34,0.32,0.3,0.21,0.16,0.34,0.46,0.53,0.53,0.54,0.43,0.33,0.25,0.52,0.6,0.63,0.62,0.56,0.44,0.33,0.25,0.34,0.46,0.53,0.58,0.6,0.63,0.63,0.62,0.64,0.73,0.76,0.71,0.69,0.67,0.6,0.42,0.35,0.33,0.31,0.28,0.25,0.23,0.16,0.11,0.22,0.55,0.65,0.63,0.64,0.63,0.61,0.63,0.61,0.48,0.35,0.27,0.23,0.37,0.52,0.6,0.63,0.76,0.63,0.54,0.41,0.34,0.38,0.31,0.26,0.37,0.5,0.55,0.59,0.63,0.58,0.45,0.34,0.45,0.68,0.63,0.66,0.62,0.64,0.5,0.38,0.32,0.45,0.54,0.61,0.62,0.64,0.62,0.6,0.59,0.73,0.73,0.63,0.59,0.58,0.54,0.57,0.53,0.46,0.37,0.32,0.29,0.26,0.25,0.23,0.15,0.18,0.21,0.25,0.25,0.26,0.27,0.27,0.28,0.28,0.29,0.31,0.31,0.3,0.28,0.26,0.25,0.21,0.24,0.25,0.26,0.26,0.26,0.25,0.26,0.23,0.23,0.23,0.22,0.18,0.22,0.24,0.25,0.25,0.25,0.23,0.23,0.23,0.23,0.23,0.24,0.24,0.22,0.24,0.26,0.25,0.22,0.2,0.19,0.15,0.42,0.56,0.68,0.68,0.66,0.67,0.68,0.63,0.52,0.42,0.33,0.29,0.24,0.17,0.13,0.1,0.22,0.51,0.65,0.64,0.63,0.61,0.59,0.6,0.55,0.43,0.27,0.17,0.12,0.38,0.49,0.5,0.5,0.68,0.63,0.53,0.37,0.32,0.35,0.27,0.22,0.36,0.49,0.58,0.63,0.65,0.59,0.46,0.32,0.44,0.64,0.72,0.66,0.65,0.64,0.49,0.34,0.29,0.43,0.51,0.56,0.57,0.56,0.57,0.55,0.53,0.7,0.69,0.69,0.66,0.65,0.61,0.61,0.6,0.52,0.4,0.32,0.3,0.29,0.29,0.29],"bass":[0.37,0.53,0.53,0.55,0.59,0.56,0.6,0.58,0.51,0.38,0.23,0.13,0.07,0.04,0.02,0.01,0.15,0.42,0.51,0.53,0.59,0.54,0.57,0.54,0.49,0.41,0.25,0.14,0.1,0.31,0.41,0.43,0.44,0.42,0.28,0.17,0.11,0.3,0.3,0.2,0.16,0.26,0.31,0.35,0.37,0.34,0.24,0.15,0.09,0.43,0.45,0.46,0.46,0.42,0.31,0.19,0.13,0.3,0.44,0.51,0.53,0.53,0.53,0.52,0.52,0.55,0.54,0.53,0.52,0.5,0.49,0.48,0.47,0.35,0.22,0.13,0.08,0.05,0.03,0.02,0.01,0.04,0.39,0.5,0.52,0.54,0.53,0.51,0.5,0.47,0.32,0.19,0.11,0.07,0.25,0.36,0.42,0.46,0.52,0.37,0.23,0.14,0.19,0.17,0.12,0.07,0.25,0.38,0.44,0.47,0.47,0.38,0.24,0.14,0.32,0.47,0.48,0.46,0.43,0.4,0.32,0.22,0.2,0.38,0.46,0.5,0.52,0.52,0.53,0.48,0.36,0.51,0.47,0.43,0.41,0.39,0.37,0.38,0.36,0.34,0.29,0.19,0.12,0.07,0.04,0.03,0.02,0.21,0.4,0.49,0.52,0.57,0.53,0.49,0.49,0.37,0.24,0.14,0.08,0.08,0.28,0.37,0.43,0.44,0.45,0.31,0.18,0.14,0.3,0.24,0.16,0.13,0.29,0.33,0.35,0.37,0.32,0.22,0.13,0.1,0.36,0.42,0.45,0.45,0.4,0.27,0.16,0.11,0.28,0.38,0.43,0.47,0.48,0.48,0.48,0.47,0.62,0.64,0.58,0.54,0.53,0.51,0.38,0.23,0.15,0.11,0.07,0.04,0.03,0.02,0.01,0.01,0.14,0.48,0.52,0.54,0.53,0.54,0.55,0.53,0.48,0.32,0.19,0.11,0.07,0.27,0.34,0.41,0.43,0.56,0.38,0.24,0.15,0.3,0.44,0.5,0.45,0.47,0.49,0.49,0.49,0.48,0.44,0.3,0.19,0.33,0.51,0.56,0.57,0.57,0.52,0.37,0.25,0.31,0.4,0.46,0.49,0.5,0.49,0.37,0.25,0.21,0.43,0.5,0.59,0.6,0.58,0.62,0.58,0.57,0.52,0.36,0.22,0.13,0.07,0.05,0.03,0.02,0.33,0.46,0.54,0.54,0.53,0.57,0.52,0.54,0.44,0.28,0.17,0.11,0.13,0.3,0.42,0.43,0.47,0.49,0.36,0.24,0.21,0.25,0.23,0.18,0.22,0.32,0.36,0.39,0.4,0.32,0.22,0.17,0.17,0.45,0.48,0.51,0.51,0.48,0.36,0.26,0.19,0.34,0.44,0.5,0.53,0.55,0.53,0.52,0.51,0.56,0.53,0.54,0.56,0.57,0.55,0.54,0.5,0.34,0.21,0.13,0.07,0.04,0.03,0.02,0.01,0.17,0.46,0.52,0.54,0.54,0.54,0.54,0.5,0.39,0.25,0.15,0.09,0.06,0.28,0.36,0.41,0.44,0.53,0.39,0.25,0.15,0.16,0.13,0.09,0.06,0.25,0.39,0.47,0.5,0.51,0.4,0.27,0.21,0.4,0.56,0.6,0.62,0.62,0.57,0.42,0.27,0.31,0.42,0.48,0.51,0.52,0.53,0.51,0.41,0.33,0.48,0.57,0.55,0.57,0.54,0.51,0.52,0.48,0.43,0.29,0.17,0.1,0.06,0.04,0.03,0.03,0.27,0.49,0.53,0.59,0.56,0.55,0.57,0.5,0.41,0.25,0.15,0.09,0.17,0.41,0.48,0.52,0.52,0.45,0.31,0.19,0.14,0.25,0.22,0.14,0.26,0.37,0.46,0.51,0.48,0.35,0.22,0.15,0.17,0.45,0.51,0.52,0.52,0.41,0.29,0.23,0.2,0.35,0.46,0.52,0.54,0.55,0.56,0.56,0.54,0.62,0.58,0.56,0.57,0.55,0.55,0.51,0.34,0.22,0.14,0.08,0.05,0.03,0.02,0.01,0.01,0.24,0.51,0.5,0.52,0.54,0.53,0.52,0.53,0.47,0.31,0.18,0.11,0.08,0.27,0.34,0.37,0.39,0.53,0.38,0.24,0.14,0.22,0.2,0.13,0.09,0.32,0.45,0.52,0.55,0.54,0.4,0.26,0.18,0.37,0.47,0.51,0.55,0.57,0.51,0.35,0.23,0.27,0.43,0.5,0.54,0.56,0.58,0.58,0.57,0.57,0.75,0.68,0.65,0.63,0.6,0.6,0.55,0.53,0.37,0.21,0.12,0.07,0.04,0.02,0.01,0.08,0.4,0.5,0.53,0.53,0.5,0.51,0.51,0.47,0.36,0.21,0.12,0.07,0.18,0.38,0.45,0.57,0.64,0.61,0.47,0.34,0.25,0.29,0.2,0.12,0.13,0.29,0.4,0.43,0.44,0.39,0.24,0.14,0.21,0.42,0.47,0.5,0.48,0.41,0.26,0.15,0.09,0.31,0.44,0.5,0.53,0.54,0.54,0.54,0.53,0.62,0.57,0.56,0.55,0.55,0.54,0.53,0.52,0.39,0.23,0.13,0.07,0.04,0.02,0.01,0.01,0.39,0.51,0.54,0.54,0.56,0.55,0.53,0.52,0.38,0.23,0.13,0.07,0.04,0.28,0.4,0.46,0.53,0.7,0.55,0.41,0.28,0.29,0.22,0.14,0.08,0.23,0.34,0.41,0.44,0.42,0.31,0.21,0.14,0.4,0.52,0.58,0.58,0.6,0.54,0.37,0.24,0.31,0.36,0.4,0.42,0.43,0.44,0.43,0.43,0.56,0.6,0.48,0.46,0.41,0.38,0.4,0.37,0.36,0.32,0.2,0.12,0.07,0.04,0.03,0.02,0.09,0.42,0.57,0.63,0.62,0.61,0.6,0.58,0.58,0.51,0.32,0.18,0.1,0.2,0.33,0.35,0.39,0.59,0.54,0.43,0.32,0.26,0.27,0.19,0.12,0.11,0.25,0.28,0.33,0.31,0.21,0.13,0.08,0.28,0.46,0.45,0.49,0.46,0.4,0.25,0.15,0.09,0.29,0.39,0.44,0.46,0.48,0.49,0.49,0.49,0.64,0.62,0.59,0.55,0.52,0.5,0.42,0.26,0.15,0.08,0.05,0.03,0.02,0.01,0.01,0,0.26,0.4,0.48,0.51,0.5,0.52,0.52,0.51,0.48,0.32,0.18,0.1,0.11,0.28,0.37,0.42,0.49,0.59,0.5,0.37,0.27,0.3,0.22,0.13,0.09,0.26,0.35,0.42,0.44,0.44,0.34,0.22,0.16,0.43,0.51,0.56,0.58,0.55,0.46,0.3,0.2,0.31,0.42,0.48,0.51,0.53,0.53,0.46,0.33,0.49,0.67,0.65,0.65,0.65,0.65,0.64,0.63,0.6,0.49,0.31,0.2,0.12,0.09,0.07,0.05,0.17,0.43,0.54,0.58,0.64,0.6,0.64,0.61,0.56,0.42,0.29,0.2,0.14,0.17,0.42,0.51,0.52,0.74,0.64,0.49,0.35,0.31,0.26,0.19,0.15,0.19,0.33,0.38,0.4,0.37,0.24,0.15,0.09,0.31,0.51,0.53,0.5,0.47,0.38,0.26,0.19,0.15,0.34,0.45,0.49,0.52,0.53,0.54,0.54,0.48,0.63,0.59,0.56,0.51,0.49,0.48,0.48,0.48,0.4,0.28,0.21,0.16,0.12,0.08,0.06,0.04,0.37,0.41,0.47,0.51,0.5,0.49,0.51,0.51,0.5,0.45,0.33,0.25,0.23,0.41,0.5,0.54,0.62,0.72,0.55,0.4,0.27,0.3,0.23,0.16,0.14,0.34,0.42,0.47,0.49,0.47,0.34,0.22,0.2,0.46,0.5,0.5,0.47,0.43,0.38,0.31,0.2,0.32,0.46,0.52,0.56,0.58,0.57,0.57,0.55,0.7,0.75,0.76,0.68,0.67,0.63,0.59,0.6,0.58,0.45,0.3,0.19,0.12,0.08,0.06,0.05,0.21,0.45,0.57,0.6,0.64,0.63,0.6,0.63,0.59,0.47,0.3,0.2,0.14,0.31,0.41,0.51,0.5,0.71,0.78,0.63,0.45,0.38,0.32,0.23,0.16,0.19,0.31,0.38,0.41,0.41,0.35,0.24,0.16,0.4,0.46,0.49,0.48,0.45,0.38,0.25,0.16,0.14,0.28,0.37,0.42,0.45,0.48,0.49,0.5,0.53,0.69,0.68,0.61,0.55,0.53,0.48,0.35,0.22,0.18,0.17,0.15,0.12,0.11,0.09,0.07,0.06,0.3,0.46,0.51,0.52,0.54,0.53,0.51,0.51,0.48,0.35,0.25,0.18,0.21,0.36,0.42,0.44,0.45,0.41,0.27,0.16,0.1,0.07,0.08,0.09,0.09,0.09,0.09,0.1,0.1,0.1,0.1,0.11,0.21,0.3,0.22,0.17,0.16,0.32,0.26,0.2,0.14,0.27,0.26,0.31,0.26,0.26,0.2,0.23,0.25,0.54,0.66,0.67,0.65,0.66,0.61,0.6,0.59,0.54,0.42,0.28,0.2,0.15,0.12,0.1,0.08,0.31,0.62,0.72,0.64,0.58,0.6,0.53,0.52,0.48,0.33,0.2,0.11,0.07,0.35,0.45,0.5,0.52,0.71,0.75,0.59,0.4,0.35,0.36,0.25,0.17,0.22,0.32,0.37,0.39,0.41,0.34,0.24,0.14,0.45,0.66,0.67,0.6,0.59,0.46,0.31,0.21,0.3,0.44,0.51,0.55,0.57,0.58,0.59,0.59,0.59,0.73,0.77,0.66,0.6,0.6,0.59,0.56,0.48,0.32,0.22,0.17,0.14,0.09,0.06,0.04,0.06,0.42,0.63,0.62,0.59,0.6,0.61,0.58,0.55,0.38,0.22,0.13,0.07,0.27,0.43,0.52,0.56,0.7,0.65,0.58,0.41,0.32,0.31,0.23,0.17,0.27,0.41,0.53,0.59,0.61,0.56,0.39,0.25,0.25,0.53,0.58,0.65,0.61,0.6,0.53,0.35,0.23,0.42,0.52,0.57,0.6,0.61,0.62,0.62,0.56,0.7,0.65,0.59,0.55,0.48,0.46,0.45,0.42,0.42,0.32,0.22,0.16,0.13,0.11,0.1,0.1,0.33,0.58,0.65,0.6,0.59,0.57,0.58,0.58,0.52,0.37,0.25,0.19,0.18,0.44,0.55,0.55,0.54,0.73,0.69,0.54,0.37,0.32,0.3,0.21,0.13,0.28,0.4,0.48,0.48,0.49,0.39,0.27,0.19,0.47,0.57,0.59,0.57,0.51,0.38,0.26,0.18,0.26,0.4,0.48,0.54,0.57,0.6,0.61,0.6,0.6,0.7,0.75,0.69,0.66,0.64,0.58,0.41,0.27,0.2,0.15,0.12,0.1,0.08,0.05,0.04,0.12,0.5,0.63,0.59,0.59,0.6,0.57,0.59,0.57,0.4,0.26,0.19,0.15,0.32,0.48,0.56,0.6,0.72,0.63,0.55,0.39,0.29,0.33,0.24,0.18,0.28,0.44,0.51,0.57,0.59,0.54,0.38,0.26,0.34,0.64,0.6,0.66,0.61,0.6,0.46,0.31,0.22,0.35,0.44,0.52,0.55,0.57,0.56,0.56,0.56,0.71,0.73,0.6,0.56,0.53,0.49,0.52,0.49,0.41,0.29,0.19,0.13,0.1,0.09,0.07,0.05,0.05,0.07,0.08,0.09,0.09,0.09,0.09,0.1,0.1,0.1,0.11,0.11,0.11,0.1,0.09,0.09,0.07,0.09,0.1,0.11,0.11,0.11,0.11,0.12,0.1,0.11,0.11,0.11,0.09,0.1,0.1,0.1,0.1,0.1,0.09,0.09,0.09,0.1,0.11,0.12,0.12,0.11,0.13,0.14,0.14,0.13,0.13,0.13,0.1,0.36,0.55,0.67,0.64,0.6,0.62,0.63,0.58,0.45,0.29,0.21,0.17,0.14,0.09,0.06,0.04,0.14,0.44,0.62,0.61,0.62,0.61,0.59,0.61,0.56,0.37,0.21,0.12,0.07,0.36,0.5,0.49,0.48,0.67,0.65,0.57,0.4,0.33,0.35,0.24,0.18,0.31,0.44,0.54,0.6,0.64,0.58,0.4,0.24,0.36,0.59,0.71,0.66,0.64,0.63,0.48,0.31,0.22,0.34,0.42,0.47,0.49,0.49,0.5,0.5,0.48,0.69,0.69,0.67,0.62,0.62,0.58,0.58,0.58,0.46,0.3,0.19,0.13,0.1,0.08,0.07]};
+const T = {"intro":[0,7.35],"displays":[7.35,12.02],"audio":[12.02,16.93],"media":[16.93,20.19],"files":[20.19,24.56],"mouse":[24.56,27.83],"deck":[27.83,31.1],"webcam":[31.1,34.38],"pair":[34.38,39.29],"platforms":[39.29,43.65],"outro":[43.65,48.01]};
+const tl = gsap.timeline({ paused: true });
+const $ = (s) => document.querySelector(s);
+const OUT = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3, ease: "power2.in" }, t);
+
+// ---- standard feature scenes ------------------------------------------------
+document.querySelectorAll(".scene.std").forEach((sc) => {
+  const t0 = parseFloat(sc.dataset.start), len = parseFloat(sc.dataset.len);
+  const q = (s) => sc.querySelectorAll(s);
+  const has = (s) => q(s).length > 0;
+  // beat-locked: every scene entrance lands on a cue-grid beat (t0 values are beat times)
+  tl.fromTo(q(".k"), { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, t0 + 0.1);
+  tl.fromTo(q(".hl .ln"), { opacity: 0, y: 56 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out", stagger: 0.09 }, t0 + 0.2);
+  tl.fromTo(q(".sub"), { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, t0 + 0.6);
+  if (has(".desk")) tl.fromTo(q(".desk"), { opacity: 0, y: 90, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out" }, t0 + 0.3);
+  if (has(".ph")) tl.fromTo(q(".ph"), { opacity: 0, y: 200 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, t0 + 0.5);
+  if (has(".mcard, .dk")) tl.fromTo(q(".mcard, .dk"), { opacity: 0, y: 90, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out" }, t0 + 0.3);
+  if (has(".chip")) tl.fromTo(q(".chip"), { opacity: 0, x: -44 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", stagger: 0.38 }, t0 + 1.0);
+  if (has(".gc")) tl.fromTo(q(".gc"), { opacity: 0, x: -44 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", stagger: 0.38 }, t0 + 1.0);
+  if (has(".pc")) tl.fromTo(q(".pc"), { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out", stagger: 0.38 }, t0 + 0.9);
+  tl.fromTo(q(".stage"), { scale: 1 }, { scale: 1.03, duration: len + 0.3, ease: "none", transformOrigin: "50% 100%" }, t0);
+  OUT(sc.querySelector(".inner"), t0 + len);
+});
+
+// meters (count-down with matching bar)
+[["#s-displays", 100, 23, 7.35], ["#s-audio", 100, 19, 12.02]].forEach(([sel, from, to, t0]) => {
+  const el = $(sel + " .cnt"), bar = $(sel + " .bar u");
+  const p = { v: from };
+  tl.fromTo(p, { v: from }, { v: to, duration: 1.4, ease: "power2.inOut", onUpdate() { el.textContent = Math.round(p.v) + "%"; } }, t0 + 1.35);
+  tl.fromTo(bar, { scaleX: 1 }, { scaleX: to / 100, duration: 1.4, ease: "power2.inOut" }, t0 + 1.35);
+});
+
+// ---- intro ---------------------------------------------------------------------
+tl.set("#introB .k, #brand, #introSub, #desk-intro, #introChips .chip", { opacity: 0 }, 0);
+tl.fromTo("#hookA .ln:nth-child(1)", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.25);
+tl.fromTo("#hookA .ln:nth-child(n+2)", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.12 }, 1.55);
+tl.fromTo("#hero-phone", { opacity: 0, y: 320 }, { opacity: 1, y: 0, duration: 1.0, ease: "power3.out" }, 0.5);
+tl.to("#hookA", { opacity: 0, y: -40, duration: 0.3, ease: "power2.in" }, 3.25);
+// beat-locked: 3.55s phone glides into the desktop composition
+tl.fromTo("#hero-phone", { x: 0, y: 0, scale: 1, transformOrigin: "0 0" }, { x: 382, y: 140, scale: 430 / 640, duration: 0.85, ease: "power3.inOut", immediateRender: false }, 3.55);
+tl.fromTo("#introB .k", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 3.65);
+// beat-locked: 4.10s brand reveal
+tl.fromTo("#brand", { opacity: 0, y: 40, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.4)" }, 4.1);
+tl.fromTo("#introSub", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 4.5);
+tl.fromTo("#desk-intro", { opacity: 0, y: 90, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out" }, 4.0);
+tl.fromTo("#introChips .chip", { opacity: 0, x: -44 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out", stagger: 0.4 }, 5.0);
+OUT("#s-intro .inner", 7.35);
+
+// ---- air mouse: finger path + click ripple ---------------------------------------
+{
+  const t0 = 24.56, f = "#ph-mouse .finger", tr = "#ph-mouse .trail", r = "#ph-mouse .rip";
+  const pts = [[110, 250], [300, 330], [340, 520], [190, 620], [290, 450]];
+  tl.set([f, tr], { x: pts[0][0], y: pts[0][1] }, 0);
+  tl.to([f, tr], { opacity: 1, duration: 0.25 }, t0 + 1.0);
+  let t = t0 + 1.0;
+  for (let i = 1; i < pts.length; i++) {
+    tl.to(f, { x: pts[i][0], y: pts[i][1], duration: 0.42, ease: "power2.inOut" }, t);
+    tl.to(tr, { x: pts[i][0], y: pts[i][1], duration: 0.55, ease: "power2.inOut" }, t + 0.06);
+    t += 0.42;
+  }
+  tl.set(r, { x: pts[4][0], y: pts[4][1] }, 0);
+  tl.fromTo(r, { scale: 0.3, opacity: 0.9 }, { scale: 1.8, opacity: 0, duration: 0.6, ease: "power2.out" }, t0 + 2.75);
+  tl.fromTo(f, { scale: 1 }, { scale: 0.75, duration: 0.15, yoyo: true, repeat: 1, ease: "power1.inOut" }, t0 + 2.75);
+}
+
+// ---- deck: key press ---------------------------------------------------------------
+{
+  const t0 = 27.83;
+  tl.fromTo("#s-deck .keyhl", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out", transformOrigin: "50% 50%" }, t0 + 1.7);
+  tl.set("#s-deck .rip", { x: 368, y: 281 }, 0);
+  tl.fromTo("#s-deck .rip", { scale: 0.3, opacity: 0.9 }, { scale: 2.2, opacity: 0, duration: 0.7, ease: "power2.out" }, t0 + 1.8);
+  tl.to("#s-deck .keyhl", { opacity: 0, duration: 0.4, ease: "power1.in" }, t0 + 2.5);
+}
+
+// ---- outro ---------------------------------------------------------------------------
+{
+  const t0 = 43.65;
+  // beat-locked: 43.65s icon lands on the cue
+  tl.fromTo("#oicon", { opacity: 0, scale: 0.7, y: 30 }, { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "back.out(1.5)" }, t0);
+  tl.fromTo("#oword", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.65, ease: "power3.out" }, t0 + 0.4);
+  tl.fromTo("#otag", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, t0 + 0.85);
+  tl.fromTo("#op1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, t0 + 1.5);
+  tl.fromTo("#op2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, t0 + 1.9);
+}
+
+// ---- audio-reactive background: pure function of timeline time (bass -> blue warmth, level -> green) ----
+{
+  const gA = $("#glowA"), gB = $("#glowB"), p = { t: 0 };
+  tl.fromTo(p, { t: 0 }, { t: 48.01, duration: 48.01, ease: "none", onUpdate() {
+    const f = Math.min(AUDIO_DATA.n - 1, Math.max(0, Math.round(p.t * AUDIO_DATA.fps)));
+    const b = AUDIO_DATA.bass[f], r = AUDIO_DATA.rms[f];
+    gA.style.opacity = (0.55 + 0.45 * b).toFixed(3);
+    gA.style.transform = "scale(" + (1 + 0.07 * b).toFixed(3) + ")";
+    gB.style.opacity = (0.5 + 0.5 * r).toFixed(3);
+  } }, 0);
+}
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

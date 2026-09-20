@@ -1,0 +1,2 @@
+Switchboard is now live. Real monitor brightness (DDC/CI), per-app volume, media, encrypted file transfer, air mouse, a control deck and phone-as-webcam, all from your Android phone over local Wi-Fi.
+No accounts, no cloud, end-to-end encrypted. Windows, Linux and Android. Free and open source: github.com/aiyu-ayaan/Switchboard
