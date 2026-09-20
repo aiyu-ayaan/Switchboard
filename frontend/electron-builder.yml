@@ -21,9 +21,12 @@ files:
   - '!**/*.ts'
   - '!**/tsconfig*.json'
 
-# The Go daemon, which main/index.ts looks for at
-# `join(process.resourcesPath, 'bin', 'switchboard.exe')`. Built by
-# `pnpm build:backend` into the repo-root `bin/` before packaging.
+# The Go daemon, which main/index.ts looks for under
+# `join(process.resourcesPath, 'bin', ...)` -- `switchboard.exe` on Windows and
+# `switchboard` elsewhere. Built by `pnpm build:backend` into the repo-root
+# `bin/` before packaging, which is why the filter is a prefix rather than a
+# name: one line covers both. File modes are preserved, so the Linux binary
+# arrives executable.
 extraResources:
   - from: ../bin
     to: bin
@@ -43,9 +46,14 @@ compression: maximum
 
 win:
   icon: resources/icon.ico
-  # NSIS only, deliberately: no portable target. The daemon needs a stable
-  # install location for its SQLite identity store, and a portable build that
-  # regenerates the host key on every launch would un-pair every phone.
+  # NSIS only. The comment here used to say a portable target would un-pair
+  # every phone because the daemon keeps its identity beside the install --
+  # which is not where it keeps it. config.defaultDBPath resolves to
+  # os.UserConfigDir()/Switchboard, so a portable copy finds the same database
+  # and the same host key. The real reasons to stay with an installer are
+  # duller: Start Menu and desktop shortcuts, the uninstaller that removes the
+  # Explorer verb the app registers at launch, and elevation to replace a
+  # running daemon holding port 9427. Worth revisiting if anyone asks for it.
   target:
     - target: nsis
       arch:
@@ -65,6 +73,66 @@ nsis:
   include: resources/installer.nsh
   artifactName: ${productName}-Setup-${version}.${ext}
   uninstallDisplayName: ${productName}
+
+linux:
+  icon: resources/icon.png
+  # Without this the binary is called `frontend`. On Windows the executable
+  # name defaults to productName, but on Linux electron-builder falls back to
+  # the package.json `name` -- which is the workspace folder, not the product.
+  # It is also what the .desktop Exec line, the /usr/bin symlink and the
+  # window's WM_CLASS are all derived from, so getting it wrong shows up in
+  # the launcher, the taskbar and the shell at once.
+  executableName: switchboard
+  category: Utility
+  synopsis: Control your desktop from your phone
+  description: >-
+    Switchboard pairs an Android phone with this desktop over the local network
+    and controls displays, audio, media playback and the pointer, and transfers
+    files, all end-to-end encrypted.
+  # The tray icon is the one thing that needs a desktop-side dependency:
+  # GNOME has shipped no tray since 3.26, so a bare GNOME session needs the
+  # AppIndicator extension for the tray to appear. The window works regardless.
+  # A flat map of .desktop keys in electron-builder 25; the nested `entry:`
+  # form is a later schema and serialises to a literal `entry=[object Object]`
+  # line here. StartupWMClass is not set: it already defaults to productName,
+  # which is what the window carries now that package.json names the product.
+  desktop:
+    Keywords: remote;control;display;brightness;volume;media;
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+
+appImage:
+  artifactName: ${productName}-${version}.${ext}
+
+deb:
+  artifactName: ${productName}-${version}.${ext}
+  # Same trap as executableName: the Debian package name also defaults to the
+  # package.json `name`, so without this the control file reads
+  # `Package: frontend` and `apt remove` wants a package called frontend.
+  packageName: switchboard
+  # electron-builder's default depends still lists gconf2, gconf-service and
+  # libappindicator1, none of which exist on a current Debian or Ubuntu -- the
+  # package installs nowhere. This is the modern equivalent set.
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - xdg-utils
+    # Switchboard's own. pactl is how every audio control is driven, and
+    # lspci is what turns a PCI id into a GPU name on the About System screen.
+    # Both are small and neither is reachable any other way.
+    - pulseaudio-utils
+    - pciutils
 
 # The daemon is the only thing that opens a port, and it binds loopback for the
 # local API. Nothing here should be publishing an auto-update feed it does not
