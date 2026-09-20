@@ -8,6 +8,18 @@ import (
 	"switchboard/backend/internal/system"
 )
 
+// requireTelemetry skips on a platform with no sampling backend. Windows and
+// Linux both have one; everything else still falls through to the stub, and
+// the cadence these tests pin is meaningless there.
+func requireTelemetry(t *testing.T) {
+	t.Helper()
+	switch runtime.GOOS {
+	case "windows", "linux":
+	default:
+		t.Skipf("telemetry sampling is not implemented on %s", runtime.GOOS)
+	}
+}
+
 func TestSampleMetrics(t *testing.T) {
 	c := system.NewController()
 	defer c.Close()
@@ -68,9 +80,7 @@ func TestAboutSystem(t *testing.T) {
 // WMI thermal, the process table, drive capacity) are primed, a tick must
 // cost a handful of syscalls rather than tens of milliseconds of host CPU.
 func TestSampleMetricsCachesSlowSources(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("telemetry sampling is only implemented on windows")
-	}
+	requireTelemetry(t)
 	c := system.NewController()
 	defer c.Close()
 
@@ -95,9 +105,7 @@ func TestSampleMetricsCachesSlowSources(t *testing.T) {
 // still records CPU, memory and network so history has no holes, but must not
 // touch the process table, drive table, thermal zone or GPU.
 func TestSampleMetricsLiteSkipsSlowSources(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("telemetry sampling is only implemented on windows")
-	}
+	requireTelemetry(t)
 	c := system.NewController()
 	defer c.Close()
 
