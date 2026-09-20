@@ -169,7 +169,7 @@ else
 fi
 
 if running && [ "$force" != yes ]; then
-	die "Switchboard is running. Quit it from the tray first (replacing the file under a running AppImage kills it), or pass --force."
+	die "Switchboard is running, and replacing the file under a running AppImage kills it. Quit it from the tray icon or with:  pkill -x switchboard  -- then run this again. (Or pass --force to replace it anyway.)"
 fi
 
 # --- Which release ----------------------------------------------------------
