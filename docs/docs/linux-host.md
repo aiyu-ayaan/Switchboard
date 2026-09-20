@@ -10,6 +10,30 @@ Linux host is one section per source.
 
 ---
 
+## 📦 Installing
+
+Releases carry two Linux artifacts, both x86-64 and both containing the same
+daemon:
+
+| Asset | For | Install |
+| ----- | --- | ------- |
+| `Switchboard-<version>.deb` | Debian, Ubuntu, Linux Mint, Pop!_OS | `sudo apt install ./Switchboard-<version>.deb` |
+| `Switchboard-<version>.AppImage` | Everything else | `chmod +x Switchboard-*.AppImage && ./Switchboard-*.AppImage` |
+
+Prefer the `.deb` where it fits, and install it with `apt` rather than by
+double-clicking, so its dependencies come with it. It puts the app in
+`/opt/Switchboard`, a launcher in the applications menu, and `switchboard` on
+your `PATH`.
+
+The AppImage needs FUSE 2 on Ubuntu 24.04 and newer, which is no longer
+installed by default: `sudo apt install libfuse2t64`.
+
+Your pairings live in `~/.config/Switchboard/switchboard.db`, not beside the
+app, so switching between the AppImage and the `.deb` — or updating either —
+keeps every paired phone.
+
+---
+
 ## 📋 At a glance
 
 | Control | Source | Status |

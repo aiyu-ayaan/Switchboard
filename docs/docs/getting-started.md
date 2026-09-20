@@ -34,14 +34,42 @@ Switchboard communicates strictly over your local Wi-Fi or LAN. An active intern
 
 1. Open the **[Latest Releases](https://github.com/aiyu-ayaan/Switchboard/releases)** page on your computer.
 2. Scroll down to the **Assets** section.
-3. Download the desktop executable:
-   - **Windows**: `Switchboard-Setup.exe` (installer) or `Switchboard-portable.zip`.
-4. Run the installer or extract the portable executable to your preferred folder.
-5. Launch **Switchboard**.
+3. Download the build for your system:
+
+| System | Asset | Install |
+| ------ | ----- | ------- |
+| Windows 10 / 11 | `Switchboard-Setup-<version>.exe` | Run it. |
+| Debian, Ubuntu, Linux Mint | `Switchboard-<version>.deb` | `sudo apt install ./Switchboard-<version>.deb` |
+| Any other Linux | `Switchboard-<version>.AppImage` | `chmod +x` it, then run it. |
+
+4. Launch **Switchboard**.
 
 ### Windows Firewall & Tray Behavior
 - **Firewall Prompt**: On first launch, Windows Defender Firewall may ask for permission for the Switchboard daemon to communicate on private networks. Check **Private networks** and click **Allow access**.
 - **System Tray**: When you close the desktop window, Switchboard minimizes to your Windows system tray so your phone remains connected in the background. Right-click the tray icon to restore or quit.
+
+### Linux notes
+
+Install the `.deb` with `apt` rather than by double-clicking it, so the
+dependencies come with it. `pactl` and `lspci` are among them: audio control
+goes through the first and the second is what names your GPU on the About
+System screen.
+
+- **AppImage on Ubuntu 24.04 or newer** needs FUSE 2, which is no longer
+  installed by default: `sudo apt install libfuse2t64`. The `.deb` has no such
+  requirement.
+- **External monitor brightness** needs you in the `i2c` group —
+  `sudo usermod -aG i2c "$USER"`, then log out and back in. The built-in panel
+  works without it.
+- **The tray icon** needs an AppIndicator host. KDE, Cinnamon, XFCE and MATE
+  have one; a stock GNOME session needs the AppIndicator extension, without
+  which the window still works but closing it leaves no tray icon to restore.
+- **Wayland**: the remote touchpad reaches only Xwayland windows. Log in to an
+  X11 session for the full air mouse. Everything else — displays, audio, media,
+  file transfer — is unaffected.
+
+Full detail, including what each control reads and what is not implemented yet,
+is in **[the Linux host page](/linux-host)**.
 
 ---
 
