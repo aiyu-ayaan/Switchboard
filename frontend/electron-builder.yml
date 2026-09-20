@@ -33,6 +33,10 @@ extraResources:
     filter:
       - switchboard*
 
+# Wraps the Linux binary so the AppImage starts where user namespaces are
+# restricted (Ubuntu 24.04 and derivatives). See afterPack.cjs.
+afterPack: afterPack.cjs
+
 asar: true
 
 # Electron ships ~50 locale .pak files. The app has no translations, so the

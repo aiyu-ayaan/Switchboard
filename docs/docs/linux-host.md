@@ -362,18 +362,22 @@ by their raw `vendor:device` PCI IDs.
 
 ## 🩺 Troubleshooting
 
-**The AppImage aborts with "The SUID sandbox helper binary was found, but is not
+**Older AppImages abort with "The SUID sandbox helper binary was found, but is not
 configured correctly".**
 Chromium needs either unprivileged user namespaces or a root-owned setuid
 helper, and an AppImage cannot supply the second. Ubuntu 24.04 and everything
 built on it — Mint 22, Pop!_OS 24.04 — restrict the first
-(`kernel.apparmor_restrict_unprivileged_userns=1`), so the app has no sandbox to
-start with. Installing through `scripts/install.sh` avoids it: the `switchboard`
-command it creates adds `--no-sandbox` only when the kernel restricts user
-namespaces, and keeps the sandbox everywhere else. Running the AppImage file
-directly on such a system needs the flag by hand —
-`./Switchboard-<version>.AppImage --no-sandbox` — or use the `.deb`, whose
-post-install step makes the helper setuid and needs neither.
+(`kernel.apparmor_restrict_unprivileged_userns=1`). From the release after
+1.1.5 the AppImage carries a launcher that adds `--no-sandbox` only when it is
+running from an AppImage on a kernel that restricts user namespaces, so it
+starts by double-click, from a terminal or from the menu entry. On 1.1.5 itself,
+install through `scripts/install.sh` (its `switchboard` command does the same) or
+run `./Switchboard-1.1.5.AppImage --no-sandbox`. The `.deb` never had the
+problem: its post-install step makes the helper setuid.
+
+**The first launch of an AppImage is slow.** The window can take 15 seconds or
+more to fill in, because the daemon is read through a compressed FUSE mount for
+the first time. It is not hung, and later launches are quicker.
 
 **"No audio endpoint is available on this host."**
 The daemon could not reach an audio server. Check `pactl info` works as the
