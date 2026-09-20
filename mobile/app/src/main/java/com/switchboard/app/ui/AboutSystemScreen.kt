@@ -160,7 +160,10 @@ fun AboutSystemScreen(
                 icon = Icons.Filled.Computer,
                 accentColor = MaterialTheme.colorScheme.primary
             ) {
-                SpecRow("OS Edition", about.os.name.ifEmpty { "Windows" })
+                // Never guess at the platform here. A host that reports no OS
+                // name is a host this build cannot describe, and naming one
+                // outright turned a Linux desktop into a confident "Windows".
+                SpecRow("OS Edition", about.os.name.ifEmpty { "Unknown" })
                 SpecRow("Build Version", about.os.build.ifEmpty { "Unknown" })
                 SpecRow("System Uptime", formatUptime(about.os.uptimeSeconds))
             }
