@@ -16,7 +16,7 @@ import {
 } from 'electron';
 import { spawn, exec, ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { HostSettings, LocalState } from '../shared/types';
 import { installExplorerVerb, pathsFromArgv } from './shellIntegration';
 import { queueSendPaths, registerSendPicker } from './sendPicker';
@@ -389,6 +389,20 @@ function syncAutoStart(autoStart: boolean, background: boolean): void {
         name: APP_NAME,
         path: process.execPath,
         args: [app.getAppPath(), '--hidden']
+      });
+    } else if (process.platform === 'linux') {
+      // Electron writes ~/.config/autostart/<name>.desktop with `path` as its
+      // Exec line, and the default is process.execPath. From an AppImage that
+      // is a path inside a FUSE mount that no longer exists at the next login,
+      // so the entry never launched anything. $APPIMAGE is the file itself. An
+      // installed copy points at the launcher beside the real binary instead,
+      // so the sandbox handling in afterPack.cjs applies at login too.
+      const launcher = join(dirname(process.execPath), 'switchboard');
+      app.setLoginItemSettings({
+        openAtLogin: autoStart,
+        name: APP_NAME,
+        path: process.env.APPIMAGE || (existsSync(launcher) ? launcher : process.execPath),
+        args: ['--hidden']
       });
     } else {
       app.setLoginItemSettings({
@@ -846,20 +860,6 @@ async function bootstrap(): Promise<void> {
       }
     }
   });
-  await startDaemon();
-
-  try {
-    const initialState = await daemonFetch<LocalState>('/state');
-    if (initialState?.settings) {
-      runInBackground = initialState.settings.runInBackground ?? runInBackground;
-      if (typeof initialState.settings.autoStart === 'boolean') {
-        syncAutoStart(initialState.settings.autoStart, runInBackground);
-      }
-    }
-  } catch {
-    // Daemon will be polled by renderer anyway
-  }
-
   // Launched by the Explorer verb rather than by the user: the picker is the
   // entire interaction, so the shell stays out of the way. The window is still
   // created, hidden — closing the last one would quit the app and take the
@@ -876,6 +876,24 @@ async function bootstrap(): Promise<void> {
   } else if (!shouldShow) {
     ensureTray();
   }
+
+  // The window does not wait on the daemon: it polls /state itself, and on a
+  // cold AppImage or a login-time boot the daemon can take a long while to bind.
+  // Blocking before the window left the user looking at nothing until it answered.
+  void (async () => {
+    await startDaemon();
+    try {
+      const initialState = await daemonFetch<LocalState>('/state');
+      if (initialState?.settings) {
+        runInBackground = initialState.settings.runInBackground ?? runInBackground;
+        if (typeof initialState.settings.autoStart === 'boolean') {
+          syncAutoStart(initialState.settings.autoStart, runInBackground);
+        }
+      }
+    } catch {
+      // Daemon will be polled by renderer anyway
+    }
+  })();
 
   // Unpackaged, `execPath` is electron.exe and needs the app directory handed
   // to it, or the menu entry opens a blank Electron. Registering in both modes
