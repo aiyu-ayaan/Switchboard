@@ -303,6 +303,7 @@ func (c *displayController) enumeratePanels() ([]*panel, error) {
 
 	backlights := discoverBacklights()
 	usedBacklight := make(map[string]bool)
+	usedBus := make(map[string]bool)
 	permissionDenied := false
 
 	var panels []*panel
@@ -322,7 +323,7 @@ func (c *displayController) enumeratePanels() ([]*panel, error) {
 			continue
 		}
 
-		p, err := externalPanel(dir, connector, name)
+		p, err := externalPanel(dir, connector, name, usedBus)
 		if err != nil {
 			if i2cPermissionHint(err) {
 				permissionDenied = true
@@ -400,11 +401,16 @@ func newInternalPanel(connector, name string, backlights []backlight, used map[s
 // externalPanel opens the connector's I2C bus and asks the monitor what it can
 // do. Returns (nil, nil) when the bus is readable but nothing on it speaks
 // DDC/CI, which is an ordinary outcome and not worth reporting.
-func externalPanel(dir, connector, name string) (*panel, error) {
+func externalPanel(dir, connector, name string, used map[string]bool) (*panel, error) {
 	busPath, err := connectorBus(dir)
 	if err != nil {
-		return nil, err
+		// NVIDIA's driver links no bus; find it by the monitor's EDID.
+		busPath, err = busByEDID(dir, used)
+		if err != nil {
+			return nil, err
+		}
 	}
+	used[busPath] = true
 
 	bus, err := openDDCBus(busPath)
 	if err != nil {
