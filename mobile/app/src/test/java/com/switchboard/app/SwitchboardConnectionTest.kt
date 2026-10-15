@@ -66,4 +66,11 @@ class SwitchboardConnectionTest {
         assertEquals(30_000L, SwitchboardConnection.retryDelayMs(5))
         assertEquals(30_000L, SwitchboardConnection.retryDelayMs(50))
     }
+
+    @Test
+    fun `a drop is redialled while the app is on screen or always-on`() {
+        assertTrue(SwitchboardConnection.shouldRedial(uiActive = true, alwaysOn = false))
+        assertTrue(SwitchboardConnection.shouldRedial(uiActive = false, alwaysOn = true))
+        assertFalse(SwitchboardConnection.shouldRedial(uiActive = false, alwaysOn = false))
+    }
 }

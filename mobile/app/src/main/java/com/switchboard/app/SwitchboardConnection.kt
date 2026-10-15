@@ -320,10 +320,10 @@ class SwitchboardConnection private constructor(context: Context) {
                     }
                 }
 
-                // The flow completes only once the socket is gone. Without
-                // always-on that is the end of the session; with it, the drop
-                // is the thing this loop exists to paper over.
-                if (!store.alwaysOn) break
+                // The flow completes only once the socket is gone. Whether to
+                // dial again is shouldRedial's call: always-on, or someone
+                // looking at the app.
+                if (!shouldRedial(uiHolders > 0, store.alwaysOn)) break
 
                 failures = if (handshook) 0 else failures + 1
 
@@ -715,6 +715,17 @@ class SwitchboardConnection private constructor(context: Context) {
             !uiActive &&
                 !alwaysOn &&
                 transfers.none { !TransferStatus.isTerminal(it.status) }
+
+        /**
+         * Whether a dropped session is dialled again.
+         *
+         * Always-on keeps it in the background. With the app on screen it is
+         * redialled too: a desktop app restarting or updating, or a Wi-Fi blip,
+         * used to leave the user on the pairing list until they tapped the
+         * host themselves, which reads as the app having given up. With
+         * neither, the drop ends the session, as an idle app should.
+         */
+        internal fun shouldRedial(uiActive: Boolean, alwaysOn: Boolean): Boolean = uiActive || alwaysOn
 
         /**
          * Backoff between reconnect attempts, doubling to a 30s ceiling.
