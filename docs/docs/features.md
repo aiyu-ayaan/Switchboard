@@ -122,6 +122,19 @@ Turn your smartphone screen into an ultra-low-latency wireless touchpad. With ad
 
 ---
 
+## Screen Sharing, Both Ways
+
+See the desktop on the phone and use it by touch, or see the phone on the desktop and use it with the mouse and keyboard.
+
+### Highlights:
+- **PC Screen**: one monitor or all of them, pinch to zoom, touch or trackpad mode, and the phone's keyboard for typing.
+- **Phone screen**: hardware H.264 from the phone, click to tap, drag to swipe, the wheel to scroll, right click for Back.
+- **Apps in windows**: the phone's apps listed on the desktop, each opening in a window of its own.
+
+👉 Learn more in the [Screen Sharing Documentation](/screen-share).
+
+---
+
 ## 6. Switchboard Deck (Stream Deck Neo Console)
 
 Transform your phone into an 8-key macro deck inspired by the Elgato Stream Deck Neo. Features a dedicated landscape console layout with dynamic LCD infobar, capacitive touch points, and custom script execution.

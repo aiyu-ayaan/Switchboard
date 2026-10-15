@@ -361,6 +361,19 @@ Directly writes text content to the host workstation system clipboard. Guarded b
 }
 ```
 
+#### 21. Screen sharing (`screen.*`, `input.point`, `input.key`, `mirror.*`)
+Sharing the desktop to the phone and the phone to the desktop. Frames ride as
+binary blobs beside the envelope, as camera frames do. The full action table
+and payloads are in [Screen Sharing](/screen-share#wire-actions).
+
+```json
+{
+  "type": "screen.start",
+  "id": "req-021",
+  "payload": { "maxWidth": 2400, "quality": 70, "fps": 20, "display": "DP-0" }
+}
+```
+
 ---
 
 ### Host Broadcasts & Events (Desktop ➔ Phone)
@@ -524,3 +537,13 @@ The Electron frontend communicates with the Go backend over `http://127.0.0.1:94
 | `POST` | `/local/audio/input` | Set default audio recording device endpoint. | `{"deviceId": "..."}` |
 | `POST` | `/local/input/text` | Inject unicode text strings into focused application. | `{"text": "Hello"}` |
 | `POST` | `/local/clipboard` | Set host system clipboard text content. | `{"text": "Copied content"}` |
+| `GET` | `/local/screen/viewers` | Phones currently watching this desktop. | None |
+| `POST` | `/local/screen/stop` | End one phone's view of this desktop, or all. | `{"deviceId": ""}` |
+| `GET` | `/local/mirror/state` | The phone mirror's state. | None |
+| `POST` | `/local/mirror/start` | Ask a phone to share its screen. | `{"deviceId": "...", "settings": {...}}` |
+| `POST` | `/local/mirror/stop` | Stop the phone mirror. | `{}` |
+| `POST` | `/local/mirror/input` | Perform a touch, key or navigation on the phone. | `MirrorInput` JSON object |
+| `GET` | `/local/mirror/apps` | The phone's launcher list. | None |
+| `POST` | `/local/mirror/apps/refresh` | Ask a phone for its launcher list. | `{"deviceId": "..."}` |
+| `POST` | `/local/mirror/launch` | Bring a phone app to the front. | `{"package": "...", "deviceId": "..."}` |
+| `GET` | `/local/mirror/video` | The phone's screen as multipart H.264. | None |

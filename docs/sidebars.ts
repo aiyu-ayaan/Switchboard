@@ -38,6 +38,7 @@ const sidebars: SidebarsConfig = {
         'home-screen-widget',
         'file-transfer',
         'wifi-camera',
+        'screen-share',
       ],
     },
     {

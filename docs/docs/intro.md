@@ -31,6 +31,7 @@ Official binaries for Windows (Desktop Host + Go Daemon) and Android (Native APK
 - **[Displays & DDC/CI Hardware Controls](/displays-ddcci)** — VESA MCCS monitor communication via Windows DXVA2 and WMI laptop display brightness control.
 - **[Audio Mixer & SMTC Transport](/audio-mixer)** — Windows Core Audio (WASAPI) session mixer, per-process sliders, and SMTC media transport controls.
 - **[Air Mouse (Remote Touchpad)](/air-mouse)** — Sub-millisecond cursor navigation, multi-finger gesture recognition, and Windows SendInput injection.
+- **[Screen Sharing (Both Ways)](/screen-share)** — The desktop on the phone with touch control, and the phone on the desktop with mouse, keyboard and its apps in their own windows.
 - **[Elgato Stream Deck Neo](/stream-deck-neo)** — 8-key hardware console replication with LCD infobar, touch points, and custom action triggers.
 - **[Encrypted File Transfer](/file-transfer)** — Chunked P2P encrypted file streaming, SHA-256 verification, and Android Storage Access Framework (SAF) integration.
 - **[Troubleshooting & FAQ](/troubleshooting)** — Diagnosis and resolution for local network pairing, Windows Firewall configuration, and background tasks.
