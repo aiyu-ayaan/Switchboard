@@ -63,6 +63,19 @@ sealed interface ConnectionEvent {
     /** A `camera.*` command from the desktop. Payload is null for stop. */
     data class CameraCommand(val action: String, val payload: JsonElement?) : ConnectionEvent
 
+    /** A `screen.*` frame: the desktop's picture, or why it stopped. */
+    data class ScreenCommand(
+        val action: String,
+        val payload: JsonElement?,
+        val blob: ByteArray? = null
+    ) : ConnectionEvent {
+        override fun equals(other: Any?) = this === other
+        override fun hashCode() = System.identityHashCode(this)
+    }
+
+    /** A `mirror.*` command from the desktop: start, stop, input, apps, launch. */
+    data class MirrorCommand(val action: String, val payload: JsonElement?) : ConnectionEvent
+
     data class Failed(val reason: String) : ConnectionEvent
     data object Disconnected : ConnectionEvent
 }
@@ -349,6 +362,12 @@ class SwitchboardClient(
                         envelope.action.startsWith("camera.") ->
                             trySend(ConnectionEvent.CameraCommand(envelope.action, payload))
 
+                        envelope.action.startsWith("screen.") ->
+                            trySend(ConnectionEvent.ScreenCommand(envelope.action, payload, frame.blob))
+
+                        envelope.action.startsWith("mirror.") ->
+                            trySend(ConnectionEvent.MirrorCommand(envelope.action, payload))
+
                         envelope.action.startsWith("file.") && payload != null ->
                             trySend(ConnectionEvent.FileFrame(envelope.action, payload, frame.blob))
                     }
@@ -453,7 +472,22 @@ class SwitchboardClient(
         is ResourcesResponse -> SwitchboardJson.encodeToJsonElement(ResourcesResponse.serializer(), payload)
         is ResourcesLivePush -> SwitchboardJson.encodeToJsonElement(ResourcesLivePush.serializer(), payload)
         is AboutSystemResponse -> SwitchboardJson.encodeToJsonElement(AboutSystemResponse.serializer(), payload)
+        is ScreenSettings -> SwitchboardJson.encodeToJsonElement(ScreenSettings.serializer(), payload)
+        is InputPoint -> SwitchboardJson.encodeToJsonElement(InputPoint.serializer(), payload)
+        is InputKey -> SwitchboardJson.encodeToJsonElement(InputKey.serializer(), payload)
+        is MirrorSettings -> SwitchboardJson.encodeToJsonElement(MirrorSettings.serializer(), payload)
+        is MirrorFrame -> SwitchboardJson.encodeToJsonElement(MirrorFrame.serializer(), payload)
+        is MirrorState -> SwitchboardJson.encodeToJsonElement(MirrorState.serializer(), payload)
+        is MirrorApps -> SwitchboardJson.encodeToJsonElement(MirrorApps.serializer(), payload)
     }
+
+    /**
+     * Bytes accepted by [send] but not yet written to the network. The mirror
+     * reads it to fall behind by dropping frames rather than by queueing: OkHttp
+     * closes a socket whose queue passes 16 MiB, and a slow link would get there
+     * in seconds at a video bitrate.
+     */
+    fun queuedBytes(): Long = socket?.queueSize() ?: 0L
 
     fun queryResources(range: String = "1h") =
         send(Actions.SYSTEM_RESOURCES_QUERY, ResourcesQuery(range))
