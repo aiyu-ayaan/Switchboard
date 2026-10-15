@@ -51,6 +51,18 @@ func (s *Server) registerLocalAPI(mux *http.ServeMux) {
 	handle("GET /local/camera/stream", s.localCameraStream)
 	handle("GET /local/camera/video", s.localCameraVideo)
 
+	handle("GET /local/screen/viewers", s.localScreenViewers)
+	handle("POST /local/screen/stop", s.localScreenStop)
+
+	handle("GET /local/mirror/state", s.localMirrorState)
+	handle("POST /local/mirror/start", s.localMirrorStart)
+	handle("POST /local/mirror/stop", s.localMirrorStop)
+	handle("POST /local/mirror/input", s.localMirrorInput)
+	handle("GET /local/mirror/apps", s.localMirrorApps)
+	handle("POST /local/mirror/apps/refresh", s.localMirrorAppsRefresh)
+	handle("POST /local/mirror/launch", s.localMirrorLaunch)
+	handle("GET /local/mirror/video", s.localMirrorVideo)
+
 	handle("GET /local/deck", s.localGetDeck)
 	handle("POST /local/deck", s.localSetDeck)
 	handle("POST /local/deck/action", s.localDeckAction)
@@ -86,6 +98,9 @@ type localStateResponse struct {
 	Devices   []db.Device        `json:"devices"`
 	Transfers []LocalTransfer    `json:"transfers"`
 	Settings  Settings           `json:"settings"`
+	// ScreenViewers drives the "your screen is being shared" indicator, so it
+	// rides the poll the shell already makes rather than one of its own.
+	ScreenViewers []protocol.ScreenViewer `json:"screenViewers"`
 }
 
 func (s *Server) localState(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +120,8 @@ func (s *Server) localState(w http.ResponseWriter, r *http.Request) {
 		Devices:   devices,
 		Transfers: transfers,
 		Settings:  s.Settings(),
+
+		ScreenViewers: s.screens.Viewers(),
 	})
 }
 
@@ -588,4 +605,121 @@ func (s *Server) localSetClipboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+// ---- Screen sharing ----
+
+func (s *Server) localScreenViewers(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.screens.Viewers())
+}
+
+// localScreenStop lets the desktop end a phone's view of it. The desktop
+// being watched always gets the last word on whether it is.
+func (s *Server) localScreenStop(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceID string `json:"deviceId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if req.DeviceID == "" {
+		for _, viewer := range s.screens.Viewers() {
+			s.screens.Stop(viewer.DeviceID, "Screen sharing was stopped on the desktop")
+		}
+	} else {
+		s.screens.Stop(req.DeviceID, "Screen sharing was stopped on the desktop")
+	}
+	writeJSON(w, s.screens.Viewers())
+}
+
+func (s *Server) localMirrorState(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.mirror.State())
+}
+
+func (s *Server) localMirrorStart(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceID string                   `json:"deviceId"`
+		Settings *protocol.MirrorSettings `json:"settings"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	settings := protocol.DefaultMirrorSettings()
+	if req.Settings != nil {
+		settings = *req.Settings
+	}
+	if err := s.mirror.Start(req.DeviceID, settings); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, s.mirror.State())
+}
+
+func (s *Server) localMirrorStop(w http.ResponseWriter, r *http.Request) {
+	if err := s.mirror.Stop(); err != nil {
+		httpError(w, err, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, s.mirror.State())
+}
+
+func (s *Server) localMirrorInput(w http.ResponseWriter, r *http.Request) {
+	var in protocol.MirrorInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.mirror.Input(in); err != nil {
+		httpError(w, err, http.StatusConflict)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) localMirrorApps(w http.ResponseWriter, r *http.Request) {
+	deviceID, apps := s.mirror.Apps()
+	writeJSON(w, map[string]any{"deviceId": deviceID, "apps": apps})
+}
+
+func (s *Server) localMirrorAppsRefresh(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceID string `json:"deviceId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if err := s.mirror.RequestApps(req.DeviceID); err != nil {
+		httpError(w, err, http.StatusConflict)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "requested"})
+}
+
+func (s *Server) localMirrorLaunch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DeviceID string `json:"deviceId"`
+		Package  string `json:"package"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, err, http.StatusBadRequest)
+		return
+	}
+	if req.Package == "" {
+		httpError(w, errors.New("no package"), http.StatusBadRequest)
+		return
+	}
+	if err := s.mirror.Launch(req.DeviceID, req.Package); err != nil {
+		httpError(w, err, http.StatusConflict)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+// localMirrorVideo is the phone's screen as H.264, in the camera video
+// track's framing.
+func (s *Server) localMirrorVideo(w http.ResponseWriter, r *http.Request) {
+	s.mirror.ServeVideo(w, r)
 }

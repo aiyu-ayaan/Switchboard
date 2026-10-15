@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"log"
 
 	"switchboard/backend/internal/protocol"
@@ -210,6 +211,78 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 			return
 		}
 		s.camera.ReportState(c.deviceID, state)
+
+	// Screen sharing, desktop to phone. The phone asks; frames go back on
+	// their own from the streamer's loop, so the start is acknowledged once
+	// and the picture arriving is the rest of the answer.
+	case protocol.ActionScreenStart:
+		if !s.control.ScreenSupported() {
+			s.fail(c, env, errors.New("this desktop cannot share its screen"))
+			return
+		}
+		var settings protocol.ScreenSettings
+		if err := env.Decode(&settings); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.screens.Start(c.deviceID, settings); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.reply(c, env, protocol.ScreenState{Streaming: true})
+
+	case protocol.ActionScreenStop:
+		s.screens.Stop(c.deviceID, "")
+		s.reply(c, env, protocol.ScreenState{Streaming: false})
+
+	// Absolute pointer and named keys. Like the rest of the air mouse they
+	// fire at touch rate, so only failures come back.
+	case protocol.ActionInputPoint:
+		var req protocol.InputPoint
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.PointerTo(req.X, req.Y); err != nil {
+			s.fail(c, env, err)
+		}
+
+	case protocol.ActionInputKey:
+		var req protocol.InputKey
+		if err := env.Decode(&req); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		if err := s.control.PressKey(req.Key); err != nil {
+			s.fail(c, env, err)
+		}
+
+	// Screen sharing, phone to desktop. Units are the second heaviest thing
+	// on the wire after file chunks and, like camera frames, neither reply
+	// nor broadcast.
+	case protocol.ActionMirrorFrame:
+		var meta protocol.MirrorFrame
+		if err := env.Decode(&meta); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.mirror.Frame(c.deviceID, meta, blob)
+
+	case protocol.ActionMirrorState:
+		var state protocol.MirrorState
+		if err := env.Decode(&state); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.mirror.ReportState(c.deviceID, state)
+
+	case protocol.ActionMirrorApps:
+		var apps protocol.MirrorApps
+		if err := env.Decode(&apps); err != nil {
+			s.fail(c, env, err)
+			return
+		}
+		s.mirror.SetApps(c.deviceID, apps.Apps)
 
 	// File transfer. These frames are relayed straight into the transfer
 	// manager, which owns all the state; the daemon replies only when the

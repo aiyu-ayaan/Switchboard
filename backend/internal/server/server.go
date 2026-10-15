@@ -22,7 +22,9 @@ import (
 	"switchboard/backend/internal/crypto"
 	"switchboard/backend/internal/db"
 	"switchboard/backend/internal/discovery"
+	"switchboard/backend/internal/mirror"
 	"switchboard/backend/internal/protocol"
+	"switchboard/backend/internal/screen"
 	"switchboard/backend/internal/system"
 	"switchboard/backend/internal/transfer"
 )
@@ -42,6 +44,8 @@ type Server struct {
 	http      *http.Server
 	transfers *transfer.Manager
 	camera    *camera.Hub
+	screens   *screen.Streamer
+	mirror    *mirror.Hub
 
 	handshakes handshakeLimiter
 
@@ -101,6 +105,8 @@ func newServer(cfg *config.Config, store *db.Database, control *system.Controlle
 	}
 	s.transfers = transfer.NewManager(s.downloadDir, s.sendToDevice, s.onTransferEvent)
 	s.camera = camera.NewHub(s.sendToDevice)
+	s.screens = screen.NewStreamer(control.CaptureScreen, s.sendToDevice)
+	s.mirror = mirror.NewHub(s.sendToDevice)
 	if _, err := s.RotatePairing(); err != nil {
 		return nil, err
 	}
@@ -305,6 +311,8 @@ func (s *Server) removeClient(c *client) {
 	if remaining == 0 {
 		s.transfers.Detach(c.deviceID)
 		s.camera.Detach(c.deviceID)
+		s.screens.Detach(c.deviceID)
+		s.mirror.Detach(c.deviceID)
 	}
 }
 
