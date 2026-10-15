@@ -1,4 +1,5 @@
-# Cuts a release: the signed Android APK and AAB, and the Windows installer.
+# Cuts a release: the signed Android APK, the Windows installer, and the Linux
+# AppImage and .deb.
 #
 # TRIGGERING
 #
@@ -149,13 +150,13 @@ jobs:
       # One failing should not hide what the other did.
       fail-fast: false
       matrix:
+        # The AAB is off for now. Restore the entry (label AAB, artifact aab,
+        # task ':app:bundleRelease') to bring it back; the naming step below
+        # still handles it.
         include:
           - label: APK
             artifact: apk
             task: ':app:assembleRelease'
-          - label: AAB
-            artifact: aab
-            task: ':app:bundleRelease'
     defaults:
       run:
         working-directory: mobile
@@ -193,7 +194,7 @@ jobs:
 
       - name: Warn when this build will be unsigned
         if: env.KEYSTORE_BASE64 == ''
-        run: echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is not set, so the APK and AAB cannot be installed as an upgrade or uploaded to Play."
+        run: echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is not set, so the APK cannot be installed as an upgrade."
 
       - name: Build ${{ matrix.label }}
         env:
