@@ -39,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
@@ -111,6 +112,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Deck("Switchboard Deck", Icons.Filled.GridView),
     Touchpad("Touchpad", Icons.Filled.Mouse),
     Camera("Camera", Icons.Filled.PhotoCamera),
+    Screen("PC Screen", Icons.Filled.DesktopWindows),
     Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
@@ -124,6 +126,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         // Always available: the camera is this phone's, so nothing about the
         // desktop's capabilities decides whether it can be offered.
         Camera -> true
+        Screen -> state.host.capabilities.contains("screen")
         Files -> true
     }
 
@@ -158,6 +161,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         Deck -> "8-key macro deck with infobar & paging"
         Touchpad -> "Drive the pointer and shell gestures"
         Camera -> "Use this phone as a webcam"
+        Screen -> "See and control the desktop"
         Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
             0 -> "Send and receive files"
             1 -> "1 transfer in progress"
@@ -1425,7 +1429,22 @@ private fun BentoUtilityGrid(
             )
         }
 
-        // Row 3: Resources & Telemetry Tile (Full Width)
+        // Row 3: Screen sharing
+        if (state.host.capabilities.contains("screen")) Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            BentoTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Filled.DesktopWindows,
+                title = "PC Screen",
+                subtitle = "View & control",
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                onClick = { onOpen(Section.Screen) }
+            )
+        }
+
+        // Row 4: Resources & Telemetry Tile (Full Width)
         ResourcesBentoTile(
             state = state,
             onClick = { onOpen(Section.Resources) }
@@ -1876,6 +1895,10 @@ fun SectionScreen(
         TouchpadScreen(actions.touchpad, modifier)
         return
     }
+    if (section == Section.Screen) {
+        RemoteScreenScreen(onBack = onBack, modifier = modifier)
+        return
+    }
     if (section == Section.Deck) {
         DeckScreen(
             state = state,
@@ -2031,6 +2054,12 @@ private fun SectionBody(
             )
 
             Section.Camera -> CameraScreen()
+
+            // Full screen; short-circuits in SectionScreen.
+            Section.Screen -> EmptyCard(
+                title = "PC Screen",
+                body = "Open PC Screen to see and control the desktop."
+            )
 
             Section.Files -> FilesBody(
                 transfers = state.transfers,

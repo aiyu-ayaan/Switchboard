@@ -361,6 +361,9 @@ fun SwitchboardApp(
     }
 
     val isDeckScreen = currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Deck
+    // Sections that draw edge to edge with no app bar of their own chrome.
+    val isFullScreen = isDeckScreen ||
+        (currentScreen is AppScreen.Detail && (currentScreen as AppScreen.Detail).section == Section.Screen)
 
     BackHandler(enabled = isDeckScreen) {
         (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -368,9 +371,9 @@ fun SwitchboardApp(
     }
 
     Scaffold(
-        contentWindowInsets = if (isDeckScreen) androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) else androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
+        contentWindowInsets = if (isFullScreen) androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) else androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            if (!isDeckScreen) {
+            if (!isFullScreen) {
                 TopAppBar(
                 navigationIcon = {
                     if (currentScreen !is AppScreen.Main) {
