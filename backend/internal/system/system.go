@@ -244,6 +244,9 @@ func (c *Controller) State(daemonID string) protocol.HostState {
 	if clipboardSupported() {
 		state.Capabilities = append(state.Capabilities, "clipboard")
 	}
+	if screenSupported() {
+		state.Capabilities = append(state.Capabilities, "screen")
+	}
 	return state
 }
 

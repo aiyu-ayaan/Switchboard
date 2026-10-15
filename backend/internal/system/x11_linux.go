@@ -124,6 +124,26 @@ func x11Client() (*x11Conn, error) {
 
 // dialX11 connects, authenticates and discovers XTEST.
 func dialX11() (*x11Conn, error) {
+	c, err := dialX11Bare()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.queryXTest(); err != nil {
+		c.conn.Close()
+		return nil, err
+	}
+	if err := c.loadKeyboardMapping(); err != nil {
+		c.conn.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+// dialX11Bare connects and authenticates, and stops there. Screen capture
+// holds a connection of its own made this way: a frame grab moves megabytes
+// and would otherwise hold the injection lock for the length of it, which the
+// user would feel as the pointer stalling once per frame.
+func dialX11Bare() (*x11Conn, error) {
 	display := os.Getenv("DISPLAY")
 	if display == "" {
 		return nil, errNoDisplay
@@ -142,14 +162,6 @@ func dialX11() (*x11Conn, error) {
 	name, data := xAuthority(host, number)
 	c := &x11Conn{conn: conn}
 	if err := c.handshake(name, data); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if err := c.queryXTest(); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if err := c.loadKeyboardMapping(); err != nil {
 		conn.Close()
 		return nil, err
 	}
