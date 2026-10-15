@@ -110,6 +110,14 @@ states whether something is plugged into it, carries that panel's EDID for the
 name, and links to the I²C bus that reaches it, so no bus is ever written to
 speculatively.
 
+NVIDIA's proprietary driver is the exception: its connectors carry an EDID but
+no link to a bus. For those, Switchboard reads the EDID from each I²C adapter
+belonging to that same GPU (`NVIDIA i2c adapter N`) and uses the bus whose
+EDID matches the connector's byte for byte, which is how ddcutil pairs them.
+Only an EDID read is sent to the candidates; DDC/CI is spoken only on the
+matched bus. On a hybrid laptop this is what makes the external monitors on
+the discrete GPU appear beside the built-in panel.
+
 - **External monitors** speak DDC/CI over the kernel's `i2c-dev` character
   devices. The MCCS VCP codes are the same ones the Windows backend uses:
   `0x10` brightness, `0x12` contrast, `0xD6` power.
