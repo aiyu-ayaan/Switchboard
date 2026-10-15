@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -189,6 +190,15 @@ fun RemoteScreenScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     BackHandler { onBack() }
+
+    // A stop chosen on the desktop closes this view rather than leaving the
+    // user on a dead picture with a retry the desktop would only refuse.
+    LaunchedEffect(status) {
+        val ended = status as? RemoteScreen.Status.Ended ?: return@LaunchedEffect
+        haptics.reject()
+        Toast.makeText(context, ended.message, Toast.LENGTH_SHORT).show()
+        onBack()
+    }
 
     val current by rememberUpdatedState(picture)
     val currentMode by rememberUpdatedState(mode)
@@ -438,7 +448,7 @@ fun RemoteScreenScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
 
-            RemoteScreen.Status.Streaming -> Unit
+            RemoteScreen.Status.Streaming, is RemoteScreen.Status.Ended -> Unit
         }
 
         // ---- Toolbar ----

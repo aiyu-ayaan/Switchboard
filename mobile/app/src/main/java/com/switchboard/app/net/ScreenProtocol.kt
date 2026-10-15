@@ -87,6 +87,8 @@ data class ScreenFrameMeta(
 data class ScreenState(
     val streaming: Boolean = false,
     val error: String? = null,
+    /** The desktop chose to stop, as opposed to failing to capture. */
+    val ended: Boolean = false,
     val displays: List<ScreenDisplay> = emptyList(),
     val display: String? = null
 )

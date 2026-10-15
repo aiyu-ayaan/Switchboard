@@ -53,6 +53,9 @@ class RemoteScreen private constructor() {
         data object Starting : Status
         data object Streaming : Status
         data class Failed(val message: String) : Status
+
+        /** The desktop ended the share on purpose; the view should close. */
+        data class Ended(val message: String) : Status
     }
 
     /** One decoded picture of the desktop. */
@@ -117,7 +120,7 @@ class RemoteScreen private constructor() {
                 val meta = payload?.let {
                     SwitchboardJson.decodeFromJsonElement(ScreenFrameMeta.serializer(), it)
                 } ?: return
-                if (_status.value == Status.Idle) return // stopped; frames in flight
+                if (!accepting) return // stopped, ended or failed; frames still in flight
                 _cursor.value = if (meta.cursorX >= 0 && meta.cursorY >= 0) {
                     meta.cursorX.toFloat() to meta.cursorY.toFloat()
                 } else {
@@ -142,6 +145,11 @@ class RemoteScreen private constructor() {
                 if (state != null && state.displays.isNotEmpty()) _displays.value = state.displays
                 if (state?.display != null) _display.value = state.display
                 when {
+                    state?.ended == true -> {
+                        _status.value = Status.Ended(state.error ?: "The desktop stopped sharing")
+                        _picture.value = null
+                        _cursor.value = null
+                    }
                     state?.error != null -> _status.value = Status.Failed(state.error)
                     state?.streaming == true && _status.value == Status.Starting -> Unit
                     action == ScreenActions.SCREEN_STATE && state?.streaming == false ->
@@ -150,6 +158,10 @@ class RemoteScreen private constructor() {
             }
         }
     }
+
+    /** Frames count only while a stream is starting or running. */
+    private val accepting: Boolean
+        get() = _status.value.let { it == Status.Starting || it == Status.Streaming }
 
     // ---- Control ----
 
@@ -210,7 +222,9 @@ class RemoteScreen private constructor() {
 
         buffers[index] = bitmap
         nextBuffer = 1 - index
-        if (_status.value == Status.Idle) return
+        // Re-checked after the decode: the stream can end while a frame is
+        // being decoded, and that frame must not bring a stopped view back.
+        if (!accepting) return
         _status.value = Status.Streaming
         _picture.value = Picture(bitmap.asImageBitmap(), meta.seq, meta.screenWidth, meta.screenHeight)
     }
