@@ -1,6 +1,7 @@
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraSettings, CameraState, LocalState } from '../../shared/types';
+import { codecFromAnnexB } from '../h264';
 
 const QUALITIES: Array<[CameraSettings['quality'], string]> = [
   ['full', 'Full (1080p)'],
@@ -14,32 +15,6 @@ const STREAM_URL = 'http://127.0.0.1:9427/local/camera/stream';
 
 /** How long the JPEG track stands aside after the last H.264 access unit. */
 const VIDEO_TRACK_GRACE_MS = 2000;
-
-/**
- * The `avc1.PPCCLL` string for an Annex-B stream, read out of its first SPS.
- *
- * `VideoDecoder.configure` needs a codec string, and profile and level differ
- * between phones: a guess that disagrees with the bytes configures cleanly and
- * then decodes nothing, which looks exactly like a camera that is not sending.
- * The three bytes after the SPS header are profile_idc, the constraint flags
- * and level_idc, which is precisely what the string encodes.
- */
-const codecFromAnnexB = (data: Uint8Array): string | null => {
-  for (let i = 0; i + 5 < data.length; i += 1) {
-    if (data[i] !== 0 || data[i + 1] !== 0) continue;
-    const start = data[i + 2] === 1 ? i + 3 : data[i + 2] === 0 && data[i + 3] === 1 ? i + 4 : -1;
-    if (start < 0) continue;
-    // NAL type 7 is the sequence parameter set.
-    if ((data[start] & 0x1f) === 7 && start + 3 < data.length) {
-      const hex = [data[start + 1], data[start + 2], data[start + 3]]
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join('');
-      return `avc1.${hex}`;
-    }
-    i = start - 1;
-  }
-  return null;
-};
 
 /**
  * Live view and controls for a phone acting as a webcam.
