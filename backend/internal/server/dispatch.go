@@ -243,7 +243,10 @@ func (s *Server) dispatch(c *client, env *protocol.Envelope, blob []byte) {
 			s.fail(c, env, err)
 			return
 		}
-		if err := s.control.PointerTo(req.X, req.Y); err != nil {
+		// The phone speaks in fractions of the picture it is shown, which
+		// may be one monitor of several.
+		x, y := s.screens.MapPoint(c.deviceID, req.X, req.Y)
+		if err := s.control.PointerTo(x, y); err != nil {
 			s.fail(c, env, err)
 		}
 

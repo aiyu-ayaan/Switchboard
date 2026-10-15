@@ -64,6 +64,26 @@ type ScreenSettings struct {
 	// FPS is the frame rate ceiling. Unchanged frames are never resent, so an
 	// idle desktop costs nothing whatever this says.
 	FPS int `json:"fps"`
+	// Display picks what is shared: a ScreenDisplay.ID, ScreenAllDisplays for
+	// the whole desktop at once, or empty for the primary monitor. One
+	// monitor is the default because three of them side by side shrink to an
+	// unreadable strip on a phone, and capturing all of them costs three
+	// times the frame rate.
+	Display string `json:"display,omitempty"`
+}
+
+// ScreenAllDisplays shares every monitor as one picture.
+const ScreenAllDisplays = "all"
+
+// ScreenDisplay is one monitor, in pixels relative to the desktop's top-left.
+type ScreenDisplay struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	X       int    `json:"x"`
+	Y       int    `json:"y"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+	Primary bool   `json:"primary,omitempty"`
 }
 
 // DefaultScreenSettings is legible text on a phone held sideways, at a rate
@@ -108,10 +128,14 @@ type ScreenFrame struct {
 	CursorY float64 `json:"cursorY"`
 }
 
-// ScreenState tells the phone why its stream is not running.
+// ScreenState tells the phone what is being shared, or why nothing is.
 type ScreenState struct {
 	Streaming bool   `json:"streaming"`
 	Error     string `json:"error,omitempty"`
+	// Displays are the monitors the phone can choose between, and Display is
+	// the one being shared now (an ID, or ScreenAllDisplays).
+	Displays []ScreenDisplay `json:"displays,omitempty"`
+	Display  string          `json:"display,omitempty"`
 }
 
 // InputPoint moves the pointer to a position on the shared desktop, as

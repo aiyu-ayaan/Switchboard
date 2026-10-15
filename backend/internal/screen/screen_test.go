@@ -3,6 +3,7 @@ package screen
 import (
 	"bytes"
 	"errors"
+	"image"
 	"image/jpeg"
 	"sync"
 	"testing"
@@ -98,6 +99,19 @@ func (r *recorder) snapshot() []sent {
 	return append([]sent(nil), r.items...)
 }
 
+// frames is every screen.frame sent, leaving out the state reports.
+func (r *recorder) frames() []sent {
+	var out []sent
+	for _, item := range r.snapshot() {
+		if item.action == protocol.ActionScreenFrame {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func noDisplays() ([]protocol.ScreenDisplay, error) { return nil, nil }
+
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -112,21 +126,21 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 func TestStreamerSendsChangesOnly(t *testing.T) {
 	var mu sync.Mutex
 	current := solid(64, 32, 50, 50, 50)
-	capture := func() (*system.ScreenFrame, error) {
+	capture := func(image.Rectangle) (*system.ScreenFrame, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		copyFrame := *current
 		return &copyFrame, nil
 	}
 	rec := &recorder{}
-	s := NewStreamer(capture, rec.send)
+	s := NewStreamer(capture, noDisplays, rec.send)
 	if err := s.Start("phone", protocol.ScreenSettings{FPS: 30}); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Stop("phone", "")
 
-	waitFor(t, "first frame", func() bool { return len(rec.snapshot()) >= 1 })
-	first := rec.snapshot()[0]
+	waitFor(t, "first frame", func() bool { return len(rec.frames()) >= 1 })
+	first := rec.frames()[0]
 	if first.action != protocol.ActionScreenFrame || len(first.blob) == 0 {
 		t.Fatalf("first send %+v", first.action)
 	}
@@ -136,7 +150,7 @@ func TestStreamerSendsChangesOnly(t *testing.T) {
 
 	// An unchanging desktop sends nothing more.
 	time.Sleep(150 * time.Millisecond)
-	if n := len(rec.snapshot()); n != 1 {
+	if n := len(rec.frames()); n != 1 {
 		t.Fatalf("%d sends for an unchanged desktop, want 1", n)
 	}
 
@@ -145,8 +159,8 @@ func TestStreamerSendsChangesOnly(t *testing.T) {
 	current = solid(64, 32, 50, 50, 50)
 	current.CursorX, current.CursorY = 32, 16
 	mu.Unlock()
-	waitFor(t, "cursor update", func() bool { return len(rec.snapshot()) >= 2 })
-	cursor := rec.snapshot()[1]
+	waitFor(t, "cursor update", func() bool { return len(rec.frames()) >= 2 })
+	cursor := rec.frames()[1]
 	if len(cursor.blob) != 0 {
 		t.Fatal("a cursor move re-sent the picture")
 	}
@@ -160,8 +174,8 @@ func TestStreamerSendsChangesOnly(t *testing.T) {
 	current = solid(64, 32, 200, 10, 10)
 	current.CursorX, current.CursorY = 32, 16
 	mu.Unlock()
-	waitFor(t, "changed frame", func() bool { return len(rec.snapshot()) >= 3 })
-	changed := rec.snapshot()[2]
+	waitFor(t, "changed frame", func() bool { return len(rec.frames()) >= 3 })
+	changed := rec.frames()[2]
 	if len(changed.blob) == 0 || changed.meta.(protocol.ScreenFrame).Sequence != 2 {
 		t.Fatalf("changed frame %+v", changed.meta)
 	}
@@ -173,9 +187,9 @@ func TestStreamerSendsChangesOnly(t *testing.T) {
 
 func TestStreamerStopTellsThePhone(t *testing.T) {
 	rec := &recorder{}
-	s := NewStreamer(func() (*system.ScreenFrame, error) { return solid(8, 8, 1, 1, 1), nil }, rec.send)
+	s := NewStreamer(func(image.Rectangle) (*system.ScreenFrame, error) { return solid(8, 8, 1, 1, 1), nil }, noDisplays, rec.send)
 	s.Start("phone", protocol.ScreenSettings{})
-	waitFor(t, "first frame", func() bool { return len(rec.snapshot()) >= 1 })
+	waitFor(t, "first frame", func() bool { return len(rec.frames()) >= 1 })
 
 	s.Stop("phone", "stopped on the desktop")
 	items := rec.snapshot()
@@ -193,18 +207,22 @@ func TestStreamerStopTellsThePhone(t *testing.T) {
 
 func TestStreamerEndsWhenDeviceIsGone(t *testing.T) {
 	rec := &recorder{fail: true}
-	s := NewStreamer(func() (*system.ScreenFrame, error) { return solid(8, 8, 1, 1, 1), nil }, rec.send)
+	s := NewStreamer(func(image.Rectangle) (*system.ScreenFrame, error) { return solid(8, 8, 1, 1, 1), nil }, noDisplays, rec.send)
 	s.Start("phone", protocol.ScreenSettings{})
 	waitFor(t, "session to end", func() bool { return len(s.Viewers()) == 0 })
 }
 
 func TestStreamerGivesUpOnDeadCapture(t *testing.T) {
 	rec := &recorder{}
-	s := NewStreamer(func() (*system.ScreenFrame, error) { return nil, errors.New("no display") }, rec.send)
+	s := NewStreamer(func(image.Rectangle) (*system.ScreenFrame, error) { return nil, errors.New("no display") }, noDisplays, rec.send)
 	s.Start("phone", protocol.ScreenSettings{FPS: 30})
 	waitFor(t, "failure report", func() bool {
-		items := rec.snapshot()
-		return len(items) == 1 && items[0].action == protocol.ActionScreenState
+		for _, item := range rec.snapshot() {
+			if state, ok := item.meta.(protocol.ScreenState); ok && state.Error != "" {
+				return true
+			}
+		}
+		return false
 	})
 	if len(s.Viewers()) != 0 {
 		t.Fatal("a dead capture is still listed as streaming")
@@ -224,4 +242,87 @@ func BenchmarkFrame1080p(b *testing.B) {
 		buf.Reset()
 		jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 70})
 	}
+}
+
+var threeMonitors = []protocol.ScreenDisplay{
+	{ID: "HDMI-0", X: 0, Y: 0, Width: 1080, Height: 1920},
+	{ID: "DP-0", X: 1080, Y: 344, Width: 2560, Height: 1440, Primary: true},
+	{ID: "eDP-1", X: 3640, Y: 344, Width: 1920, Height: 1080},
+}
+
+func TestChooseDisplay(t *testing.T) {
+	cases := []struct {
+		want, id string
+		rect     image.Rectangle
+	}{
+		{"", "DP-0", image.Rect(1080, 344, 3640, 1784)},
+		{"eDP-1", "eDP-1", image.Rect(3640, 344, 5560, 1424)},
+		{"unplugged", "DP-0", image.Rect(1080, 344, 3640, 1784)},
+		{protocol.ScreenAllDisplays, protocol.ScreenAllDisplays, image.Rectangle{}},
+	}
+	for _, c := range cases {
+		rect, id := choose(threeMonitors, c.want)
+		if id != c.id || rect != c.rect {
+			t.Errorf("choose(%q) = %v %q, want %v %q", c.want, rect, id, c.rect, c.id)
+		}
+	}
+	if rect, id := choose(nil, ""); !rect.Empty() || id != protocol.ScreenAllDisplays {
+		t.Errorf("no display list should share everything, got %v %q", rect, id)
+	}
+}
+
+func TestMapPointCoversOneMonitor(t *testing.T) {
+	var asked image.Rectangle
+	var mu sync.Mutex
+	capture := func(r image.Rectangle) (*system.ScreenFrame, error) {
+		mu.Lock()
+		asked = r
+		mu.Unlock()
+		f := solid(r.Dx(), r.Dy(), 1, 1, 1)
+		f.DesktopWidth, f.DesktopHeight = 5560, 1920
+		return f, nil
+	}
+	rec := &recorder{}
+	s := NewStreamer(capture, func() ([]protocol.ScreenDisplay, error) { return threeMonitors, nil }, rec.send)
+	s.Start("phone", protocol.ScreenSettings{Display: "eDP-1", MaxWidth: 640})
+	defer s.Stop("phone", "")
+	waitFor(t, "first frame", func() bool { return len(rec.frames()) >= 1 })
+
+	mu.Lock()
+	if asked != image.Rect(3640, 344, 5560, 1424) {
+		t.Fatalf("captured %v, want the eDP-1 rectangle", asked)
+	}
+	mu.Unlock()
+
+	// The picture's top-left and bottom-right are the monitor's corners on
+	// the whole desktop.
+	x, y := s.MapPoint("phone", 0, 0)
+	if abs(x*5559-3640) > 1 || abs(y*1919-344) > 1 {
+		t.Fatalf("top-left maps to %.1f,%.1f", x*5559, y*1919)
+	}
+	x, y = s.MapPoint("phone", 1, 1)
+	if abs(x*5559-5559) > 1 || abs(y*1919-1423) > 1 {
+		t.Fatalf("bottom-right maps to %.1f,%.1f", x*5559, y*1919)
+	}
+
+	// The phone was told which monitor it is looking at, and what else there is.
+	state := rec.snapshot()[0].meta.(protocol.ScreenState)
+	if state.Display != "eDP-1" || len(state.Displays) != 3 {
+		t.Fatalf("state %+v", state)
+	}
+	if viewers := s.Viewers(); viewers[0].Settings.Display != "eDP-1" {
+		t.Fatalf("viewer reports display %q", viewers[0].Settings.Display)
+	}
+
+	// No stream, no mapping.
+	if x, y := s.MapPoint("other", 0.3, 0.4); x != 0.3 || y != 0.4 {
+		t.Fatalf("unknown device mapped to %v,%v", x, y)
+	}
+}
+
+func abs(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

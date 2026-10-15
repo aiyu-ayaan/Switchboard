@@ -105,7 +105,7 @@ func newServer(cfg *config.Config, store *db.Database, control *system.Controlle
 	}
 	s.transfers = transfer.NewManager(s.downloadDir, s.sendToDevice, s.onTransferEvent)
 	s.camera = camera.NewHub(s.sendToDevice)
-	s.screens = screen.NewStreamer(control.CaptureScreen, s.sendToDevice)
+	s.screens = screen.NewStreamer(control.CaptureScreen, control.ScreenDisplays, s.sendToDevice)
 	s.mirror = mirror.NewHub(s.sendToDevice)
 	if _, err := s.RotatePairing(); err != nil {
 		return nil, err

@@ -38,8 +38,9 @@ const maxCaptureFailures = 50
 
 // Streamer owns every live desktop stream, one per viewing device.
 type Streamer struct {
-	capture func() (*system.ScreenFrame, error)
-	send    func(deviceID, action string, payload any, blob []byte) error
+	capture  func(image.Rectangle) (*system.ScreenFrame, error)
+	displays func() ([]protocol.ScreenDisplay, error)
+	send     func(deviceID, action string, payload any, blob []byte) error
 
 	mu       sync.Mutex
 	sessions map[string]*session
@@ -51,17 +52,73 @@ type session struct {
 	since    time.Time
 	settings protocol.ScreenSettings
 
-	mu  sync.Mutex
-	fps float64
+	mu      sync.Mutex
+	fps     float64
+	display string
+	// region is what is being captured, in desktop pixels, and desktop the
+	// whole desktop's size: together they turn a touch on the picture into a
+	// pointer position on the desktop.
+	region  image.Rectangle
+	desktop image.Point
 }
 
 // NewStreamer builds a Streamer that grabs frames with capture and delivers
 // them with send.
 func NewStreamer(
-	capture func() (*system.ScreenFrame, error),
+	capture func(image.Rectangle) (*system.ScreenFrame, error),
+	displays func() ([]protocol.ScreenDisplay, error),
 	send func(deviceID, action string, payload any, blob []byte) error,
 ) *Streamer {
-	return &Streamer{capture: capture, send: send, sessions: map[string]*session{}}
+	return &Streamer{capture: capture, displays: displays, send: send, sessions: map[string]*session{}}
+}
+
+// MapPoint turns a position on a device's picture -- fractions of what it is
+// being shown -- into fractions of the whole desktop, which is what absolute
+// pointer moves take. A device that is not streaming is passed through as if
+// it were looking at the whole desktop.
+func (s *Streamer) MapPoint(deviceID string, x, y float64) (float64, float64) {
+	s.mu.Lock()
+	sess := s.sessions[deviceID]
+	s.mu.Unlock()
+	if sess == nil {
+		return x, y
+	}
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if sess.region.Empty() || sess.desktop.X <= 0 || sess.desktop.Y <= 0 {
+		return x, y
+	}
+	r := sess.region
+	px := float64(r.Min.X) + x*float64(r.Dx()-1)
+	py := float64(r.Min.Y) + y*float64(r.Dy()-1)
+	return px / float64(sess.desktop.X-1), py / float64(sess.desktop.Y-1)
+}
+
+// choose picks the region for a requested display: the whole desktop, the
+// display with that ID, or the primary monitor. A display that has gone falls
+// back to the primary rather than failing the stream.
+func choose(displays []protocol.ScreenDisplay, want string) (image.Rectangle, string) {
+	if want == protocol.ScreenAllDisplays || len(displays) == 0 {
+		return image.Rectangle{}, protocol.ScreenAllDisplays
+	}
+	pick := -1
+	for i, d := range displays {
+		if want != "" && d.ID == want {
+			pick = i
+			break
+		}
+	}
+	if pick < 0 {
+		pick = 0
+		for i, d := range displays {
+			if d.Primary {
+				pick = i
+				break
+			}
+		}
+	}
+	d := displays[pick]
+	return image.Rect(d.X, d.Y, d.X+d.Width, d.Y+d.Height), d.ID
 }
 
 // Start begins streaming to a device, replacing any stream it already has. A
@@ -124,10 +181,12 @@ func (s *Streamer) Viewers() []protocol.ScreenViewer {
 	viewers := make([]protocol.ScreenViewer, 0, len(s.sessions))
 	for id, sess := range s.sessions {
 		sess.mu.Lock()
+		settings := sess.settings
+		settings.Display = sess.display
 		viewers = append(viewers, protocol.ScreenViewer{
 			DeviceID: id,
 			Since:    sess.since.UnixMilli(),
-			Settings: sess.settings,
+			Settings: settings,
 			FPS:      sess.fps,
 		})
 		sess.mu.Unlock()
@@ -154,12 +213,35 @@ func (s *Streamer) run(ctx context.Context, deviceID string, sess *session) {
 	)
 	table := crc32.MakeTable(crc32.Castagnoli)
 
+	// Which part of the desktop, worked out at the start and again whenever a
+	// capture fails -- a monitor unplugged mid-stream fails the grab, and the
+	// fresh list moves the stream to whatever is still there.
+	var region image.Rectangle
+	pickRegion := func() {
+		displays, err := s.displays()
+		if err != nil {
+			displays = nil
+		}
+		var id string
+		region, id = choose(displays, settings.Display)
+		sess.mu.Lock()
+		sess.region, sess.display = region, id
+		sess.mu.Unlock()
+		s.send(deviceID, protocol.ActionScreenState, protocol.ScreenState{
+			Streaming: true, Displays: displays, Display: id,
+		}, nil)
+	}
+	pickRegion()
+
 	for {
 		started := time.Now()
 
-		frame, err := s.capture()
+		frame, err := s.capture(region)
 		if err != nil {
 			failures++
+			if failures%10 == 1 {
+				pickRegion()
+			}
 			if failures >= maxCaptureFailures {
 				log.Printf("screen: giving up on %s: %v", deviceID, err)
 				s.mu.Lock()
@@ -173,6 +255,9 @@ func (s *Streamer) run(ctx context.Context, deviceID string, sess *session) {
 			}
 		} else {
 			failures = 0
+			sess.mu.Lock()
+			sess.desktop = image.Pt(frame.DesktopWidth, frame.DesktopHeight)
+			sess.mu.Unlock()
 			scaled = Downscale(frame, settings.MaxWidth, scaled)
 			sum := crc32.Checksum(scaled.Pix, table)
 
