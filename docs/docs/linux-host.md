@@ -41,27 +41,27 @@ curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scrip
 
 | It writes | Which is |
 | --------- | -------- |
-| `~/.local/lib/switchboard/Switchboard.AppImage` | the app, plus a `version` file next to it |
-| `~/.local/bin/switchboard` | a symlink, so `switchboard` starts it from a terminal |
+| `~/.local/share/switchboard/Switchboard.AppImage` | the app, plus a `version` file next to it |
+| `~/.local/bin/switchboard` | a symlink to the AppImage, so `switchboard` starts it from a terminal |
 | `~/.local/share/applications/switchboard.desktop` | the launcher entry |
-| `~/.local/share/icons/hicolor/…/switchboard.png` | the icon set, read out of the AppImage itself |
+| `~/.local/share/icons/hicolor/512x512/apps/switchboard.png` | the icon, read out of the AppImage itself |
 
-Run as root — `curl … | sudo sh` — it installs into `/usr/local` instead, for
-every user on the machine.
+It installs for you alone and refuses to run as root, so no `sudo`. An install
+made by an older copy of the script, in `~/.local/lib/switchboard`, is moved
+over on the next run.
 
 | Flag | Does |
 | ---- | ---- |
 | *(none)* | the newest stable release |
 | `--pre` | the newest build of any channel, alpha and beta included |
 | `--version 1.2.3` | that release, whether or not it is the newest |
-| `--prefix DIR` | installs under `DIR` rather than `~/.local` |
 | `--force` | reinstalls a version that is already here |
+| `--from-file PATH` | installs a local AppImage instead of downloading one |
 | `--uninstall` | removes all four paths above |
 
 Re-running it is the update: it compares the release against the `version` file
-and stops if there is nothing to do. It refuses while Switchboard is running,
-because replacing the file under a mounted AppImage takes the running copy down
-with it — quit it from the tray first.
+and stops if there is nothing to do. A running Switchboard keeps running the
+version it started with; quit it from the tray and start it again to switch.
 
 Nothing it does touches `~/.config/Switchboard`, so installing, updating and
 uninstalling all keep the host key and every pairing. `--uninstall` prints the
@@ -371,13 +371,16 @@ built on it — Mint 22, Pop!_OS 24.04 — restrict the first
 1.1.5 the AppImage carries a launcher that adds `--no-sandbox` only when it is
 running from an AppImage on a kernel that restricts user namespaces, so it
 starts by double-click, from a terminal or from the menu entry. On 1.1.5 itself,
-install through `scripts/install.sh` (its `switchboard` command does the same) or
+install through `scripts/install.sh` (it adds the flag for releases that need it) or
 run `./Switchboard-1.1.5.AppImage --no-sandbox`. The `.deb` never had the
 problem: its post-install step makes the helper setuid.
 
-**The first launch of an AppImage is slow.** The window can take 15 seconds or
-more to fill in, because the daemon is read through a compressed FUSE mount for
-the first time. It is not hung, and later launches are quicker.
+**The AppImage takes minutes to start (1.1.7 and older).** Those AppImages were
+packed with xz, which the AppImage runtime decompresses again for nearly every
+page it reads: one core sits at full load for a minute or more before the daemon
+answers. From 1.1.8 the AppImage uses gzip and starts in a couple of seconds.
+Re-run `scripts/install.sh` to update, or use the `.deb`, which was never
+affected.
 
 **"No audio endpoint is available on this host."**
 The daemon could not reach an audio server. Check `pactl info` works as the

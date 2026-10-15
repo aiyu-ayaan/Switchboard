@@ -58,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scrip
 ```
 
 It takes the AppImage from the latest release and puts it under `~/.local`: the
-app in `~/.local/lib/switchboard`, a `switchboard` command in `~/.local/bin`,
+app in `~/.local/share/switchboard`, a `switchboard` command in `~/.local/bin`,
 and an entry in your applications menu with the right icon.
 
 - **To update**, run the same line again — it says so when you already have the
@@ -70,8 +70,8 @@ and an entry in your applications menu with the right icon.
   ```
 
 - **Other options**: `--pre` takes the newest alpha or beta, `--version 1.2.3`
-  pins a release, `--prefix /opt/switchboard` installs somewhere else, and
-  `--help` lists them all.
+  pins a release, `--from-file` installs an AppImage you already downloaded, and
+  `--help` lists them all. Run it as yourself, not with `sudo`.
 
 Installing, updating and uninstalling all leave `~/.config/Switchboard` alone —
 the host key and every paired phone live there, so none of the three un-pairs

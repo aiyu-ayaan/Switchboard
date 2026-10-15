@@ -154,7 +154,7 @@ curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scrip
 
 Run it again to update, or with `--uninstall` to remove it; either way your
 paired phones survive. [`scripts/install.sh`](scripts/install.sh) takes
-`--pre`, `--version`, `--prefix` and `--help`, and the
+`--pre`, `--version`, `--from-file` and `--help`, and the
 **[Linux host page](https://aiyu-ayaan.github.io/Switchboard/linux-host)** has
 the detail.
 
