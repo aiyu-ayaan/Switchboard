@@ -132,6 +132,10 @@ type ScreenFrame struct {
 type ScreenState struct {
 	Streaming bool   `json:"streaming"`
 	Error     string `json:"error,omitempty"`
+	// Ended marks a stop the desktop chose, as opposed to a failure. The
+	// phone leaves the screen for one and offers a retry for the other:
+	// "try again" on a desktop that just said no would only be refused.
+	Ended bool `json:"ended,omitempty"`
 	// Displays are the monitors the phone can choose between, and Display is
 	// the one being shared now (an ID, or ScreenAllDisplays).
 	Displays []ScreenDisplay `json:"displays,omitempty"`

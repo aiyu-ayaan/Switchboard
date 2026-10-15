@@ -197,6 +197,9 @@ func TestStreamerStopTellsThePhone(t *testing.T) {
 	if last.action != protocol.ActionScreenState {
 		t.Fatalf("last send %s, want screen.state", last.action)
 	}
+	if state := last.meta.(protocol.ScreenState); !state.Ended || state.Error == "" {
+		t.Fatalf("a desktop stop must read as ended with a reason, got %+v", state)
+	}
 	if len(s.Viewers()) != 0 {
 		t.Fatal("viewer still listed after stop")
 	}

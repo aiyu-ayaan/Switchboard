@@ -153,7 +153,7 @@ func (s *Streamer) Stop(deviceID, reason string) {
 		return
 	}
 	if reason != "" {
-		s.send(deviceID, protocol.ActionScreenState, protocol.ScreenState{Error: reason}, nil)
+		s.send(deviceID, protocol.ActionScreenState, protocol.ScreenState{Error: reason, Ended: true}, nil)
 	}
 }
 
