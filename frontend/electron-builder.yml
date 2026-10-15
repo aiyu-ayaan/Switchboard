@@ -126,6 +126,11 @@ deb:
   # package.json `name`, so without this the control file reads
   # `Package: frontend` and `apt remove` wants a package called frontend.
   packageName: switchboard
+  # The deb target inherits `linux.compression` above, and electron-builder
+  # passes it to fpm verbatim as --deb-compression. fpm only knows gz, bzip2
+  # and xz, so `normal` fails the build. xz is fpm's own default, and unlike the
+  # AppImage a .deb is unpacked once at install, not read through FUSE at run.
+  compression: xz
   # electron-builder's default depends still lists gconf2, gconf-service and
   # libappindicator1, none of which exist on a current Debian or Ubuntu -- the
   # package installs nowhere. This is the modern equivalent set.
