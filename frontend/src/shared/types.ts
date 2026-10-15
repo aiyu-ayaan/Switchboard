@@ -152,6 +152,72 @@ export interface LocalState {
   devices: PairedDevice[];
   transfers: FileTransfer[];
   settings: HostSettings;
+  /** Phones currently watching this desktop's screen. */
+  screenViewers?: ScreenViewer[];
+}
+
+export interface ScreenViewer {
+  deviceId: string;
+  since: number;
+  settings: { maxWidth: number; quality: number; fps: number; display?: string };
+  fps: number;
+}
+
+/** A paired phone sharing its own screen with this desktop. */
+export interface MirrorSettings {
+  maxSize: number;
+  bitrate: number;
+  fps: number;
+}
+
+export interface MirrorState {
+  streaming: boolean;
+  /** Android's own capture prompt is up on the phone, waiting for the user. */
+  awaitingConsent?: boolean;
+  width?: number;
+  height?: number;
+  /** The phone's accessibility service is on, so clicks act on it. */
+  control: boolean;
+  /** The package in front on the phone. */
+  foreground?: string;
+  settings: MirrorSettings;
+  error?: string;
+  deviceId?: string;
+  fps?: number;
+  bytesPerSec?: number;
+}
+
+export interface MirrorApp {
+  package: string;
+  label: string;
+  /** Base64 PNG. */
+  icon?: string;
+}
+
+export type MirrorNav =
+  | 'back'
+  | 'home'
+  | 'recents'
+  | 'notifications'
+  | 'quickSettings'
+  | 'lock'
+  | 'screenshot';
+
+export interface MirrorPoint {
+  x: number;
+  y: number;
+  t?: number;
+}
+
+export interface MirrorInput {
+  kind: 'tap' | 'longPress' | 'swipe' | 'scroll' | 'text' | 'key' | 'nav';
+  points?: MirrorPoint[];
+  duration?: number;
+  dx?: number;
+  dy?: number;
+  text?: string;
+  key?: string;
+  nav?: MirrorNav;
 }
 
 export type MediaAction = 'play' | 'pause' | 'toggle' | 'next' | 'prev' | 'stop';
@@ -290,6 +356,29 @@ export interface SwitchboardBridge {
     cancel(): Promise<void>;
     /** Fires when a further right-click adds files to an open picker. */
     onFiles(handler: (files: string[]) => void): () => void;
+  };
+  /** This desktop's screen as phones see it, and phones' screens shown here. */
+  screen: {
+    viewers(): Promise<ScreenViewer[]>;
+    /** Ends one phone's view of this screen, or every phone's when omitted. */
+    stop(deviceId?: string): Promise<ScreenViewer[]>;
+  };
+  phone: {
+    getState(): Promise<MirrorState>;
+    start(deviceId: string): Promise<MirrorState>;
+    stop(): Promise<MirrorState>;
+    input(input: MirrorInput): Promise<void>;
+    apps(): Promise<{ deviceId: string; apps: MirrorApp[] }>;
+    refreshApps(deviceId?: string): Promise<void>;
+    launch(pkg: string, deviceId?: string): Promise<void>;
+    /** Opens a phone-sized window for one app, or for the whole phone. */
+    openWindow(pkg: string, label: string): Promise<void>;
+    /** Packages with a window open ('' is the whole phone), and changes to them. */
+    windows(): Promise<string[]>;
+    onWindows(handler: (packages: string[]) => void): () => void;
+    focusWindows(): Promise<void>;
+    closeWindows(): Promise<void>;
+    onVideo(handler: (unit: CameraVideoUnit) => void): () => void;
   };
   camera: {
     getState(): Promise<CameraState>;

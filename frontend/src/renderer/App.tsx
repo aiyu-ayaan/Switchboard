@@ -1,4 +1,4 @@
-import { Camera, LayoutGrid, Monitor, Send, Settings, Smartphone, Volume2 } from 'lucide-react';
+import { Camera, Eye, LayoutGrid, Monitor, Send, Settings, Smartphone, TabletSmartphone, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { ActivityBar, StatusBar, TitleBar } from './components/Shell';
 import type { ViewId } from './components/Shell';
@@ -6,6 +6,7 @@ import { DisplaysView } from './components/DisplaysView';
 import { AudioView } from './components/AudioView';
 import { DeckView } from './components/DeckView';
 import { CameraView } from './components/CameraView';
+import { PhoneView } from './components/PhoneView';
 import { FilesView } from './components/FilesView';
 import { DevicesView } from './components/DevicesView';
 import { SettingsView } from './components/SettingsView';
@@ -16,6 +17,7 @@ const SECTIONS = [
   { id: 'audio' as const, label: 'Audio and media', icon: Volume2 },
   { id: 'deck' as const, label: 'Switchboard Deck', icon: LayoutGrid },
   { id: 'camera' as const, label: 'Camera', icon: Camera },
+  { id: 'phone' as const, label: 'Phone screen', icon: TabletSmartphone },
   { id: 'files' as const, label: 'File transfers', icon: Send },
   { id: 'devices' as const, label: 'Paired devices', icon: Smartphone },
   { id: 'settings' as const, label: 'Settings', icon: Settings }
@@ -32,6 +34,27 @@ export const App = () => {
   return (
     <div className="flex h-full flex-col">
       <TitleBar subtitle={state ? `— ${state.host.hostName}` : ''} locked={state?.host.locked} />
+
+      {/* A desktop being watched should always be able to see that it is,
+          and to end it from here. */}
+      {state?.screenViewers && state.screenViewers.length > 0 && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-warn/30 bg-warn/10 px-4 py-1.5 text-tiny text-warn">
+          <Eye aria-hidden="true" className="h-3.5 w-3.5" />
+          <span className="mr-auto">
+            {state.screenViewers
+              .map((v) => state.devices.find((d) => d.id === v.deviceId)?.name ?? 'A phone')
+              .join(', ')}{' '}
+            {state.screenViewers.length === 1 ? 'is' : 'are'} viewing this screen
+          </span>
+          <button
+            type="button"
+            onClick={() => window.switchboard.screen.stop().then(refresh)}
+            className="rounded border border-warn/40 px-2 py-0.5 font-medium hover:bg-warn/20"
+          >
+            Stop sharing
+          </button>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <ActivityBar
@@ -52,6 +75,7 @@ export const App = () => {
             {view === 'audio' && <AudioView state={state} patch={patch} setPaused={setPaused} />}
             {view === 'deck' && <DeckView state={state} />}
             {view === 'camera' && <CameraView state={state} />}
+            {view === 'phone' && <PhoneView state={state} />}
             {view === 'files' && <FilesView state={state} refresh={refresh} />}
             {view === 'devices' && <DevicesView state={state} refresh={refresh} />}
             {view === 'settings' && <SettingsView state={state} patch={patch} />}

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PowerAction } from '../../shared/types';
 
-export type ViewId = 'displays' | 'audio' | 'deck' | 'camera' | 'files' | 'devices' | 'settings';
+export type ViewId = 'displays' | 'audio' | 'deck' | 'camera' | 'phone' | 'files' | 'devices' | 'settings';
 
 export function PowerMenu() {
   const [open, setOpen] = useState(false);

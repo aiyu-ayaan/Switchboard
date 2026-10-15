@@ -19,6 +19,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { HostSettings, LocalState } from '../shared/types';
 import { installExplorerVerb, pathsFromArgv } from './shellIntegration';
+import { registerPhoneBridge } from './phoneBridge';
 import { queueSendPaths, registerSendPicker } from './sendPicker';
 import { resolveSiteIcon } from './siteIcons';
 import { registerUpdateBridge } from './updateBridge';
@@ -448,7 +449,16 @@ const ALLOWED_ROUTES = new Set([
   '/audio/mic',
   '/audio/input',
   '/input/text',
-  '/clipboard'
+  '/clipboard',
+  '/screen/viewers',
+  '/screen/stop',
+  '/mirror/state',
+  '/mirror/start',
+  '/mirror/stop',
+  '/mirror/input',
+  '/mirror/apps',
+  '/mirror/apps/refresh',
+  '/mirror/launch'
 ]);
 
 /**
@@ -841,6 +851,14 @@ async function bootstrap(): Promise<void> {
   registerWindowControls();
   registerDaemonBridge();
   registerCameraBridge();
+  registerPhoneBridge({
+    isDev,
+    devServer: DEV_SERVER,
+    rendererFile: join(__dirname, '..', 'renderer', 'index.html'),
+    preload: join(__dirname, '..', 'preload', 'index.js'),
+    port: DAEMON_PORT,
+    iconPath: appIconPath()
+  });
   registerFileBridge();
   registerUpdateBridge();
   registerSendPicker({

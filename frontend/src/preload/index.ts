@@ -8,6 +8,10 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   AudioDevice,
   CameraState,
+  CameraVideoUnit,
+  MirrorApp,
+  MirrorState,
+  ScreenViewer,
   AudioSession,
   Display,
   DeckActionRequest,
@@ -93,6 +97,45 @@ const bridge: SwitchboardBridge = {
       const listener = (_event: unknown, files: string[]) => handler(files);
       ipcRenderer.on('sendPicker:files', listener);
       return () => ipcRenderer.removeListener('sendPicker:files', listener);
+    }
+  },
+  screen: {
+    viewers: () => call<ScreenViewer[]>('/screen/viewers'),
+    stop: (deviceId) => call<ScreenViewer[]>('/screen/stop', { deviceId: deviceId ?? '' })
+  },
+  phone: {
+    getState: () => call<MirrorState>('/mirror/state'),
+    start: (deviceId) => call<MirrorState>('/mirror/start', { deviceId }),
+    stop: () => call<MirrorState>('/mirror/stop', {}),
+    input: async (input) => {
+      await call('/mirror/input', input);
+    },
+    apps: () => call<{ deviceId: string; apps: MirrorApp[] }>('/mirror/apps'),
+    refreshApps: async (deviceId) => {
+      await call('/mirror/apps/refresh', { deviceId: deviceId ?? '' });
+    },
+    launch: async (pkg, deviceId) => {
+      await call('/mirror/launch', { package: pkg, deviceId: deviceId ?? '' });
+    },
+    openWindow: (pkg, label) => ipcRenderer.invoke('phone:openWindow', pkg, label) as Promise<void>,
+    windows: () => ipcRenderer.invoke('phone:windows') as Promise<string[]>,
+    onWindows: (handler) => {
+      const listener = (_event: unknown, packages: string[]) => handler(packages);
+      ipcRenderer.on('phone:windows', listener);
+      return () => ipcRenderer.removeListener('phone:windows', listener);
+    },
+    focusWindows: () => ipcRenderer.invoke('phone:focusWindows') as Promise<void>,
+    closeWindows: () => ipcRenderer.invoke('phone:closeWindows') as Promise<void>,
+    // Each window holds its own stream, started at the daemon's newest
+    // keyframe, so a window opened mid-stream has a picture at once.
+    onVideo: (handler) => {
+      const listener = (_event: unknown, unit: CameraVideoUnit) => handler(unit);
+      ipcRenderer.on('phone:video', listener);
+      ipcRenderer.send('phone:subscribe');
+      return () => {
+        ipcRenderer.removeListener('phone:video', listener);
+        ipcRenderer.send('phone:unsubscribe');
+      };
     }
   },
   camera: {
