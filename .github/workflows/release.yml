@@ -52,6 +52,7 @@ on:
 
 permissions:
   contents: write
+  actions: write # delete the build artifacts once they are published
 
 concurrency:
   group: release
@@ -227,6 +228,9 @@ jobs:
           name: android-${{ matrix.artifact }}
           path: ${{ runner.temp }}/out/*
           if-no-files-found: error
+          # Published to the Release by `publish`, which then deletes them. A
+          # failed release keeps them this day for a retry.
+          retention-days: 1
 
   desktop:
     name: Desktop ${{ matrix.label }}
@@ -367,6 +371,9 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ runner.temp }}/out/*
           if-no-files-found: error
+          # Published to the Release by `publish`, which then deletes them. A
+          # failed release keeps them this day for a retry.
+          retention-days: 1
 
   publish:
     name: Publish
@@ -466,3 +473,13 @@ jobs:
           body_path: ${{ steps.notes.outputs.path }}
           files: artifacts/*
           fail_on_unmatched_files: true
+
+      # Everything is in the Release now. GitHub's shortest expiry is a day, so
+      # they go here; a failed release never reaches this step and keeps them
+      # that day for the retry.
+      - name: Delete the build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate --jq '.artifacts[].id' |
+            xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/{}"
