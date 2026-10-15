@@ -192,8 +192,8 @@ function startDaemon(): Promise<void> {
  * Polls until the daemon answers, for up to `seconds`. False if it never does.
  *
  * Generous on purpose. A freshly installed Windows binary waits on Defender, and
- * the first launch of a Linux AppImage reads the Go binary through a FUSE mount
- * of a maximum-compression image -- measured at about fifteen seconds cold. Giving
+ * a Linux AppImage reads the Go binary through a FUSE mount, which before 1.1.8
+ * was an xz image that took over a minute to start from. Giving
  * up early is worse than waiting: the renderer's next poll would then start a
  * second daemon, which fails to bind and exits.
  */

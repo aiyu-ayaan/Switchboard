@@ -80,6 +80,13 @@ nsis:
 
 linux:
   icon: resources/icon.png
+  # Not the `maximum` above. For an AppImage that means an xz squashfs with 1 MiB
+  # blocks, and the AppImage runtime reads it through FUSE with no block cache:
+  # every page Chromium faults in decompresses a whole megabyte again, single
+  # threaded. Measured on 1.1.7, the daemon answered after 70 s with the file
+  # already in the page cache, and minutes on a cold or slower machine. The same
+  # payload in gzip answered in 2 s, for a download about a quarter larger.
+  compression: normal
   # Without this the binary is called `frontend`. On Windows the executable
   # name defaults to productName, but on Linux electron-builder falls back to
   # the package.json `name` -- which is the workspace folder, not the product.
