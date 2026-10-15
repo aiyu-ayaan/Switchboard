@@ -1,6 +1,11 @@
 package system
 
-import "math"
+import (
+	"image"
+	"math"
+
+	"switchboard/backend/internal/protocol"
+)
 
 // ScreenFrame is one grab of the host's whole desktop.
 //
@@ -14,6 +19,11 @@ type ScreenFrame struct {
 	Stride        int
 	Pix           []byte
 
+	// DesktopWidth and DesktopHeight are the whole desktop's size, which a
+	// region capture needs reported beside it: a touch on one monitor's
+	// picture becomes a pointer position on the desktop as a whole.
+	DesktopWidth, DesktopHeight int
+
 	// Cursor is the pointer position in frame pixels, or -1 when it is off the
 	// captured area. Neither capture path includes the cursor in the pixels,
 	// so it is reported beside them for the viewer to draw.
@@ -23,9 +33,17 @@ type ScreenFrame struct {
 // ScreenSupported reports whether this host can capture its desktop.
 func (c *Controller) ScreenSupported() bool { return screenSupported() }
 
-// CaptureScreen grabs the whole desktop -- every monitor, as one picture
-// spanning the virtual screen.
-func (c *Controller) CaptureScreen() (*ScreenFrame, error) { return captureScreen() }
+// CaptureScreen grabs part of the desktop: region, in desktop pixels, or the
+// whole of it -- every monitor as one picture -- when region is empty. A
+// region is clipped to the desktop, and only it is read, so sharing one
+// monitor of three costs a third of the capture.
+func (c *Controller) CaptureScreen(region image.Rectangle) (*ScreenFrame, error) {
+	return captureScreen(region)
+}
+
+// ScreenDisplays lists the monitors, in desktop pixels. A host that cannot
+// tell its monitors apart reports the whole desktop as one.
+func (c *Controller) ScreenDisplays() ([]protocol.ScreenDisplay, error) { return screenDisplays() }
 
 // PointerTo moves the pointer to an absolute position given as fractions of
 // the captured desktop, so a tap on the phone's picture of the screen lands on

@@ -5,6 +5,7 @@ package system
 import (
 	"errors"
 	"fmt"
+	"image"
 	"sync"
 	"unsafe"
 
@@ -75,6 +76,41 @@ type bitmapInfoHeader struct {
 
 type point struct{ x, y int32 }
 
+const monitorInfoPrimary = 1
+
+// screenDisplays enumerates monitors in the same coordinates captureScreen
+// takes: pixels from the virtual screen's top-left.
+func screenDisplays() ([]protocol.ScreenDisplay, error) {
+	grabber.dpiOnce.Do(beDPIAware)
+	vx, vy, _, _ := virtualScreen()
+
+	var displays []protocol.ScreenDisplay
+	callback := windows.NewCallback(func(monitor, _ uintptr, _ uintptr, _ uintptr) uintptr {
+		info := monitorInfoEx{cbSize: uint32(unsafe.Sizeof(monitorInfoEx{}))}
+		if r, _, _ := procGetMonitorInfoW.Call(monitor, uintptr(unsafe.Pointer(&info))); r == 0 {
+			return 1
+		}
+		device := windows.UTF16ToString(info.szDevice[:])
+		displays = append(displays, protocol.ScreenDisplay{
+			ID:      device,
+			Name:    fmt.Sprintf("Display %d", len(displays)+1),
+			X:       int(info.rcMonitor.Left) - vx,
+			Y:       int(info.rcMonitor.Top) - vy,
+			Width:   int(info.rcMonitor.Right - info.rcMonitor.Left),
+			Height:  int(info.rcMonitor.Bottom - info.rcMonitor.Top),
+			Primary: info.dwFlags&monitorInfoPrimary != 0,
+		})
+		return 1 // continue
+	})
+	if r, _, err := procEnumDisplayMonitors.Call(0, 0, callback, 0); r == 0 {
+		return nil, fmt.Errorf("system: EnumDisplayMonitors: %w", err)
+	}
+	if len(displays) == 0 {
+		return nil, errors.New("system: no monitors")
+	}
+	return displays, nil
+}
+
 // grabber keeps its DC and DIB section between frames. Creating them costs
 // more than the copy itself, and the size only changes when a monitor does.
 var grabber struct {
@@ -126,7 +162,7 @@ func releaseGrabberLocked() {
 	grabber.width, grabber.height = 0, 0
 }
 
-func captureScreen() (*ScreenFrame, error) {
+func captureScreen(region image.Rectangle) (*ScreenFrame, error) {
 	grabber.Lock()
 	defer grabber.Unlock()
 	grabber.dpiOnce.Do(beDPIAware)
@@ -134,6 +170,19 @@ func captureScreen() (*ScreenFrame, error) {
 	vx, vy, vw, vh := virtualScreen()
 	if vw <= 0 || vh <= 0 {
 		return nil, errors.New("system: no desktop to capture")
+	}
+	desktopW, desktopH := vw, vh
+	// The region is in desktop pixels from the virtual screen's top-left,
+	// which on a desktop with a monitor left of the primary is not (0,0) in
+	// Windows' own coordinates. From here on vx,vy,vw,vh describe the area
+	// actually read.
+	if !region.Empty() {
+		area := region.Intersect(image.Rect(0, 0, vw, vh))
+		if area.Empty() {
+			return nil, errors.New("system: the chosen display is no longer on the desktop")
+		}
+		vx, vy = vx+area.Min.X, vy+area.Min.Y
+		vw, vh = area.Dx(), area.Dy()
 	}
 
 	screenDC, _, _ := procGetDC.Call(0)
@@ -179,7 +228,11 @@ func captureScreen() (*ScreenFrame, error) {
 	pix := make([]byte, stride*vh)
 	copy(pix, unsafe.Slice((*byte)(grabber.bits), len(pix)))
 
-	frame := &ScreenFrame{Width: vw, Height: vh, Stride: stride, Pix: pix, CursorX: -1, CursorY: -1}
+	frame := &ScreenFrame{
+		Width: vw, Height: vh, Stride: stride, Pix: pix,
+		DesktopWidth: desktopW, DesktopHeight: desktopH,
+		CursorX: -1, CursorY: -1,
+	}
 	var cursor point
 	if r, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&cursor))); r != 0 {
 		cx, cy := int(cursor.x)-vx, int(cursor.y)-vy

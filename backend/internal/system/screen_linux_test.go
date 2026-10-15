@@ -3,6 +3,7 @@
 package system
 
 import (
+	"image"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ import (
 
 func TestCaptureScreenReadsWholeRoot(t *testing.T) {
 	requireX11(t)
-	frame, err := captureScreen()
+	frame, err := captureScreen(image.Rectangle{})
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
@@ -26,7 +27,7 @@ func TestCaptureScreenReadsWholeRoot(t *testing.T) {
 	// A second grab on the same dedicated connection must line up too: a
 	// reply drained short would leave the stream desynchronised and show up
 	// only here.
-	again, err := captureScreen()
+	again, err := captureScreen(image.Rectangle{})
 	if err != nil {
 		t.Fatalf("second capture: %v", err)
 	}
@@ -60,7 +61,7 @@ func TestPointerToLandsOnFraction(t *testing.T) {
 		t.Fatalf("pointer at %d,%d, want %d,%d", x, y, wantX, wantY)
 	}
 
-	frame, err := captureScreen()
+	frame, err := captureScreen(image.Rectangle{})
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
@@ -87,4 +88,38 @@ func abs(v int) int {
 		return -v
 	}
 	return v
+}
+
+func TestScreenDisplaysCoverTheDesktop(t *testing.T) {
+	requireX11(t)
+	displays, err := screenDisplays()
+	if err != nil {
+		t.Fatalf("displays: %v", err)
+	}
+	if len(displays) == 0 {
+		t.Fatal("no displays")
+	}
+	whole, err := captureScreen(image.Rectangle{})
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	for _, d := range displays {
+		if d.ID == "" || d.Width <= 0 || d.Height <= 0 {
+			t.Fatalf("malformed display %+v", d)
+		}
+		if d.X < 0 || d.Y < 0 || d.X+d.Width > whole.Width || d.Y+d.Height > whole.Height {
+			t.Fatalf("display %+v falls outside the %dx%d desktop", d, whole.Width, whole.Height)
+		}
+		t.Logf("display %+v", d)
+	}
+
+	// Capturing one display reads exactly its rectangle.
+	d := displays[0]
+	part, err := captureScreen(image.Rect(d.X, d.Y, d.X+d.Width, d.Y+d.Height))
+	if err != nil {
+		t.Fatalf("region capture: %v", err)
+	}
+	if part.Width != d.Width || part.Height != d.Height {
+		t.Fatalf("region %dx%d, want %dx%d", part.Width, part.Height, d.Width, d.Height)
+	}
 }
