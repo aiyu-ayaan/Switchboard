@@ -39,7 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
@@ -113,6 +113,7 @@ enum class Section(val title: String, val icon: ImageVector) {
     Touchpad("Touchpad", Icons.Filled.Mouse),
     Camera("Camera", Icons.Filled.PhotoCamera),
     Screen("PC Screen", Icons.Filled.DesktopWindows),
+    Mirror("Share Phone", Icons.Filled.PhoneAndroid),
     Files("Files", Icons.Filled.Folder);
 
     fun availableIn(state: UiState): Boolean = when (this) {
@@ -127,6 +128,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         // desktop's capabilities decides whether it can be offered.
         Camera -> true
         Screen -> state.host.capabilities.contains("screen")
+        Mirror -> true
         Files -> true
     }
 
@@ -162,6 +164,7 @@ enum class Section(val title: String, val icon: ImageVector) {
         Touchpad -> "Drive the pointer and shell gestures"
         Camera -> "Use this phone as a webcam"
         Screen -> "See and control the desktop"
+        Mirror -> "Show this phone on the desktop"
         Files -> when (val running = state.transfers.count { !TransferStatus.isTerminal(it.status) }) {
             0 -> "Send and receive files"
             1 -> "1 transfer in progress"
@@ -1429,18 +1432,28 @@ private fun BentoUtilityGrid(
             )
         }
 
-        // Row 3: Screen sharing
-        if (state.host.capabilities.contains("screen")) Row(
+        // Row 3: Screen sharing, both ways
+        Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            if (state.host.capabilities.contains("screen")) {
+                BentoTile(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Filled.DesktopWindows,
+                    title = "PC Screen",
+                    subtitle = "View & control",
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    onClick = { onOpen(Section.Screen) }
+                )
+            }
             BentoTile(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Filled.DesktopWindows,
-                title = "PC Screen",
-                subtitle = "View & control",
+                icon = Icons.Filled.PhoneAndroid,
+                title = "Share Phone",
+                subtitle = "Mirror to desktop",
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                onClick = { onOpen(Section.Screen) }
+                onClick = { onOpen(Section.Mirror) }
             )
         }
 
@@ -2054,6 +2067,8 @@ private fun SectionBody(
             )
 
             Section.Camera -> CameraScreen()
+
+            Section.Mirror -> MirrorScreen()
 
             // Full screen; short-circuits in SectionScreen.
             Section.Screen -> EmptyCard(

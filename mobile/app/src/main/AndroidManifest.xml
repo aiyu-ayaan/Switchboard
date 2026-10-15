@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- Sharing this phone's screen to the desktop holds a media projection. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!--
       "Stay connected" holds the socket open past the UI. connectedDevice
       rather than dataSync, which Android 15 caps at a few hours a day;
@@ -44,6 +46,18 @@
       Files are picked and saved through the Storage Access Framework, which
       grants per-document access, so no storage permission is declared at all.
     -->
+
+    <!--
+      The desktop lists this phone's apps to open them in their own windows.
+      Android 11 hides other packages from an app unless it says which it
+      needs to see: here, exactly what the home screen shows.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -97,6 +111,42 @@
             android:name=".camera.CameraService"
             android:exported="false"
             android:foregroundServiceType="camera" />
+
+        <service
+            android:name=".mirror.MirrorService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <!--
+          Asks Android's own screen-capture question over whatever is on
+          screen, then disappears. Excluded from Recents: it is a prompt, not
+          a place the user can go back to.
+        -->
+        <activity
+            android:name=".mirror.MirrorConsentActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!--
+          Performs the desktop's clicks and typing when this phone's screen is
+          shared. Off until the user turns it on in Accessibility settings;
+          the permission means only the system can bind it.
+        -->
+        <service
+            android:name=".mirror.MirrorControlService"
+            android:exported="true"
+            android:label="@string/mirror_control_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/mirror_control_service" />
+        </service>
 
         <receiver
             android:name=".BootReceiver"

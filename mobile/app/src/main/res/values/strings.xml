@@ -8,5 +8,7 @@
     <string name="widget_settings_title">Widget controls</string>
     <string name="performance_widget_description">Live CPU, memory, GPU and network for your desktop.</string>
     <string name="controls_widget_label">Switchboard Controls</string>
+    <string name="mirror_control_label">Switchboard desktop control</string>
+    <string name="mirror_control_description">Lets your paired desktop click, scroll and type on this phone while you share its screen with it. Switchboard only acts on what you do in the desktop\'s phone window, and only while sharing is on.</string>
     <string name="performance_widget_label">Switchboard Performance</string>
 </resources>

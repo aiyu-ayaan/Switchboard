@@ -21,6 +21,7 @@ import com.switchboard.app.net.SwitchboardJson
 import com.switchboard.app.net.TransferStatus
 import com.switchboard.app.net.Volume
 import com.switchboard.app.camera.CameraController
+import com.switchboard.app.mirror.MirrorController
 import com.switchboard.app.screen.RemoteScreen
 import com.switchboard.app.transfer.TransferEngine
 import kotlinx.coroutines.CoroutineScope
@@ -93,6 +94,7 @@ class SwitchboardConnection private constructor(context: Context) {
     private val transfers = TransferEngine.get(context)
     val camera = CameraController.get(context)
     val remoteScreen = RemoteScreen.get()
+    val mirror = MirrorController.get(context)
     private val client = SwitchboardClient(store.identity, "${Build.MANUFACTURER} ${Build.MODEL}")
     private val discovery = HostDiscovery(context)
 
@@ -375,6 +377,7 @@ class SwitchboardConnection private constructor(context: Context) {
                 transfers.bind { action, payload, blob -> client.send(action, payload, blob) }
                 camera.bind { action, payload, blob -> client.send(action, payload, blob) }
                 remoteScreen.bind { action, payload, blob -> client.send(action, payload, blob) }
+                mirror.bind({ action, payload, blob -> client.send(action, payload, blob) }, client::queuedBytes)
                 store.save(saved)
                 client.send(Actions.DECK_GET)
                 client.send(Actions.SYSTEM_APPS)
@@ -469,12 +472,14 @@ class SwitchboardConnection private constructor(context: Context) {
             is ConnectionEvent.ScreenCommand ->
                 remoteScreen.onCommand(event.action, event.payload, event.blob)
 
-            is ConnectionEvent.MirrorCommand -> Unit
+            is ConnectionEvent.MirrorCommand ->
+                mirror.onCommand(event.action, event.payload)
 
             is ConnectionEvent.Failed -> {
                 transfers.unbind()
                 camera.unbind()
                 remoteScreen.unbind()
+                mirror.unbind()
                 _state.update {
                     it.copy(
                         status = ConnectionStatus.Disconnected,
@@ -488,6 +493,7 @@ class SwitchboardConnection private constructor(context: Context) {
                 transfers.unbind()
                 camera.unbind()
                 remoteScreen.unbind()
+                mirror.unbind()
                 _state.update {
                     it.copy(status = ConnectionStatus.Disconnected, activeHost = null)
                 }
@@ -529,6 +535,7 @@ class SwitchboardConnection private constructor(context: Context) {
         transfers.unbind()
         camera.unbind()
         remoteScreen.unbind()
+        mirror.unbind()
         client.disconnect()
         _state.update { it.copy(status = ConnectionStatus.Disconnected, activeHost = null) }
     }
