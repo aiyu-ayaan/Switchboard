@@ -35,7 +35,9 @@ time, or all of them as one picture. Sharing starts on the primary monitor:
 several monitors side by side shrink to an unreadable strip on a phone.
 
 While any phone is watching, the desktop shows a banner naming it, with
-**Stop sharing**. The phone is told why its view ended.
+**Stop sharing**. Stopping there closes PC Screen on the phone, which returns
+to its home screen and says the desktop stopped sharing. A desktop that cannot
+capture its screen keeps the view open with **Try again** instead.
 
 ### How it works
 
