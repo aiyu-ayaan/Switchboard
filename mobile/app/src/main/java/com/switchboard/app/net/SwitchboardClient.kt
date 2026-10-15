@@ -115,8 +115,12 @@ class SwitchboardClient(
     @Volatile
     private var socket: WebSocket? = null
 
+    /**
+     * The authenticated socket and the session that seals for it, swapped as
+     * one so a send can never pair one connection's key with another's socket.
+     */
     @Volatile
-    private var session: SessionCrypto.Session? = null
+    private var link: Pair<WebSocket, SessionCrypto.Session>? = null
 
     fun connect(credentials: Credentials): Flow<ConnectionEvent> = callbackFlow {
         val endpoint: String
@@ -171,12 +175,25 @@ class SwitchboardClient(
 
         lateinit var listener: WebSocketListener
 
+        // This attempt's own socket and session. The class-level fields are
+        // only the send path, and a newer attempt takes them over. Before
+        // this, each attempt worked on the shared fields: a reconnect
+        // cancelled the old attempt, whose teardown ran later and closed the
+        // *new* socket and cleared its session, while the old socket was
+        // never closed and went on decrypting the host's frames with the new
+        // session's counters -- every frame refused as a replay, and the
+        // phone stuck on "connecting" with a live socket.
+        var mine: WebSocket? = null
+        var mySession: SessionCrypto.Session? = null
+
         var endpointIndex = 0
         fun startNextConnection(): Boolean {
             if (endpointIndex < endpoints.size) {
                 val nextUrl = endpoints[endpointIndex++]
                 Log.i(TAG, "Connecting to host endpoint: $nextUrl")
-                socket = http.newWebSocket(Request.Builder().url(nextUrl).build(), listener)
+                val next = http.newWebSocket(Request.Builder().url(nextUrl).build(), listener)
+                mine = next
+                socket = next
                 return true
             }
             return false
@@ -268,7 +285,9 @@ class SwitchboardClient(
                 )
                 check(hostProved) { "host failed to prove its identity" }
 
-                session = derived
+                mySession = derived
+                socket = webSocket
+                link = webSocket to derived
                 phase = Phase.READY
                 Log.i(TAG, "Handshake complete! Emitting ConnectionEvent.Connected for ${result.hostName}")
                 trySend(
@@ -282,7 +301,7 @@ class SwitchboardClient(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                val active = session ?: return
+                val active = mySession ?: return
                 runCatching {
                     val frame = Frame.decode(active.open(bytes.toByteArray()))
                     val envelope = frame.envelope
@@ -398,9 +417,11 @@ class SwitchboardClient(
         startNextConnection()
 
         awaitClose {
-            socket?.close(NORMAL_CLOSURE, null)
-            socket = null
-            session = null
+            mine?.close(NORMAL_CLOSURE, null)
+            // Only clear the send path if it is still this attempt's; a newer
+            // one may already own it.
+            if (socket === mine) socket = null
+            if (link?.first === mine) link = null
         }
     }
         // callbackFlow defaults to 64 slots, and every emitter above is a
@@ -420,7 +441,7 @@ class SwitchboardClient(
      * envelope for a bulk payload. No-ops before the handshake completes.
      */
     fun send(action: String, payload: WirePayload? = null, blob: ByteArray? = null) {
-        val active = session ?: return
+        val (target, active) = link ?: return
         val envelope = Envelope(
             id = UUID.randomUUID().toString(),
             type = "command",
@@ -436,7 +457,7 @@ class SwitchboardClient(
         // hardware encoder's thread and the analyser's at once, which turns
         // that from a rare race into a matter of seconds.
         synchronized(active) {
-            socket?.send(active.seal(frame).toByteString())
+            target.send(active.seal(frame).toByteString())
         }
     }
 
@@ -487,7 +508,7 @@ class SwitchboardClient(
      * closes a socket whose queue passes 16 MiB, and a slow link would get there
      * in seconds at a video bitrate.
      */
-    fun queuedBytes(): Long = socket?.queueSize() ?: 0L
+    fun queuedBytes(): Long = link?.first?.queueSize() ?: 0L
 
     fun queryResources(range: String = "1h") =
         send(Actions.SYSTEM_RESOURCES_QUERY, ResourcesQuery(range))
@@ -516,7 +537,7 @@ class SwitchboardClient(
     fun disconnect() {
         socket?.close(NORMAL_CLOSURE, null)
         socket = null
-        session = null
+        link = null
     }
 
     private enum class Phase { AWAITING_HELLO, AWAITING_RESULT, READY }
