@@ -3,6 +3,7 @@ package com.switchboard.app.camera
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
+import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
@@ -49,7 +50,20 @@ class VideoEncoder(
      * those parameters — in which case the caller keeps to the JPEG track.
      */
     @Synchronized
-    fun start(width: Int, height: Int, fps: Int, bitrate: Int): Surface? {
+    fun start(
+        width: Int,
+        height: Int,
+        fps: Int,
+        bitrate: Int,
+        /**
+         * Re-emit the last frame after this long without a new one. A camera
+         * always has new frames; a phone screen sitting still has none, and a
+         * viewer that joins then would wait forever for a keyframe that only
+         * comes with the next frame.
+         */
+        repeatAfterUs: Long = 0,
+        iFrameIntervalSeconds: Int = 1
+    ): Surface? {
         stop()
 
         return runCatching {
@@ -63,7 +77,10 @@ class VideoEncoder(
                 // One second between keyframes. A viewer joining mid-stream is
                 // blank until the first one arrives, and every keyframe costs
                 // several times a delta frame, so this is the whole trade.
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameIntervalSeconds)
+                if (repeatAfterUs > 0) {
+                    setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, repeatAfterUs)
+                }
                 setInteger(
                     MediaFormat.KEY_BITRATE_MODE,
                     MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
@@ -111,6 +128,20 @@ class VideoEncoder(
         codec = null
         thread?.let { runCatching { it.quitSafely() } }
         thread = null
+    }
+
+    /**
+     * Asks for the next frame to be a keyframe, for a viewer that has just
+     * joined or fallen behind and cannot decode deltas until one arrives.
+     */
+    @Synchronized
+    fun requestKeyFrame() {
+        val codec = codec ?: return
+        runCatching {
+            codec.setParameters(Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+            })
+        }
     }
 
     private val callback = object : MediaCodec.Callback() {
