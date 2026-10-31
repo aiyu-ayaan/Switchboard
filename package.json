@@ -1,0 +1,16 @@
+{
+  "name": "switchboard",
+  "version": "0.0.0",
+  "packageManager": "pnpm@12.4.2",
+  "private": true,
+  "description": "Cross-platform system control and file transfer via mobile device",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:backend": "cargo build --release -p switchboard-backend",
+    "build:frontend": "pnpm --filter frontend build",
+    "test:backend": "cargo test --workspace",
+    "android:build": "cd mobile && ./gradlew assembleDebug"
+  },
+  "keywords": ["switchboard", "remote-control", "electron", "android", "rust"],
+  "license": "MIT"
+}
