@@ -15,6 +15,8 @@ use switchboard_core::protocol::Command;
 
 use crate::app::App;
 
+// Arguments share the line with the request `id`, so no command may take
+// an argument called `id`.
 #[derive(Deserialize)]
 struct Input {
     id: u64,
@@ -28,7 +30,7 @@ enum Cmd {
     Status,
     PairStart,
     PairCancel,
-    Forget { id: String },
+    Forget { device: String },
     Rename { name: String },
     /// What a phone would see right now, for the desktop's own dashboard.
     State,
@@ -49,8 +51,8 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
             app.emit_status();
             Value::Null
         }
-        Cmd::Forget { id } => {
-            let removed = app.forget(&id)?;
+        Cmd::Forget { device } => {
+            let removed = app.forget(&device)?;
             app.emit_status();
             json!({ "removed": removed })
         }
@@ -96,5 +98,23 @@ pub async fn run(app: Arc<App>) {
         } else {
             reply.await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forget_line_keeps_request_id() {
+        let i: Input = serde_json::from_str(r#"{"id":7,"cmd":"forget","device":"abc"}"#).unwrap();
+        assert_eq!(i.id, 7);
+        assert!(matches!(i.cmd, Cmd::Forget { device } if device == "abc"));
+    }
+
+    #[test]
+    fn run_line_parses() {
+        let i: Input = serde_json::from_str(r#"{"id":1,"cmd":"run","command":{"type":"set_volume","level":5}}"#).unwrap();
+        assert!(matches!(i.cmd, Cmd::Run { .. }));
     }
 }

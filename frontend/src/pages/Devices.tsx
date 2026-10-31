@@ -14,7 +14,7 @@ export function Devices({ status, go }: { status: Status | null; go: (r: Route) 
     if (!forget) return
     setBusy(true)
     try {
-      await sb.call('forget', { id: forget.id })
+      await sb.call('forget', { device: forget.id })
       toast(`${forget.name} was forgotten`)
       setForget(null)
     } catch (e) {
