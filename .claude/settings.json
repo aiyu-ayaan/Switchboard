@@ -2,6 +2,7 @@
   "enabledPlugins": {
     "ponytail@ponytail": true,
     "superpowers@claude-plugins-official": true,
-    "brag@brag": true
+    "brag@brag": true,
+    "material-3@material-3-skill": true
   }
 }
