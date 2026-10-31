@@ -267,7 +267,7 @@ function quit() {
 // --- IPC --------------------------------------------------------------------
 
 const trusted = (e) => e.senderFrame && win && e.sender === win.webContents
-const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'rename', 'state'])
+const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'rename', 'state', 'run'])
 
 ipcMain.handle('sb:call', (e, cmd, args) => {
   if (!trusted(e) || !ALLOWED.has(cmd)) throw new Error('not allowed')

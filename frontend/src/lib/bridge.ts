@@ -90,23 +90,25 @@ export function useStatus() {
 }
 
 /** What a phone would see, polled while the page is on screen. */
-export function useHostState(everyMs = 4000) {
+export function useHostState(everyMs = 3000) {
   const [state, setState] = useState<HostState | null>(null)
+  const [tick, setTick] = useState(0)
   useEffect(() => {
     let alive = true
-    const tick = () =>
+    const load = () =>
       sb.call<HostState>('state').then(
         (s) => alive && setState(s),
         () => {},
       )
-    tick()
-    const t = setInterval(() => !document.hidden && tick(), everyMs)
+    load()
+    const t = setInterval(() => !document.hidden && load(), everyMs)
     return () => {
       alive = false
       clearInterval(t)
     }
-  }, [everyMs])
-  return state
+  }, [everyMs, tick])
+  const refresh = useCallback(() => setTick((n) => n + 1), [])
+  return { state, refresh }
 }
 
 export function useSettings() {
@@ -134,3 +136,13 @@ export function bytes(n: number) {
   const gb = n / 1024 ** 3
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`
 }
+
+export type Control =
+  | { type: 'set_volume'; level: number }
+  | { type: 'set_mute'; muted: boolean }
+  | { type: 'set_brightness'; display: string; level: number }
+  | { type: 'set_contrast'; display: string; level: number }
+  | { type: 'media'; action: 'play_pause' | 'next' | 'previous' }
+
+/** Runs a control on this computer, the same path a phone command takes. */
+export const run = (command: Control) => sb.call('run', { command })

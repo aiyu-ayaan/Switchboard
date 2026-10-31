@@ -127,10 +127,11 @@ export function Button({ variant = 'filled', size = 'md', icon, loading, childre
         // Expressive press: the pill squares up a little while held.
         'state-layer no-drag inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 rounded-full font-medium transition-[border-radius,transform,background-color] duration-fast ease-std active:rounded-lg disabled:cursor-not-allowed disabled:opacity-40',
         variants[variant],
-        size === 'sm' && 'h-9 px-4 text-label',
-        size === 'md' && 'h-10 px-5 text-body',
-        size === 'lg' && 'h-14 px-7 text-title',
-        !children && (size === 'sm' ? 'w-9 px-0' : size === 'md' ? 'w-10 px-0' : 'w-14 px-0'),
+        size === 'sm' && 'h-9 text-label',
+        size === 'md' && 'h-10 text-body',
+        size === 'lg' && 'h-14 text-title',
+        // Icon-only buttons are square; padding would squeeze the icon to nothing.
+        children ? { sm: 'px-4', md: 'px-5', lg: 'px-7' }[size] : { sm: 'w-9', md: 'w-10', lg: 'w-14' }[size],
         className,
       )}
       {...rest}
@@ -143,7 +144,7 @@ export function Button({ variant = 'filled', size = 'md', icon, loading, childre
 
 // --- Containers -------------------------------------------------------------------
 
-export function Card({ children, className, style, tone = 'panel' }: { children: ReactNode; className?: string; style?: CSSProperties; tone?: 'panel' | 'container' | 'high' }) {
+export function Card({ children, className, style, tone = 'panel' }: { children?: ReactNode; className?: string; style?: CSSProperties; tone?: 'panel' | 'container' | 'high' }) {
   return (
     <section
       style={style}
@@ -323,5 +324,56 @@ export function Toaster({ children }: { children: ReactNode }) {
         ))}
       </div>
     </ToastCtx.Provider>
+  )
+}
+
+// --- Slider ------------------------------------------------------------------------
+
+/**
+ * M3 slider for a live hardware value. Sends at most every 150 ms while dragged
+ * and once more on release; ignores polled values for 2 s after a touch so a
+ * stale reading cannot yank the handle back.
+ */
+export function Slider({ value, onCommit, label, disabled, icon }: { value: number | null; onCommit: (v: number) => void; label: string; disabled?: boolean; icon?: ReactNode }) {
+  const [local, setLocal] = useState(value ?? 0)
+  const touched = useRef(0)
+  const last = useRef(0)
+  const timer = useRef<number>()
+  useEffect(() => {
+    if (value != null && Date.now() - touched.current > 2000) setLocal(value)
+  }, [value])
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const send = (v: number, final = false) => {
+    touched.current = Date.now()
+    clearTimeout(timer.current)
+    const wait = 150 - (Date.now() - last.current)
+    if (final || wait <= 0) {
+      last.current = Date.now()
+      onCommit(v)
+    } else {
+      timer.current = window.setTimeout(() => send(v, true), wait)
+    }
+  }
+  return (
+    <div className="flex items-center gap-3">
+      {icon && <span className="text-muted">{icon}</span>}
+      <input
+        type="range"
+        className="m3-range no-drag flex-1 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={label}
+        min={0}
+        max={100}
+        value={local}
+        disabled={disabled || value == null}
+        style={{ '--fill': `${local}%` } as CSSProperties}
+        onChange={(e) => {
+          const v = Number(e.target.value)
+          setLocal(v)
+          send(v)
+        }}
+        onPointerUp={(e) => send(Number((e.target as HTMLInputElement).value), true)}
+      />
+      <span className="w-11 text-right text-label font-semibold tabular">{value == null ? '—' : `${local}%`}</span>
+    </div>
   )
 }

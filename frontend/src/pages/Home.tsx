@@ -1,7 +1,7 @@
-import { ArrowRight, BatteryCharging, BatteryHigh, Cpu, DeviceMobile, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
+import { ArrowRight, BatteryCharging, BatteryHigh, CircleHalf, Cpu, DeviceMobile, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
 import type { Route } from '@/components/Shell'
-import { Button, Card, Chip, Meter, SectionTitle, ShapeIcon, StatusDot } from '@/components/ui'
-import { bytes, timeAgo, useHostState, type Status } from '@/lib/bridge'
+import { Button, Card, Chip, Meter, SectionTitle, ShapeIcon, Slider, StatusDot, useToast } from '@/components/ui'
+import { bytes, run, timeAgo, useHostState, type Control, type Status } from '@/lib/bridge'
 import { cn } from '@/lib/cn'
 
 function greeting() {
@@ -60,26 +60,17 @@ function Hero({ status, go }: { status: Status; go: (r: Route) => void }) {
   )
 }
 
-function Tile({ i, icon, label, value, sub, children }: { i: number; icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode; children?: React.ReactNode }) {
-  return (
-    <Card className="rise flex flex-col gap-4 p-5" style={{ ['--i' as string]: i }}>
-      <div className="flex items-center gap-3">
-        {icon}
-        <span className="text-label font-medium text-muted">{label}</span>
-      </div>
-      <div>
-        <p className="truncate text-headline font-semibold tabular">{value}</p>
-        {sub && <p className="mt-0.5 truncate text-label text-muted">{sub}</p>}
-      </div>
-      {children}
-    </Card>
-  )
-}
-
 export function Home({ status, go }: { status: Status | null; go: (r: Route) => void }) {
-  const state = useHostState()
+  const { state, refresh } = useHostState()
+  const toast = useToast()
+  const act = (c: Control) =>
+    run(c).then(
+      () => setTimeout(refresh, 250),
+      (e: Error) => toast(e.message),
+    )
   if (!status) return <Starting />
   const ext = state?.displays.filter((d) => d.kind === 'external').length ?? 0
+  const media = state?.media
   return (
     <>
       <div className="rise mb-8">
@@ -94,74 +85,95 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
 
       <Hero status={status} go={go} />
 
-      <SectionTitle>What your phone controls</SectionTitle>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile
-          i={1}
-          icon={<ShapeIcon icon={state?.volume?.muted ? <SpeakerSlash size={22} weight="fill" /> : <SpeakerHigh size={22} weight="fill" />} size={44} />}
-          label="Volume"
-          value={state?.volume ? (state.volume.muted ? 'Muted' : `${state.volume.level}%`) : '—'}
-          sub="Default output"
-        >
-          <Meter value={state?.volume && !state.volume.muted ? state.volume.level : 0} />
-        </Tile>
-        <Tile
-          i={2}
-          icon={<ShapeIcon icon={<Monitor size={22} weight="fill" />} shape="cookie6" tone="tertiary" size={44} />}
-          label="Displays"
-          value={state ? state.displays.length : '—'}
-          sub={state ? `${ext} over DDC/CI${state.displays.some((d) => d.kind === 'internal') ? ' · built-in panel' : ''}` : 'Detecting…'}
-        />
-        <Tile
-          i={3}
-          icon={<ShapeIcon icon={<MusicNotes size={22} weight="fill" />} shape="flower" tone="secondary" size={44} />}
-          label={state?.media?.player ?? 'Media'}
-          value={state?.media?.title || 'Nothing playing'}
-          sub={state?.media?.artist || (state?.media ? (state.media.playing ? 'Playing' : 'Paused') : 'Play something to control it')}
-        />
-        <Tile
-          i={4}
-          icon={<ShapeIcon icon={<Cpu size={22} weight="fill" />} shape="clover" tone="primary" size={44} />}
-          label="System"
-          value={state ? `${Math.round(state.stats.cpu)}% CPU` : '—'}
-          sub={state ? `${bytes(state.stats.mem_used)} of ${bytes(state.stats.mem_total)}` : ''}
-        >
-          {state && <Meter value={(state.stats.mem_used / state.stats.mem_total) * 100} tone="tertiary" />}
-        </Tile>
-      </div>
-
-      {state && state.displays.length > 0 && (
-        <>
-          <SectionTitle>Displays</SectionTitle>
-          <Card className="rise divide-y divide-border/60" style={{ ['--i' as string]: 2 }}>
-            {state.displays.map((d) => (
-              <div key={d.id} className="flex items-center gap-4 px-5 py-4">
-                <ShapeIcon icon={<Monitor size={20} />} shape="cookie9" tone={d.kind === 'internal' ? 'secondary' : 'tertiary'} size={40} />
-                <div className="w-48 min-w-0">
-                  <p className="truncate font-medium">{d.name}</p>
-                  <p className="text-caption text-muted">{d.kind === 'internal' ? 'Built-in · backlight' : 'External · DDC/CI'}</p>
-                </div>
-                <div className="flex-1">
-                  <Meter value={d.brightness ?? 0} />
-                </div>
-                <span className="w-12 text-right text-label font-medium tabular">{d.brightness ?? '—'}%</span>
-              </div>
-            ))}
-          </Card>
-        </>
-      )}
-
-      {state?.media && (
-        <Card className="rise mt-3 flex items-center gap-4 p-5" style={{ ['--i' as string]: 3 }}>
-          <ShapeIcon icon={state.media.playing ? <Play size={20} weight="fill" /> : <Pause size={20} weight="fill" />} shape="sunny" tone="tertiary" size={44} spin={state.media.playing} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{state.media.title || 'Unknown title'}</p>
-            <p className="truncate text-label text-muted">{[state.media.artist, state.media.player].filter(Boolean).join(' · ')}</p>
+      <SectionTitle>Controls</SectionTitle>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
+        <Card className="rise flex flex-col gap-4 p-5" style={{ ['--i' as string]: 1 }}>
+          <div className="flex items-center gap-3">
+            <ShapeIcon icon={state?.volume?.muted ? <SpeakerSlash size={22} weight="fill" /> : <SpeakerHigh size={22} weight="fill" />} size={44} />
+            <div className="flex-1">
+              <p className="text-label font-medium text-muted">Volume</p>
+              <p className="text-headline font-semibold tabular">{state?.volume ? (state.volume.muted ? 'Muted' : `${state.volume.level}%`) : '—'}</p>
+            </div>
+            <Button
+              variant={state?.volume?.muted ? 'filled' : 'tonal'}
+              aria-label={state?.volume?.muted ? 'Unmute' : 'Mute'}
+              aria-pressed={!!state?.volume?.muted}
+              disabled={!state?.volume}
+              icon={state?.volume?.muted ? <SpeakerSlash size={20} weight="fill" /> : <SpeakerHigh size={20} />}
+              onClick={() => state?.volume && act({ type: 'set_mute', muted: !state.volume.muted })}
+            />
           </div>
-          {state.stats.battery && (
-            <Chip icon={state.stats.battery.charging ? <BatteryCharging size={16} /> : <BatteryHigh size={16} />}>{state.stats.battery.percent}%</Chip>
+          <Slider label="Volume" value={state?.volume?.level ?? null} onCommit={(level) => act({ type: 'set_volume', level })} />
+        </Card>
+
+        <Card className="rise flex flex-col gap-4 bg-tertiary-container p-5 text-on-tertiary-container" style={{ ['--i' as string]: 2 }}>
+          <div className="flex min-w-0 items-center gap-3">
+            <ShapeIcon icon={<MusicNotes size={22} weight="fill" />} shape="sunny" tone="primary" size={44} spin={media?.playing} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-label font-medium opacity-80">{media?.player ?? 'Media'}</p>
+              <p className="truncate text-title font-semibold">{media?.title || 'Nothing playing'}</p>
+              <p className="truncate text-label opacity-80">{media?.artist || (media ? '' : 'Start a player to control it')}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="tonal" aria-label="Previous" disabled={!media} icon={<SkipBack size={20} weight="fill" />} onClick={() => act({ type: 'media', action: 'previous' })} />
+            <Button
+              size="lg"
+              className="w-20"
+              aria-label={media?.playing ? 'Pause' : 'Play'}
+              disabled={!media}
+              icon={media?.playing ? <Pause size={26} weight="fill" /> : <Play size={26} weight="fill" />}
+              onClick={() => act({ type: 'media', action: 'play_pause' })}
+            />
+            <Button variant="tonal" aria-label="Next" disabled={!media} icon={<SkipForward size={20} weight="fill" />} onClick={() => act({ type: 'media', action: 'next' })} />
+          </div>
+        </Card>
+
+        <Card className="rise flex flex-col gap-4 p-5" style={{ ['--i' as string]: 3 }}>
+          <div className="flex items-center gap-3">
+            <ShapeIcon icon={<Cpu size={22} weight="fill" />} shape="clover" tone="secondary" size={44} />
+            <div className="min-w-0 flex-1">
+              <p className="text-label font-medium text-muted">System</p>
+              <p className="whitespace-nowrap text-headline font-semibold tabular">{state ? `${Math.round(state.stats.cpu)}% CPU` : '—'}</p>
+            </div>
+            {state?.stats.battery && (
+              <Chip icon={state.stats.battery.charging ? <BatteryCharging size={16} /> : <BatteryHigh size={16} />}>{state.stats.battery.percent}%</Chip>
+            )}
+          </div>
+          {state && (
+            <div>
+              <Meter value={(state.stats.mem_used / state.stats.mem_total) * 100} tone="tertiary" />
+              <p className="mt-2 text-label text-muted">
+                {bytes(state.stats.mem_used)} of {bytes(state.stats.mem_total)} memory
+              </p>
+            </div>
           )}
         </Card>
+      </div>
+
+      <SectionTitle action={state && <span className="text-label text-muted">{state.displays.length} found · {ext} over DDC/CI</span>}>Displays</SectionTitle>
+      {!state ? (
+        <Card className="h-24 animate-pulse" />
+      ) : state.displays.length === 0 ? (
+        <Card className="p-6 text-body text-muted">No controllable display found. External monitors need DDC/CI turned on in their own menu.</Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {state.displays.map((d, i) => (
+            <Card key={d.id} className="rise flex flex-col gap-4 p-5" style={{ ['--i' as string]: i + 2 }}>
+              <div className="flex items-center gap-3">
+                <ShapeIcon icon={<Monitor size={22} weight="fill" />} shape={d.kind === 'internal' ? 'cookie9' : 'cookie6'} tone={d.kind === 'internal' ? 'secondary' : 'tertiary'} size={44} />
+                <div className="min-w-0">
+                  <p className="truncate text-title font-medium">{d.name}</p>
+                  <p className="text-caption text-muted">{d.kind === 'internal' ? 'Built-in · backlight' : 'External · DDC/CI'}</p>
+                </div>
+              </div>
+              <Slider label={`${d.name} brightness`} icon={<Sun size={20} />} value={d.brightness} onCommit={(level) => act({ type: 'set_brightness', display: d.id, level })} />
+              {d.kind === 'external' && (
+                <Slider label={`${d.name} contrast`} icon={<CircleHalf size={20} />} value={d.contrast} onCommit={(level) => act({ type: 'set_contrast', display: d.id, level })} />
+              )}
+            </Card>
+          ))}
+        </div>
       )}
 
       {status.devices.length > 0 && (

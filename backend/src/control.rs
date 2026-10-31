@@ -11,6 +11,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
+use switchboard_core::protocol::Command;
+
 use crate::app::App;
 
 #[derive(Deserialize)]
@@ -30,6 +32,8 @@ enum Cmd {
     Rename { name: String },
     /// What a phone would see right now, for the desktop's own dashboard.
     State,
+    /// Run a control (brightness, volume, media) from the desktop itself.
+    Run { command: Command },
 }
 
 async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
@@ -56,6 +60,12 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
             Value::Null
         }
         Cmd::State => serde_json::to_value(app.system.snapshot().await)?,
+        Cmd::Run { command } => {
+            app.system.run(&command).await?;
+            // Connected phones see the change on their next state push.
+            app.poke.notify_one();
+            Value::Null
+        }
     })
 }
 
@@ -70,7 +80,7 @@ pub async fn run(app: Arc<App>) {
                 continue;
             }
         };
-        let slow = matches!(input.cmd, Cmd::State);
+        let slow = matches!(input.cmd, Cmd::State | Cmd::Run { .. });
         let app2 = app.clone();
         let reply = async move {
             let reply = match handle(&app2, input.cmd).await {
