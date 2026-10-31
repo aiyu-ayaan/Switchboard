@@ -11,3 +11,18 @@ authors.workspace = true
 name = "switchboard_core"
 # rlib for the backend, cdylib for the Android app (loaded over JNI).
 crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+zeroize = "1"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
