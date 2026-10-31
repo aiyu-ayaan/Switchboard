@@ -1,0 +1,13 @@
+[package]
+name = "switchboard-core"
+description = "Protocol and crypto shared by the Switchboard backend and the Android app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "switchboard_core"
+# rlib for the backend, cdylib for the Android app (loaded over JNI).
+crate-type = ["rlib", "cdylib"]
