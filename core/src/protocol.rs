@@ -71,6 +71,8 @@ pub enum Command {
     Media { action: MediaAction },
     Power { action: PowerAction },
     Ping,
+    /// The phone forgot this desktop; the desktop drops it too.
+    Unpair,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

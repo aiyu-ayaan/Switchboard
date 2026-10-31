@@ -32,7 +32,8 @@ impl System {
     /// Runs one phone command. `Hello`, `GetState` and `Ping` carry no action.
     pub async fn run(&self, cmd: &Command) -> Result<()> {
         match cmd {
-            Command::Hello | Command::GetState | Command::Ping => Ok(()),
+            // Unpair is handled by the session, which knows the device.
+            Command::Hello | Command::GetState | Command::Ping | Command::Unpair => Ok(()),
             Command::SetVolume { level } => {
                 let l = *level;
                 blocking(move || volume::set_level(l)).await?

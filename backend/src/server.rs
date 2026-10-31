@@ -161,7 +161,7 @@ async fn connection(app: Arc<App>, mut sock: WebSocket) -> Result<()> {
     app.emit_status();
     app.poke.notify_one();
 
-    let result = session(&app, &mut sock, &mut sess, hello_id, &mut rx).await;
+    let result = session(&app, &mut sock, &mut sess, hello_id, &hello.device_id, &mut rx).await;
 
     app.unregister(conn_id);
     let _ = app.store.touch(&hello.device_id, &name);
@@ -174,6 +174,7 @@ async fn session(
     sock: &mut WebSocket,
     sess: &mut Session,
     hello_id: u64,
+    device_id: &str,
     rx: &mut mpsc::UnboundedReceiver<Outbound>,
 ) -> Result<()> {
     send(sock, sess, &Event::Welcome { host_id: app.host_id.clone(), host_name: app.name(), os: app.os.clone() }).await?;
@@ -201,6 +202,14 @@ async fn session(
                     Ok(r) => r,
                     Err(e) => { tracing::debug!("bad request: {e}"); continue }
                 };
+                if req.cmd == Command::Unpair {
+                    app.forget(device_id)?;
+                    app.emit_status();
+                    send(sock, sess, &Event::Result { id: req.id, ok: true, error: None }).await?;
+                    // forget() queued a Revoked for this connection; the
+                    // next loop turn sends it and closes.
+                    continue;
+                }
                 let app = app.clone();
                 let done = done_tx.clone();
                 tokio::spawn(async move {

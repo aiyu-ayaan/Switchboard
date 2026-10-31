@@ -165,3 +165,21 @@ async fn forget_revokes_live_session() {
     let r = connect(port, &p, HelloMode::Resume, [0; 32], &app.keys.public).await;
     assert_eq!(r.err().as_deref(), Some("Unknown"));
 }
+
+#[tokio::test]
+async fn phone_unpair_removes_device() {
+    let (app, port) = start().await;
+    app.start_pairing();
+    let token = app.pairing.lock().unwrap().as_ref().unwrap().token;
+    let (mut ws, mut s) = connect(port, &phone("bye"), HelloMode::PairQr, token, &app.keys.public).await.unwrap();
+    assert!(matches!(next_event(&mut ws, &mut s).await, Some(Event::Welcome { .. })));
+    ws.send(Message::Binary(s.seal(&serde_json::to_vec(&Request { id: 9, cmd: Command::Unpair }).unwrap()).unwrap())).await.unwrap();
+    loop {
+        match next_event(&mut ws, &mut s).await {
+            Some(Event::Revoked) => break,
+            Some(_) => continue,
+            None => panic!("no revoke"),
+        }
+    }
+    assert!(app.store.device("bye").unwrap().is_none());
+}
