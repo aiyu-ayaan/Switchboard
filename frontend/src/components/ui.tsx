@@ -377,3 +377,23 @@ export function Slider({ value, onCommit, label, disabled, icon }: { value: numb
     </div>
   )
 }
+
+// --- Ring -------------------------------------------------------------------------
+
+/** M3 circular determinate indicator: thick rounded arc, gap, then the track. */
+export function Ring({ value, size = 96, children, tone = 'primary', label }: { value: number; size?: number; children?: ReactNode; tone?: 'primary' | 'tertiary'; label: string }) {
+  const v = Math.max(0, Math.min(100, value))
+  const r = 42
+  const c = 2 * Math.PI * r
+  const gap = v > 0 && v < 100 ? 8 : 0
+  const arc = Math.max(0, (v / 100) * c - gap)
+  return (
+    <div className="relative grid place-items-center" style={{ width: size, height: size }} role="meter" aria-label={label} aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100}>
+      <svg viewBox="0 0 100 100" className="absolute inset-0 -rotate-90">
+        <circle cx="50" cy="50" r={r} fill="none" strokeWidth="8" strokeLinecap="round" className={tone === 'primary' ? 'stroke-secondary-container' : 'stroke-tertiary-container'} strokeDasharray={`${Math.max(0, c - arc - gap * 2)} ${c}`} strokeDashoffset={-(arc + gap)} />
+        <circle cx="50" cy="50" r={r} fill="none" strokeWidth="8" strokeLinecap="round" className={cn('transition-[stroke-dasharray] duration-slow ease-std', tone === 'primary' ? 'stroke-primary' : 'stroke-tertiary')} strokeDasharray={`${arc} ${c}`} />
+      </svg>
+      <div className="relative text-center">{children}</div>
+    </div>
+  )
+}
