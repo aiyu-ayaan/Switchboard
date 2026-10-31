@@ -13,3 +13,41 @@ path = "src/main.rs"
 
 [dependencies]
 switchboard-core = { path = "../core" }
+anyhow = "1"
+axum = { version = "0.7", features = ["ws"] }
+futures-util = "0.3"
+if-addrs = "0.13"
+mdns-sd = "0.13"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+dirs = "6"
+ddc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+ddc-i2c = { version = "0.2", features = ["with-linux"] }
+
+[target.'cfg(windows)'.dependencies]
+ddc-winapi = "0.2"
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_System_Com",
+  "Win32_System_Power",
+  "Win32_System_Shutdown",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Media_Control",
+  "Foundation",
+] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.24"
