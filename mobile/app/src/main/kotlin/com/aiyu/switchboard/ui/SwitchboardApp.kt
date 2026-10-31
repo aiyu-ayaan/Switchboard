@@ -77,6 +77,7 @@ fun SwitchboardApp(vm: AppViewModel, deepLink: MutableStateFlow<String?>) {
                 SystemsScreen(
                     vm,
                     onOpen = { nav.navigate(Routes.system(it)) },
+                    onSection = { id, sec -> nav.navigate(Routes.section(id, sec)) },
                     onScan = { nav.navigate(Routes.SCAN) },
                     onCode = { nav.navigate(Routes.CODE) },
                     onAdd = { nav.navigate(Routes.ADD) },

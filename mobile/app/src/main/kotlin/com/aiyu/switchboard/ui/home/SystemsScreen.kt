@@ -36,6 +36,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.text.font.FontWeight
 import com.aiyu.switchboard.ui.kit.MonoCaption
+import com.aiyu.switchboard.ui.system.Section
+import com.aiyu.switchboard.ui.system.VolumeRow
+import com.aiyu.switchboard.net.Cmd
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import com.aiyu.switchboard.ui.kit.SectionCard
 import com.aiyu.switchboard.ui.kit.bouncyClickable
 import androidx.compose.material3.MaterialShapes
@@ -73,7 +79,7 @@ import com.aiyu.switchboard.ui.components.ShapeIcon
 
 /** Start screen: every paired computer with its live status. */
 @Composable
-fun SystemsScreen(vm: AppViewModel, onOpen: (String) -> Unit, onScan: () -> Unit, onCode: () -> Unit, onAdd: () -> Unit, onSettings: () -> Unit) {
+fun SystemsScreen(vm: AppViewModel, onOpen: (String) -> Unit, onSection: (String, Section) -> Unit, onScan: () -> Unit, onCode: () -> Unit, onAdd: () -> Unit, onSettings: () -> Unit) {
     val data by vm.vault.data.collectAsStateWithLifecycle()
     val live by vm.connections.live.collectAsStateWithLifecycle()
     val hosts = data.hosts
@@ -131,7 +137,7 @@ fun SystemsScreen(vm: AppViewModel, onOpen: (String) -> Unit, onScan: () -> Unit
             ) {
                 items(hosts, key = { it.id }) { h ->
                     val conn = live[h.id]
-                    SystemCard(h, conn, Modifier.animateItem()) {
+                    SystemCard(h, conn, Modifier.animateItem(), onSection = { vm.select(h.id); onSection(h.id, it) }) {
                         vm.select(h.id)
                         onOpen(h.id)
                     }
@@ -142,11 +148,12 @@ fun SystemsScreen(vm: AppViewModel, onOpen: (String) -> Unit, onScan: () -> Unit
 }
 
 @Composable
-private fun SystemCard(host: SavedHost, conn: HostConnection?, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun SystemCard(host: SavedHost, conn: HostConnection?, modifier: Modifier = Modifier, onSection: (Section) -> Unit, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val link = conn?.link?.collectAsStateWithLifecycle()?.value ?: Link.Connecting
     val state = conn?.state?.collectAsStateWithLifecycle()?.value
     val on = link is Link.Online
+    var lockAsk by remember { mutableStateOf(false) }
     SectionCard(modifier.bouncyClickable(onClick = onClick), color = if (on) cs.surfaceContainer else cs.surfaceContainerLow) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -180,30 +187,48 @@ private fun SystemCard(host: SavedHost, conn: HostConnection?, modifier: Modifie
                 }
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = cs.onSurfaceVariant)
             }
-            if (on && state != null) {
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    state.volume?.let { Pill(Icons.Rounded.VolumeUp, if (it.muted) "Muted" else "${it.level}%") }
-                    Pill(Icons.Rounded.DesktopWindows, "${state.displays.size} display${if (state.displays.size == 1) "" else "s"}")
-                    state.media?.takeIf { it.title.isNotBlank() }?.let { Pill(Icons.Rounded.MusicNote, it.title, Modifier.weight(1f, fill = false)) }
+            if (on && state != null && conn != null) {
+                // Quick controls right on the card; the header still opens the full home.
+                state.volume?.let {
+                    Spacer(Modifier.height(12.dp))
+                    VolumeRow(it.level, it.muted, conn)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Pill(Icons.Rounded.DesktopWindows, "${state.displays.size} display${if (state.displays.size == 1) "" else "s"}") { onSection(Section.Displays) }
+                    val m = state.media
+                    if (m != null) {
+                        Pill(if (m.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, m.title.ifBlank { m.player }, Modifier.weight(1f, fill = false), accent = true) {
+                            conn.post(Cmd.media("play_pause"))
+                        }
+                    }
+                    Pill(Icons.Rounded.Lock, "Lock") { lockAsk = true }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun Pill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, modifier: Modifier = Modifier) {
-    val cs = MaterialTheme.colorScheme
-    Surface(shape = CircleShape, color = cs.secondaryContainer, modifier = modifier) {
-        Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(14.dp), tint = cs.onSecondaryContainer)
-            Spacer(Modifier.width(4.dp))
-            Text(text, style = MaterialTheme.typography.labelMedium, color = cs.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+    if (lockAsk && conn != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { lockAsk = false },
+            title = { Text("Lock ${host.name}?") },
+            text = { Text("Its screen locks; sign in again on the computer.") },
+            confirmButton = { Button(onClick = { lockAsk = false; conn.post(Cmd.power("lock")) }) { Text("Lock") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { lockAsk = false }) { Text("Cancel") } },
+        )
     }
 }
 
+@Composable
+private fun Pill(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, modifier: Modifier = Modifier, accent: Boolean = false, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Surface(shape = CircleShape, color = if (accent) cs.tertiaryContainer else cs.secondaryContainer, modifier = modifier.bouncyClickable(onClick = onClick)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(16.dp), tint = if (accent) cs.onTertiaryContainer else cs.onSecondaryContainer)
+            Spacer(Modifier.width(6.dp))
+            Text(text, style = MaterialTheme.typography.labelMedium, color = if (accent) cs.onTertiaryContainer else cs.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
 @Composable
 private fun Empty(modifier: Modifier, onScan: () -> Unit, onCode: () -> Unit, onAdd: () -> Unit) {
     val cs = MaterialTheme.colorScheme
