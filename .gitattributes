@@ -3,3 +3,6 @@
 
 *.rs text eol=lf
 *.bat text eol=crlf
+
+.agents/** linguist-vendored
+.claude/** linguist-vendored
