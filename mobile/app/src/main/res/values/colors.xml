@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- primaryContainer (dark) / the app tile colour. -->
+    <color name="brand_tile">#303AA1</color>
+    <color name="brand_mark">#E0E0FF</color>
+    <color name="splash_background">#FBF8FE</color>
+</resources>
