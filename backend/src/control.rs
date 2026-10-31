@@ -70,13 +70,21 @@ pub async fn run(app: Arc<App>) {
                 continue;
             }
         };
+        let slow = matches!(input.cmd, Cmd::State);
         let app2 = app.clone();
-        tokio::spawn(async move {
+        let reply = async move {
             let reply = match handle(&app2, input.cmd).await {
                 Ok(data) => json!({ "id": input.id, "ok": true, "data": data }),
                 Err(e) => json!({ "id": input.id, "ok": false, "error": format!("{e:#}") }),
             };
             let _ = app2.ui.send(reply.to_string());
-        });
+        };
+        // Only the slow hardware read runs aside; everything else keeps the
+        // order it was sent in, so a start and a cancel cannot swap places.
+        if slow {
+            tokio::spawn(reply);
+        } else {
+            reply.await;
+        }
     }
 }
