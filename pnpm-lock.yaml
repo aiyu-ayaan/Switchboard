@@ -168,12 +168,24 @@ importers:
 
   frontend:
     dependencies:
+      '@fontsource-variable/inter':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@phosphor-icons/react':
+        specifier: ^2.1.10
+        version: 2.1.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       react:
         specifier: ^18.3.1
         version: 18.3.1
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      react-qr-code:
+        specifier: ^2.2.0
+        version: 2.2.0(react@18.3.1)
     devDependencies:
       '@types/node':
         specifier: ^22.7.0
@@ -470,6 +482,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
+
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
@@ -528,6 +543,13 @@ packages:
     resolution: {integrity: sha512-mJd2Z5TjYWq/ttPLLGqArdtnC74J6bOzg4rMDnN+p1xTacZ2yPRCk2y0oSWQtygLR9YVQXgOcONrwtnk3JupxQ==}
     engines: {node: ^12.13.0 || ^14.15.0 || >=16.0.0}
     deprecated: This functionality has been moved to @npmcli/fs
+
+  '@phosphor-icons/react@2.1.10':
+    resolution: {integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      react: '>= 16.8'
+      react-dom: '>= 16.8'
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -1008,6 +1030,10 @@ packages:
   clone@1.0.4:
     resolution: {integrity: sha512-JQHZ2QMW6l3aH/j6xCqQThY/9OH4D/9ls34cgkUBiEeocRTU04tHfKPBsUK1PqZCUQM7GiA0IIXJSuXHI64Kbg==}
     engines: {node: '>=0.8'}
+
+  clsx@2.1.1:
+    resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
+    engines: {node: '>=6'}
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -1937,12 +1963,18 @@ packages:
     resolution: {integrity: sha512-y+WKFlBR8BGXnsNlIHFGPZmyDf3DFMoLhaflAnyZgV6rG6xu+JwesTo2Q9R6XwYmtmwAFCkAk3e35jEdoeh/3g==}
     engines: {node: '>=10'}
 
+  prop-types@15.8.1:
+    resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
+
   pump@3.0.4:
     resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
 
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
@@ -1955,6 +1987,14 @@ packages:
     resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}
     peerDependencies:
       react: ^18.3.1
+
+  react-is@16.13.1:
+    resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
+
+  react-qr-code@2.2.0:
+    resolution: {integrity: sha512-e5nS0UUN22K3Nf8KBRUzemfdJ6OmnN5w+kbnj1lvJaol9RyVRFeGl05bCkxSN2ZegbLxjjYjX1+mmAoX9+fAhw==}
+    peerDependencies:
+      react: '*'
 
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
@@ -2608,6 +2648,8 @@ snapshots:
   '@esbuild/win32-x64@0.21.5':
     optional: true
 
+  '@fontsource-variable/inter@5.3.0': {}
+
   '@gar/promisify@1.1.3': {}
 
   '@isaacs/cliui@8.0.2':
@@ -2675,6 +2717,11 @@ snapshots:
     dependencies:
       mkdirp: 1.0.4
       rimraf: 3.0.2
+
+  '@phosphor-icons/react@2.1.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
@@ -3199,6 +3246,8 @@ snapshots:
       mimic-response: 1.0.1
 
   clone@1.0.4: {}
+
+  clsx@2.1.1: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -4180,12 +4229,20 @@ snapshots:
       err-code: 2.0.3
       retry: 0.12.0
 
+  prop-types@15.8.1:
+    dependencies:
+      loose-envify: 1.4.0
+      object-assign: 4.1.1
+      react-is: 16.13.1
+
   pump@3.0.4:
     dependencies:
       end-of-stream: 1.4.5
       once: 1.4.0
 
   punycode@2.3.1: {}
+
+  qrcode-generator@2.0.4: {}
 
   queue-microtask@1.2.3: {}
 
@@ -4196,6 +4253,14 @@ snapshots:
       loose-envify: 1.4.0
       react: 18.3.1
       scheduler: 0.23.2
+
+  react-is@16.13.1: {}
+
+  react-qr-code@2.2.0(react@18.3.1):
+    dependencies:
+      prop-types: 15.8.1
+      qrcode-generator: 2.0.4
+      react: 18.3.1
 
   react-refresh@0.17.0: {}
 
