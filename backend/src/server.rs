@@ -33,9 +33,11 @@ pub async fn serve(app: Arc<App>, listener: tokio::net::TcpListener) -> Result<(
     Ok(())
 }
 
-/// Unauthenticated probe: lets a phone confirm an address is this desktop.
+/// Unauthenticated probe: lets a phone confirm an address is this desktop
+/// and learn its key for typed-code pairing. A forged key cannot pair: the
+/// code is mixed into the session keys, so the first frame would not open.
 async fn info(State(app): State<Arc<App>>) -> impl IntoResponse {
-    axum::Json(json!({ "id": app.host_id, "name": app.name(), "v": PROTOCOL_VERSION }))
+    axum::Json(json!({ "id": app.host_id, "name": app.name(), "pk": app.pk_b64(), "v": PROTOCOL_VERSION }))
 }
 
 async fn ws(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, up: WebSocketUpgrade) -> impl IntoResponse {
