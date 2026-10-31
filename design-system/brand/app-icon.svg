@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="64" fill="#303AA1"/>
+  <g transform="translate(128 128) scale(0.74) translate(-128 -138)" color="#E0E0FF">
+    <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="26">
+      <path d="M172 70 H118 a34 34 0 0 0 0 68 h20 a34 34 0 0 1 0 68 H84"/>
+    </g>
+    <circle cx="184" cy="70" r="26" fill="currentColor"/>
+    <circle cx="72" cy="206" r="26" fill="currentColor"/>
+  </g>
+</svg>
