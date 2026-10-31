@@ -1,6 +1,10 @@
 package com.aiyu.switchboard.ui
 
-import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,7 +17,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.aiyu.switchboard.AppViewModel
 import com.aiyu.switchboard.data.parsePairUri
-import com.aiyu.switchboard.ui.home.HomeScreen
+import com.aiyu.switchboard.ui.home.SystemsScreen
+import com.aiyu.switchboard.ui.system.HostScreen
+import com.aiyu.switchboard.ui.system.Section
+import com.aiyu.switchboard.ui.system.SectionScreen
 import com.aiyu.switchboard.ui.pair.AddScreen
 import com.aiyu.switchboard.ui.pair.CodeScreen
 import com.aiyu.switchboard.ui.pair.PairingScreen
@@ -30,6 +37,10 @@ object Routes {
     const val CODE = "code"
     const val PAIRING = "pairing"
     const val SETTINGS = "settings"
+    const val SYSTEM = "system/{id}"
+    fun system(id: String) = "system/$id"
+    const val SECTION = "system/{id}/{section}"
+    fun section(id: String, s: Section) = "system/$id/${s.name}"
 }
 
 @Composable
@@ -49,18 +60,42 @@ fun SwitchboardApp(vm: AppViewModel, deepLink: MutableStateFlow<String?>) {
             vm.pair(offer.target, offer.secret)
             nav.navigate(Routes.PAIRING) { launchSingleTop = true }
         }
-        // Forward screens slide in from the right a little; back reverses.
-        val slide = AnimatedContentTransitionScope.SlideDirection.Start
+        // M3 shared axis X: forward slides in from the end while the old screen
+        // slides away and fades through; back reverses it, and the leaving
+        // screen shrinks so a predictive back gesture previews what is behind.
+        val emph = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+        val accel = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
         NavHost(
             navController = nav,
             startDestination = Routes.HOME,
-            enterTransition = { slideIntoContainer(slide, tween(400)) { it / 6 } + fadeIn(tween(300)) },
-            exitTransition = { fadeOut(tween(150)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(250)) { it / 6 } + fadeOut(tween(200)) },
+            enterTransition = { slideInHorizontally(tween(450, easing = emph)) { it / 3 } + fadeIn(tween(250, 90)) },
+            exitTransition = { slideOutHorizontally(tween(450, easing = emph)) { -it / 5 } + fadeOut(tween(120)) },
+            popEnterTransition = { slideInHorizontally(tween(400, easing = emph)) { -it / 5 } + fadeIn(tween(250, 60)) + scaleIn(tween(400, easing = emph), 0.96f) },
+            popExitTransition = { scaleOut(tween(300, easing = accel), 0.88f) + slideOutHorizontally(tween(300, easing = accel)) { it / 4 } + fadeOut(tween(200, 100)) },
         ) {
             composable(Routes.HOME) {
-                HomeScreen(vm, onAdd = { nav.navigate(Routes.ADD) }, onScan = { nav.navigate(Routes.SCAN) }, onCode = { nav.navigate(Routes.CODE) }, onSettings = { nav.navigate(Routes.SETTINGS) })
+                SystemsScreen(
+                    vm,
+                    onOpen = { nav.navigate(Routes.system(it)) },
+                    onScan = { nav.navigate(Routes.SCAN) },
+                    onCode = { nav.navigate(Routes.CODE) },
+                    onAdd = { nav.navigate(Routes.ADD) },
+                    onSettings = { nav.navigate(Routes.SETTINGS) },
+                )
+            }
+            composable(Routes.SYSTEM) { entry ->
+                val id = entry.arguments?.getString("id").orEmpty()
+                HostScreen(
+                    vm,
+                    id,
+                    onSwitch = { nav.popBackStack(Routes.HOME, inclusive = false) },
+                    onOpen = { nav.navigate(Routes.section(id, it)) },
+                    onSettings = { nav.navigate(Routes.SETTINGS) },
+                )
+            }
+            composable(Routes.SECTION) { entry ->
+                val section = runCatching { Section.valueOf(entry.arguments?.getString("section").orEmpty()) }.getOrDefault(Section.Audio)
+                SectionScreen(vm, entry.arguments?.getString("id").orEmpty(), section, onBack = { nav.popBackStack() })
             }
             composable(Routes.ADD) {
                 AddScreen(vm, onBack = { nav.popBackStack() }, onScan = { nav.navigate(Routes.SCAN) }, onCode = { nav.navigate(Routes.CODE) }, onPairing = { nav.navigate(Routes.PAIRING) })
