@@ -35,6 +35,7 @@ sealed interface PairState {
 class Connections(context: Context, val vault: Vault) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val discovery = Discovery(context)
+    val transfers = Transfers(context.applicationContext, scope)
     private val conns = mutableMapOf<String, HostConnection>()
     private val _live = MutableStateFlow<Map<String, HostConnection>>(emptyMap())
     val live: StateFlow<Map<String, HostConnection>> = _live.asStateFlow()

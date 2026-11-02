@@ -65,6 +65,14 @@ class HostConnection(
     private val _state = MutableStateFlow<HostState?>(null)
     val state: StateFlow<HostState?> = _state.asStateFlow()
 
+    private val _offers = MutableStateFlow<List<Event.FileOffer>>(emptyList())
+    /** Files the desktop is waiting for this phone to take or decline. */
+    val offers: StateFlow<List<Event.FileOffer>> = _offers.asStateFlow()
+
+    fun dismissOffer(xfer: String) {
+        _offers.value = _offers.value.filter { it.xfer != xfer }
+    }
+
     private val ids = AtomicLong(1)
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<Event.Result>>()
     private var ws: WebSocket? = null
@@ -191,6 +199,7 @@ class HostConnection(
                     }
                     is Event.Result -> pending.remove(ev.id)?.complete(ev)
                     is Event.State -> _state.value = ev
+                    is Event.FileOffer -> _offers.value = (_offers.value + ev).takeLast(10)
                     Event.Revoked -> {
                         _link.value = Link.Refused("${target.name} forgot this phone")
                         onRevoked()
@@ -232,6 +241,8 @@ class HostConnection(
         }
         pending.values.forEach { it.complete(Event.Result(-1, false, "Disconnected")) }
         pending.clear()
+        // The desktop forgets its offers when the link drops.
+        _offers.value = emptyList()
         if (offline != null && _link.value !is Link.Refused) _link.value = Link.Offline(offline)
     }
 

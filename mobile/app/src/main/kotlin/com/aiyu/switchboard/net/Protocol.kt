@@ -11,6 +11,9 @@ import kotlinx.serialization.json.put
 
 const val PROTOCOL_VERSION = 1
 
+/** Bytes per file chunk before base64; core/src/protocol.rs FILE_CHUNK. */
+const val FILE_CHUNK = 192 * 1024
+
 val WireJson = Json {
     ignoreUnknownKeys = true
     classDiscriminator = "type"
@@ -43,7 +46,11 @@ sealed interface Event {
     data class Welcome(@SerialName("host_id") val hostId: String, @SerialName("host_name") val hostName: String, val os: String) : Event
 
     @Serializable @SerialName("result")
-    data class Result(val id: Long, val ok: Boolean, val error: String? = null) : Event
+    data class Result(val id: Long, val ok: Boolean, val error: String? = null, val data: String? = null) : Event
+
+    /** The desktop wants to send this phone a file. */
+    @Serializable @SerialName("file_offer")
+    data class FileOffer(val xfer: String, val name: String, val size: Long) : Event
 
     @Serializable @SerialName("state")
     data class State(
@@ -98,6 +105,11 @@ object Cmd {
     fun media(action: String) = obj("media") { put("action", action) }
     fun power(action: String) = obj("power") { put("action", action) }
     fun unpair() = obj("unpair")
+    fun fileSend(xfer: String, name: String, size: Long) = obj("file_send") { put("xfer", xfer); put("name", name); put("size", size) }
+    fun fileChunk(xfer: String, offset: Long, data: String) = obj("file_chunk") { put("xfer", xfer); put("offset", offset); put("data", data) }
+    fun fileDone(xfer: String) = obj("file_done") { put("xfer", xfer) }
+    fun fileCancel(xfer: String) = obj("file_cancel") { put("xfer", xfer) }
+    fun fileRead(xfer: String, offset: Long, len: Int) = obj("file_read") { put("xfer", xfer); put("offset", offset); put("len", len) }
 
     private fun obj(type: String, body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit = {}): JsonObject =
         buildJsonObject { put("type", type); body() }

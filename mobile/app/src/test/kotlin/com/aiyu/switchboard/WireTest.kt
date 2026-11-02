@@ -4,6 +4,7 @@ import com.aiyu.switchboard.data.normaliseCode
 import com.aiyu.switchboard.data.parsePairUri
 import com.aiyu.switchboard.net.Cmd
 import com.aiyu.switchboard.net.Event
+import com.aiyu.switchboard.net.FILE_CHUNK
 import com.aiyu.switchboard.net.ServerHello
 import com.aiyu.switchboard.net.WireJson
 import org.junit.Assert.assertEquals
@@ -60,6 +61,15 @@ class WireTest {
         assertEquals(40, s.apps.single().level)
         assertEquals("""{"type":"set_app_volume","app":"202","level":100}""", Cmd.setAppVolume("202", 150).toString())
         assertEquals("""{"type":"set_output","output":"a"}""", Cmd.setOutput("a").toString())
+    }
+
+    @Test fun fileMessages() {
+        val offer = WireJson.decodeFromString(Event.serializer(), """{"type":"file_offer","xfer":"abc","name":"a.txt","size":12}""")
+        assertEquals(Event.FileOffer("abc", "a.txt", 12), offer)
+        val r = WireJson.decodeFromString(Event.serializer(), """{"type":"result","id":4,"ok":true,"data":"AAE"}""") as Event.Result
+        assertEquals("AAE", r.data)
+        assertEquals("""{"type":"file_chunk","xfer":"x","offset":196608,"data":"AAE"}""", Cmd.fileChunk("x", 196608, "AAE").toString())
+        assertEquals("""{"type":"file_read","xfer":"x","offset":0,"len":196608}""", Cmd.fileRead("x", 0, FILE_CHUNK).toString())
     }
 
     @Test fun commandShape() {
