@@ -29,8 +29,24 @@ export interface Display {
   contrast: number | null
 }
 
+export interface AudioOutput {
+  id: string
+  name: string
+  default: boolean
+}
+
+export interface AudioApp {
+  id: string
+  name: string
+  detail: string
+  level: number
+  muted: boolean
+}
+
 export interface HostState {
   volume: { level: number; muted: boolean } | null
+  outputs: AudioOutput[]
+  apps: AudioApp[]
   displays: Display[]
   media: { player: string; title: string; artist: string; playing: boolean } | null
   stats: { cpu: number; mem_used: number; mem_total: number; uptime: number; battery: { percent: number; charging: boolean } | null }
@@ -140,6 +156,9 @@ export function bytes(n: number) {
 export type Control =
   | { type: 'set_volume'; level: number }
   | { type: 'set_mute'; muted: boolean }
+  | { type: 'set_output'; output: string }
+  | { type: 'set_app_volume'; app: string; level: number }
+  | { type: 'set_app_mute'; app: string; muted: boolean }
   | { type: 'set_brightness'; display: string; level: number }
   | { type: 'set_contrast'; display: string; level: number }
   | { type: 'media'; action: 'play_pause' | 'next' | 'previous' }

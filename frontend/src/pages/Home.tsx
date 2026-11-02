@@ -1,4 +1,4 @@
-import { ArrowRight, BatteryCharging, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
+import { ArrowRight, BatteryCharging, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
 import type { Route } from '@/components/Shell'
 import { Button, Ring, ShapeIcon, Slider, StatusDot, useToast } from '@/components/ui'
 import { bytes, run, timeAgo, useHostState, type Control, type Status } from '@/lib/bridge'
@@ -116,6 +116,57 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
           />
         </div>
         <Slider label="Volume" value={vol?.level ?? null} onCommit={(level) => act({ type: 'set_volume', level })} />
+      </section>
+
+      {/* Mixer: where sound goes and how loud each program is. */}
+      <section className={cn(tile, 'col-span-12 flex flex-col gap-4 md:col-span-6 lg:col-span-8')} style={delay(2)}>
+        <div className="flex items-center gap-3">
+          <ShapeIcon icon={<Headphones size={22} weight="fill" />} shape="cookie6" tone="secondary" size={44} />
+          <p className="text-title font-medium">Sound</p>
+        </div>
+        {(state?.outputs.length ?? 0) > 1 && (
+          <div role="radiogroup" aria-label="Output device" className="flex flex-wrap gap-2">
+            {state!.outputs.map((o) => (
+              <button
+                key={o.id}
+                role="radio"
+                aria-checked={o.default}
+                onClick={() => !o.default && act({ type: 'set_output', output: o.id })}
+                className={cn(
+                  'state-layer h-9 cursor-pointer rounded-full px-4 text-label font-medium',
+                  o.default ? 'bg-secondary-container text-on-secondary-container' : 'bg-container text-muted hover:text-fg',
+                )}
+              >
+                {o.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {(state?.apps.length ?? 0) === 0 ? (
+          <p className="text-body text-muted">Nothing is playing sound right now.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {state!.apps.map((a) => (
+              <div key={a.id} className="flex items-center gap-3">
+                <div className="w-36 min-w-0">
+                  <p className="truncate text-label font-medium">{a.name}</p>
+                  {a.detail && <p className="truncate text-caption text-muted">{a.detail}</p>}
+                </div>
+                <div className="flex-1">
+                  <Slider label={`${a.name} volume`} value={a.level} onCommit={(level) => act({ type: 'set_app_volume', app: a.id, level })} />
+                </div>
+                <Button
+                  variant={a.muted ? 'filled' : 'tonal'}
+                  size="sm"
+                  aria-label={a.muted ? `Unmute ${a.name}` : `Mute ${a.name}`}
+                  aria-pressed={a.muted}
+                  icon={a.muted ? <SpeakerSlash size={16} weight="fill" /> : <SpeakerHigh size={16} weight="fill" />}
+                  onClick={() => act({ type: 'set_app_mute', app: a.id, muted: !a.muted })}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* System rings. */}
