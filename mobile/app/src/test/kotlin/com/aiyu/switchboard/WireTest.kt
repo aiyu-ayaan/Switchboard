@@ -51,6 +51,17 @@ class WireTest {
         assertEquals(ServerHello.Reject("unknown"), rej)
     }
 
+    @Test fun decodesMixer() {
+        val s = WireJson.decodeFromString(
+            Event.serializer(),
+            """{"type":"state","volume":null,"outputs":[{"id":"a","name":"Speakers","default":true}],"apps":[{"id":"202","name":"Firefox","detail":"Radio","level":40,"muted":false}],"displays":[],"media":null,"stats":{"cpu":0.0,"mem_used":0,"mem_total":0,"uptime":0,"battery":null}}""",
+        ) as Event.State
+        assertTrue(s.outputs.single().default)
+        assertEquals(40, s.apps.single().level)
+        assertEquals("""{"type":"set_app_volume","app":"202","level":100}""", Cmd.setAppVolume("202", 150).toString())
+        assertEquals("""{"type":"set_output","output":"a"}""", Cmd.setOutput("a").toString())
+    }
+
     @Test fun commandShape() {
         assertEquals("""{"type":"set_brightness","display":"ddc:i2c-8","level":100}""", Cmd.setBrightness("ddc:i2c-8", 140).toString())
     }

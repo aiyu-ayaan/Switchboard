@@ -11,11 +11,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.BrightnessMedium
@@ -83,6 +94,8 @@ fun SectionScreen(vm: AppViewModel, id: String, section: Section, onBack: () -> 
                 Section.Audio -> {
                     item { PlayerCard(s, scope.conn) }
                     item { MasterVolume(s, scope.conn) }
+                    if (s.outputs.size > 1) item { OutputDevices(s, scope.conn) }
+                    item { Programs(s, scope.conn) }
                 }
                 Section.Displays -> {
                     if (s.displays.isEmpty()) item {
@@ -133,6 +146,58 @@ private fun MasterVolume(s: HostState, conn: HostConnection) {
             Presets(if (v.muted) null else v.level, listOf(0, 25, 50, 75, 100)) { conn.post(Cmd.setVolume(it)) }
             Spacer(Modifier.height(8.dp))
             Text("Controls the computer's default output device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Where sound comes out. Picking one makes it the computer's default. */
+@Composable
+private fun OutputDevices(s: HostState, conn: HostConnection) {
+    SectionCard {
+        PodHeader(Icons.Rounded.Headphones, "Output device", "Where the computer plays sound", shape = MaterialShapes.Cookie6Sided)
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            s.outputs.forEach { o ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).selectable(selected = o.default, role = Role.RadioButton) { if (!o.default) conn.post(Cmd.setOutput(o.id)) }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = o.default, onClick = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(o.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+/** One slider and mute per program that is making sound. */
+@Composable
+private fun Programs(s: HostState, conn: HostConnection) {
+    val cs = MaterialTheme.colorScheme
+    SectionCard {
+        PodHeader(Icons.Rounded.Tune, "Programs", if (s.apps.isEmpty()) "Nothing is playing sound" else "Volume for each program", shape = MaterialShapes.Clover4Leaf)
+        s.apps.forEach { a ->
+            Spacer(Modifier.height(14.dp))
+            // key: a stream keeps its own slider position when the list reorders.
+            androidx.compose.runtime.key(a.id) {
+                Column {
+                    Text(a.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (a.detail.isNotBlank()) Text(a.detail, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(4.dp))
+                    LevelRow(
+                        value = a.level,
+                        label = "${a.name} volume",
+                        onSend = { conn.post(Cmd.setAppVolume(a.id, it)) },
+                        icon = if (a.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                        onIcon = { conn.post(Cmd.setAppMute(a.id, !a.muted)) },
+                        iconContainer = if (a.muted) cs.errorContainer else cs.surfaceContainerHighest,
+                        iconTint = if (a.muted) cs.error else cs.primary,
+                        badge = if (a.muted) "MUTED" else null,
+                        enabled = !a.muted,
+                    )
+                }
+            }
         }
     }
 }

@@ -48,6 +48,8 @@ sealed interface Event {
     @Serializable @SerialName("state")
     data class State(
         val volume: Volume? = null,
+        val outputs: List<AudioOutput> = emptyList(),
+        val apps: List<AudioApp> = emptyList(),
         val displays: List<Display> = emptyList(),
         val media: Media? = null,
         val stats: Stats = Stats(),
@@ -60,6 +62,10 @@ sealed interface Event {
 typealias HostState = Event.State
 
 @Serializable data class Volume(val level: Int, val muted: Boolean)
+
+@Serializable data class AudioOutput(val id: String, val name: String, val default: Boolean)
+
+@Serializable data class AudioApp(val id: String, val name: String, val detail: String = "", val level: Int, val muted: Boolean)
 
 @Serializable
 data class Display(val id: String, val name: String, val kind: String, val brightness: Int? = null, val contrast: Int? = null) {
@@ -84,6 +90,9 @@ object Cmd {
     fun hello() = obj("hello")
     fun setVolume(level: Int) = obj("set_volume") { put("level", level.coerceIn(0, 100)) }
     fun setMute(muted: Boolean) = obj("set_mute") { put("muted", muted) }
+    fun setOutput(output: String) = obj("set_output") { put("output", output) }
+    fun setAppVolume(app: String, level: Int) = obj("set_app_volume") { put("app", app); put("level", level.coerceIn(0, 100)) }
+    fun setAppMute(app: String, muted: Boolean) = obj("set_app_mute") { put("app", app); put("muted", muted) }
     fun setBrightness(display: String, level: Int) = obj("set_brightness") { put("display", display); put("level", level.coerceIn(0, 100)) }
     fun setContrast(display: String, level: Int) = obj("set_contrast") { put("display", display); put("level", level.coerceIn(0, 100)) }
     fun media(action: String) = obj("media") { put("action", action) }
