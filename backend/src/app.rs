@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use serde_json::json;
@@ -46,6 +46,8 @@ pub struct App {
     pub inbox: PathBuf,
     /// Files the desktop has offered, by transfer id.
     offers: Mutex<HashMap<String, Offer>>,
+    /// Half-finished uploads waiting for their phone to reconnect.
+    pub parked: files::ParkedMap,
     next_conn: AtomicU64,
     pub state: watch::Sender<Arc<HostState>>,
     /// Ask the poller for a fresh snapshot now (after a command, a connect).
@@ -75,6 +77,7 @@ impl App {
             Some(n) => n,
             None => sysinfo::System::host_name().unwrap_or_else(|| "My computer".into()),
         };
+        files::sweep(&inbox);
         let os = sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.into());
         Ok(Arc::new(Self {
             store,
@@ -88,6 +91,7 @@ impl App {
             conns: Mutex::new(HashMap::new()),
             inbox,
             offers: Mutex::new(HashMap::new()),
+            parked: Default::default(),
             next_conn: AtomicU64::new(1),
             state: watch::channel(Arc::new(HostState::default())).0,
             poke: Notify::new(),
@@ -130,38 +134,7 @@ impl App {
     }
 
     pub fn unregister(&self, id: u64) {
-        let mut conns = self.conns.lock().unwrap();
-        let Some(gone) = conns.remove(&id) else { return };
-        // A phone that left cannot pull what was offered to it.
-        if !conns.values().any(|c| c.device_id == gone.device_id) {
-            self.offers.lock().unwrap().retain(|_, o| o.device_id != gone.device_id);
-        }
-    }
-
-    /// Offers a local file to a connected phone. The phone is asked; nothing is sent until it pulls.
-    pub fn offer_file(&self, device_id: &str, path: &Path) -> anyhow::Result<()> {
-        let meta = std::fs::metadata(path).context("cannot read that file")?;
-        anyhow::ensure!(meta.is_file(), "that is not a file");
-        let name = files::safe_name(&path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).context("bad file name")?;
-        let conns = self.conns.lock().unwrap();
-        let live: Vec<_> = conns.values().filter(|c| c.device_id == device_id).collect();
-        anyhow::ensure!(!live.is_empty(), "that phone is not connected");
-        let xfer = b64(&random_bytes::<9>());
-        self.offers.lock().unwrap().insert(xfer.clone(), Offer { device_id: device_id.into(), path: path.into(), name: name.clone(), size: meta.len() });
-        for c in live {
-            let _ = c.tx.send(Outbound::Offer { xfer: xfer.clone(), name: name.clone(), size: meta.len() });
-        }
-        Ok(())
-    }
-
-    /// Path and size of an offer made to this phone.
-    pub fn offer(&self, device_id: &str, xfer: &str) -> Option<(PathBuf, u64)> {
-        self.offers.lock().unwrap().get(xfer).filter(|o| o.device_id == device_id).map(|o| (o.path.clone(), o.size))
-    }
-
-    pub fn take_offer(&self, device_id: &str, xfer: &str) -> Option<Offer> {
-        let mut offers = self.offers.lock().unwrap();
-        if offers.get(xfer).is_some_and(|o| o.device_id == device_id) { offers.remove(xfer) } else { None }
+        self.conns.lock().unwrap().remove(&id);
     }
 
     pub fn forget(&self, device_id: &str) -> anyhow::Result<bool> {
@@ -169,7 +142,64 @@ impl App {
         for c in self.conns.lock().unwrap().values().filter(|c| c.device_id == device_id) {
             let _ = c.tx.send(Outbound::Revoked);
         }
+        // A forgotten phone leaves nothing waiting for it.
+        self.offers.lock().unwrap().retain(|_, o| o.device_id != device_id);
+        self.parked.lock().unwrap().retain(|(owner, _), p| {
+            let keep = owner != device_id;
+            if !keep {
+                files::discard(&p.tmp);
+            }
+            keep
+        });
         Ok(removed)
+    }
+
+    /// Offers a local file to a connected phone; `temp` files (a folder's zip)
+    /// are deleted with the offer. The phone is asked; nothing is sent until it pulls.
+    pub fn offer_file(&self, device_id: &str, path: &Path, temp: bool) -> anyhow::Result<()> {
+        let meta = std::fs::metadata(path).context("cannot read that file")?;
+        anyhow::ensure!(meta.is_file(), "that is not a file");
+        let name = files::safe_name(&path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).context("bad file name")?;
+        let conns = self.conns.lock().unwrap();
+        let live: Vec<_> = conns.values().filter(|c| c.device_id == device_id).collect();
+        anyhow::ensure!(!live.is_empty(), "that phone is not connected");
+        let xfer = b64(&random_bytes::<9>());
+        let now = Instant::now();
+        let mut offers = self.offers.lock().unwrap();
+        offers.retain(|_, o| o.created.elapsed() < files::OFFER_FOR);
+        offers.insert(xfer.clone(), Offer { device_id: device_id.into(), path: path.into(), name: name.clone(), size: meta.len(), created: now, last: now, temp });
+        for c in live {
+            let _ = c.tx.send(Outbound::Offer { xfer: xfer.clone(), name: name.clone(), size: meta.len() });
+        }
+        Ok(())
+    }
+
+    /// Path and size of an offer made to this phone, while it is still open.
+    pub fn offer(&self, device_id: &str, xfer: &str) -> Option<(PathBuf, u64)> {
+        self.offers.lock().unwrap().get(xfer).filter(|o| o.device_id == device_id && o.created.elapsed() < files::OFFER_FOR).map(|o| (o.path.clone(), o.size))
+    }
+
+    /// The offer's name if a progress event is due for it.
+    pub fn offer_progress(&self, device_id: &str, xfer: &str) -> Option<String> {
+        let mut offers = self.offers.lock().unwrap();
+        let o = offers.get_mut(xfer).filter(|o| o.device_id == device_id)?;
+        if o.last.elapsed() < std::time::Duration::from_millis(250) {
+            return None;
+        }
+        o.last = Instant::now();
+        Some(o.name.clone())
+    }
+
+    pub fn take_offer(&self, device_id: &str, xfer: &str) -> Option<Offer> {
+        let mut offers = self.offers.lock().unwrap();
+        if offers.get(xfer).is_some_and(|o| o.device_id == device_id) { offers.remove(xfer) } else { None }
+    }
+
+    /// Offers still open for this phone, to show again when it reconnects.
+    pub fn pending_offers(&self, device_id: &str) -> Vec<(String, String, u64)> {
+        let mut offers = self.offers.lock().unwrap();
+        offers.retain(|_, o| o.created.elapsed() < files::OFFER_FOR);
+        offers.iter().filter(|(_, o)| o.device_id == device_id).map(|(x, o)| (x.clone(), o.name.clone(), o.size)).collect()
     }
 
     pub fn start_pairing(&self) {

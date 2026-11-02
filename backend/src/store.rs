@@ -20,6 +20,18 @@ pub struct Device {
     pub last_seen: i64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct TransferRow {
+    pub at: i64,
+    pub device: String,
+    pub name: String,
+    pub size: u64,
+    /// "in" (phone to computer) or "out".
+    pub dir: String,
+    /// "done", "cancelled" or "declined".
+    pub status: String,
+}
+
 pub struct Store {
     db: Mutex<Connection>,
     vault: Option<Box<dyn Vault>>,
@@ -104,6 +116,15 @@ impl Store {
                  static_pk BLOB NOT NULL,
                  paired_at INTEGER NOT NULL,
                  last_seen INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS transfers (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 at INTEGER NOT NULL,
+                 device TEXT NOT NULL,
+                 name TEXT NOT NULL,
+                 size INTEGER NOT NULL,
+                 dir TEXT NOT NULL,
+                 status TEXT NOT NULL
              );",
         )?;
         Ok(Self { db: Mutex::new(db), vault })
@@ -221,6 +242,23 @@ impl Store {
         Ok(())
     }
 
+    /// One finished, cancelled or declined transfer; only the newest 500 are kept.
+    pub fn add_transfer(&self, device: &str, name: &str, size: u64, dir: &str, status: &str) -> Result<()> {
+        let db = self.db.lock().unwrap();
+        db.execute("INSERT INTO transfers (at, device, name, size, dir, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![now(), device, name, size as i64, dir, status])?;
+        db.execute("DELETE FROM transfers WHERE id NOT IN (SELECT id FROM transfers ORDER BY id DESC LIMIT 500)", [])?;
+        Ok(())
+    }
+
+    pub fn transfers(&self, limit: u32) -> Result<Vec<TransferRow>> {
+        let db = self.db.lock().unwrap();
+        let mut st = db.prepare("SELECT at, device, name, size, dir, status FROM transfers ORDER BY id DESC LIMIT ?1")?;
+        let rows = st
+            .query_map([limit], |r| Ok(TransferRow { at: r.get(0)?, device: r.get(1)?, name: r.get(2)?, size: r.get::<_, i64>(3)? as u64, dir: r.get(4)?, status: r.get(5)? }))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     pub fn remove_device(&self, id: &str) -> Result<bool> {
         Ok(self.db.lock().unwrap().execute("DELETE FROM devices WHERE id = ?1", [id])? > 0)
     }
@@ -300,6 +338,18 @@ mod tests {
         locked.db.lock().unwrap().execute_batch("CREATE TABLE meta (key TEXT PRIMARY KEY, value BLOB NOT NULL);").unwrap();
         locked.set_meta("host_id", b"abc").unwrap();
         assert!(locked.identity().is_err());
+    }
+
+    #[test]
+    fn history_keeps_the_newest() {
+        let s = Store::memory().unwrap();
+        for i in 0..505 {
+            s.add_transfer("Pixel", &format!("f{i}"), i, "in", "done").unwrap();
+        }
+        let t = s.transfers(3).unwrap();
+        assert_eq!(t[0].name, "f504");
+        assert_eq!(t.len(), 3);
+        assert_eq!(s.transfers(1000).unwrap().len(), 500);
     }
 
     #[test]

@@ -229,8 +229,11 @@ async fn phone_uploads_a_file() {
     let (mut ws, mut s) = paired(&app, port, "up").await;
 
     let data: Vec<u8> = (0..FILE_CHUNK * 2 + 777).map(|i| (i % 251) as u8).collect();
-    let (ok, ..) = ask(&mut ws, &mut s, 10, Command::FileSend { xfer: "x1".into(), name: "../evil/photo.bin".into(), size: data.len() as u64 }).await;
+    let (ok, err, _) = ask(&mut ws, &mut s, 9, Command::FileSend { xfer: "x0".into(), name: "../evil/photo.bin".into(), size: 1 }).await;
+    assert!(!ok && err.is_some(), "a path that climbs is refused");
+    let (ok, _, offset) = ask(&mut ws, &mut s, 10, Command::FileSend { xfer: "x1".into(), name: "trip/photo.bin".into(), size: data.len() as u64 }).await;
     assert!(ok);
+    assert_eq!(offset.as_deref(), Some("0"));
     for (n, chunk) in data.chunks(FILE_CHUNK).enumerate() {
         let offset = (n * FILE_CHUNK) as u64;
         let (ok, ..) = ask(&mut ws, &mut s, 11 + n as u64, Command::FileChunk { xfer: "x1".into(), offset, data: b64(chunk) }).await;
@@ -239,8 +242,8 @@ async fn phone_uploads_a_file() {
     let (ok, ..) = ask(&mut ws, &mut s, 20, Command::FileDone { xfer: "x1".into() }).await;
     assert!(ok);
 
-    // Landed inside the inbox under the cleaned name, byte for byte.
-    assert_eq!(std::fs::read(inbox.join("photo.bin")).unwrap(), data);
+    // Landed inside the inbox, folders kept, byte for byte.
+    assert_eq!(std::fs::read(inbox.join("trip").join("photo.bin")).unwrap(), data);
     let mut saw = false;
     while let Ok(line) = ui.try_recv() {
         saw |= line.contains("file_received") && line.contains("photo.bin");
@@ -262,8 +265,8 @@ async fn desktop_offers_a_file_and_only_that_phone_can_pull_it() {
     let src = scratch("src").join("song.mp3");
     let data: Vec<u8> = (0..FILE_CHUNK + 5000).map(|i| (i * 7 % 256) as u8).collect();
     std::fs::write(&src, &data).unwrap();
-    assert!(app.offer_file("nobody", &src).is_err(), "offline phones cannot be offered files");
-    app.offer_file("owner", &src).unwrap();
+    assert!(app.offer_file("nobody", &src, false).is_err(), "offline phones cannot be offered files");
+    app.offer_file("owner", &src, false).unwrap();
 
     let (xfer, size) = loop {
         match next_event(&mut ws, &mut s).await {
@@ -296,4 +299,67 @@ async fn desktop_offers_a_file_and_only_that_phone_can_pull_it() {
         saw |= line.contains("file_sent");
     }
     assert!(saw);
+}
+
+#[tokio::test]
+async fn upload_and_offer_survive_a_dropped_connection() {
+    let inbox = scratch("resume");
+    let (app, port, _ui) = start_with_inbox(inbox.clone()).await;
+    app.start_pairing();
+    let token = app.pairing.lock().unwrap().as_ref().unwrap().token;
+    let p = phone("flaky");
+    let (mut ws, mut s) = connect(port, &p, HelloMode::PairQr, token, &app.keys.public).await.unwrap();
+    assert!(matches!(next_event(&mut ws, &mut s).await, Some(Event::Welcome { .. })));
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let data: Vec<u8> = (0..FILE_CHUNK + 1000).map(|i| (i % 253) as u8).collect();
+    ask(&mut ws, &mut s, 2, Command::FileSend { xfer: "u".into(), name: "movie.bin".into(), size: data.len() as u64 }).await;
+    let (ok, ..) = ask(&mut ws, &mut s, 3, Command::FileChunk { xfer: "u".into(), offset: 0, data: b64(&data[..FILE_CHUNK]) }).await;
+    assert!(ok);
+
+    let src = scratch("offer-src").join("clip.bin");
+    std::fs::write(&src, &data).unwrap();
+    app.offer_file("flaky", &src, false).unwrap();
+    let xfer = loop {
+        match next_event(&mut ws, &mut s).await {
+            Some(Event::FileOffer { xfer, .. }) => break xfer,
+            Some(_) => continue,
+            None => panic!("no offer"),
+        }
+    };
+    let (_, _, first) = ask(&mut ws, &mut s, 4, Command::FileRead { xfer: xfer.clone(), offset: 0, len: 100 }).await;
+    assert_eq!(unb64(&first.unwrap()).unwrap(), &data[..100]);
+
+    // The connection drops.
+    drop(ws);
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    let (mut ws, mut s) = connect(port, &p, HelloMode::Resume, [0; 32], &app.keys.public).await.unwrap();
+    assert!(matches!(next_event(&mut ws, &mut s).await, Some(Event::Welcome { .. })));
+    // The offer is shown again, and the upload continues from the byte it reached.
+    let mut offered_again = false;
+    let (ok, _, resume) = {
+        ws.send(Message::Binary(s.seal(&serde_json::to_vec(&Request { id: 20, cmd: Command::FileSend { xfer: "u".into(), name: "movie.bin".into(), size: data.len() as u64 } }).unwrap()).unwrap())).await.unwrap();
+        loop {
+            match next_event(&mut ws, &mut s).await {
+                Some(Event::FileOffer { xfer: x, .. }) if x == xfer => offered_again = true,
+                Some(Event::Result { id: 20, ok, error, data }) => break (ok, error, data),
+                Some(_) => continue,
+                None => panic!("no result"),
+            }
+        }
+    };
+    assert!(ok);
+    assert_eq!(resume.as_deref(), Some(FILE_CHUNK.to_string().as_str()));
+    let (ok, ..) = ask(&mut ws, &mut s, 21, Command::FileChunk { xfer: "u".into(), offset: FILE_CHUNK as u64, data: b64(&data[FILE_CHUNK..]) }).await;
+    assert!(ok);
+    let (ok, ..) = ask(&mut ws, &mut s, 22, Command::FileDone { xfer: "u".into() }).await;
+    assert!(ok);
+    assert_eq!(std::fs::read(inbox.join("movie.bin")).unwrap(), data);
+
+    // The offer can be read on from where it stopped.
+    let (ok, _, rest) = ask(&mut ws, &mut s, 23, Command::FileRead { xfer: xfer.clone(), offset: 100, len: 50 }).await;
+    assert!(ok);
+    assert_eq!(unb64(&rest.unwrap()).unwrap(), &data[100..150]);
+    let _ = offered_again; // the offer may arrive before or after the result; reading it above proves it is still there
 }

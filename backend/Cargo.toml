@@ -28,6 +28,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 dirs = "6"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = { version = "2", default-features = false, features = ["tls"] }
 ddc = "0.2"
 

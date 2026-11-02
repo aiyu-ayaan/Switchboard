@@ -186,7 +186,11 @@ async fn session(
 
     // Uploads are strictly ordered, so file commands run right here in the
     // loop; they vanish with the connection.
-    let mut uploads = files::Uploads::new(app.inbox.clone());
+    let mut uploads = files::Uploads::new(app.inbox.clone(), device_id.to_owned(), app.parked.clone());
+    // Offers this phone has not taken yet (it may have dropped and come back).
+    for (xfer, name, size) in app.pending_offers(device_id) {
+        send(sock, sess, &Event::FileOffer { xfer, name, size }).await?;
+    }
 
     // Commands run concurrently so a slow DDC write never delays a volume
     // change; their results come back through this channel.

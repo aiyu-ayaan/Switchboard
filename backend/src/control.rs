@@ -34,8 +34,11 @@ enum Cmd {
     Rename { name: String },
     /// What a phone would see right now, for the desktop's own dashboard.
     State,
-    /// Offer a file (picked in the desktop's own dialog) to a connected phone.
-    SendFile { device: String, path: String },
+    /// Offer files and folders (picked in the desktop's own dialog) to a
+    /// connected phone. A folder is zipped first.
+    SendFiles { device: String, paths: Vec<String> },
+    /// Recent transfers, newest first.
+    History,
     /// The folder phones' uploads are saved to.
     Inbox,
     /// Run a control (brightness, volume, media) from the desktop itself.
@@ -65,10 +68,24 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
             app.emit_status();
             Value::Null
         }
-        Cmd::SendFile { device, path } => {
-            app.offer_file(&device, std::path::Path::new(&path))?;
-            Value::Null
+        Cmd::SendFiles { device, paths } => {
+            let app2 = app.clone();
+            let sent = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
+                for p in &paths {
+                    let p = std::path::Path::new(p);
+                    if p.is_dir() {
+                        let (zip, _) = crate::files::zip_dir(p)?;
+                        app2.offer_file(&device, &zip, true)?;
+                    } else {
+                        app2.offer_file(&device, p, false)?;
+                    }
+                }
+                Ok(paths.len())
+            })
+            .await??;
+            json!({ "sent": sent })
         }
+        Cmd::History => json!(app.store.transfers(50)?),
         Cmd::Inbox => {
             std::fs::create_dir_all(&app.inbox)?;
             json!(app.inbox)
@@ -94,7 +111,7 @@ pub async fn run(app: Arc<App>) {
                 continue;
             }
         };
-        let slow = matches!(input.cmd, Cmd::State | Cmd::Run { .. });
+        let slow = matches!(input.cmd, Cmd::State | Cmd::Run { .. } | Cmd::SendFiles { .. });
         let app2 = app.clone();
         let reply = async move {
             let reply = match handle(&app2, input.cmd).await {
