@@ -7,6 +7,10 @@ import com.aiyu.switchboard.net.Event
 import com.aiyu.switchboard.net.FILE_CHUNK
 import com.aiyu.switchboard.net.ServerHello
 import com.aiyu.switchboard.net.lost
+import com.aiyu.switchboard.net.magicPacket
+import com.aiyu.switchboard.net.splitAddr
+import com.aiyu.switchboard.net.validRemoteAddr
+import com.aiyu.switchboard.net.wakeTargets
 import com.aiyu.switchboard.net.WireJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -98,6 +102,22 @@ class WireTest {
         assertEquals("""{"type":"type_text","text":"hi"}""", Cmd.typeText("hi").toString())
         val s = WireJson.decodeFromString(Event.serializer(), """{"type":"state","volume":null,"remote_input":true,"displays":[],"media":null,"stats":{"cpu":0.0,"mem_used":0,"mem_total":0,"uptime":0,"battery":null}}""") as Event.State
         assertTrue(s.remoteInput)
+    }
+
+    @Test fun addressesAndWakeOnLan() {
+        assertEquals("192.168.1.5" to 9427, splitAddr("192.168.1.5", 9427))
+        assertEquals("pc.tailnet.ts.net" to 9500, splitAddr("pc.tailnet.ts.net:9500", 9427))
+        assertEquals("fe80::1" to 9500, splitAddr("[fe80::1]:9500", 9427))
+        assertEquals("fe80::1" to 9427, splitAddr("fe80::1", 9427))
+        assertTrue(validRemoteAddr("203.0.113.5:9427"))
+        assertEquals(false, validRemoteAddr("bad host!"))
+        assertEquals(false, validRemoteAddr("host:99999"))
+        val p = magicPacket("aa:bb:cc:dd:ee:0f")!!
+        assertEquals(6 + 16 * 6, p.size)
+        assertEquals(List(6) { 0xFF.toByte() }, p.take(6))
+        assertEquals(0x0F.toByte(), p.last())
+        assertEquals(null, magicPacket("nope"))
+        assertEquals(listOf("255.255.255.255", "192.168.1.255"), wakeTargets(listOf("192.168.1.15", "pc.local")))
     }
 
     @Test fun commandShape() {

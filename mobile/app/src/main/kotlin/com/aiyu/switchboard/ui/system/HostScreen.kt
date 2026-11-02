@@ -173,7 +173,7 @@ fun HostScreen(vm: AppViewModel, id: String, onSwitch: () -> Unit, onOpen: (Sect
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (link !is Link.Online || s == null) {
-                item { LinkCard(link, scope.host.name, onRetry = scope.conn::retry) }
+                item { LinkCard(link, scope.host.name, onRetry = scope.conn::retry, wakeMacs = scope.host.macs, wakeAddrs = scope.host.addrs) }
             } else {
                 item(key = "hero") { HeroCard(scope.host, s, scope.conn) }
                 item(key = "audio") { AudioPod(s, scope.conn) { onOpen(Section.Audio) } }
@@ -185,7 +185,7 @@ fun HostScreen(vm: AppViewModel, id: String, onSwitch: () -> Unit, onOpen: (Sect
             }
         }
     }
-    if (info) HostSheet(scope.host, scope.conn, onDismiss = { info = false }, onSettings = { info = false; onSettings() }, onForget = { info = false; vm.forget(scope.host.id) })
+    if (info) HostSheet(scope.host, scope.conn, onDismiss = { info = false }, onSettings = { info = false; onSettings() }, onForget = { info = false; vm.forget(scope.host.id) }, onRemoteAddrs = { vm.setRemoteAddrs(scope.host.id, it) })
 }
 
 // --- Pods ----------------------------------------------------------------------------

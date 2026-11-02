@@ -14,6 +14,10 @@ data class SavedHost(
     val addrs: List<String>,
     val port: Int,
     val os: String = "",
+    /** Hardware addresses of its network cards, to wake it with Wake-on-LAN. */
+    val macs: List<String> = emptyList(),
+    /** Addresses the person added by hand (a VPN name, a forwarded port); tried after the discovered ones. */
+    val remoteAddrs: List<String> = emptyList(),
     val pairedAt: Long = System.currentTimeMillis(),
 )
 

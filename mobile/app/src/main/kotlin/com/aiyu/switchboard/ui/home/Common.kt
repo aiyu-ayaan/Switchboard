@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Refresh
@@ -122,8 +123,10 @@ fun StatusDot(on: Boolean, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun LinkCard(link: Link, name: String, onRetry: () -> Unit) {
+fun LinkCard(link: Link, name: String, onRetry: () -> Unit, wakeMacs: List<String> = emptyList(), wakeAddrs: List<String> = emptyList()) {
     val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    var wakeNote by remember { mutableStateOf<String?>(null) }
     val refused = link is Link.Refused
     Surface(shape = RoundedCornerShape(32.dp), color = if (refused) cs.errorContainer else cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -144,6 +147,17 @@ fun LinkCard(link: Link, name: String, onRetry: () -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         Text("Try again")
                     }
+                    if (wakeMacs.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = {
+                            scope.launch { wakeNote = if (com.aiyu.switchboard.net.wake(wakeMacs, wakeAddrs)) "Wake-up sent. It can take a minute to start; this phone must be on the same network." else "Couldn't send the wake-up." }
+                        }) {
+                            Icon(Icons.Rounded.PowerSettingsNew, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Wake it up")
+                        }
+                        wakeNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp)) }
+                    }
                 }
                 is Link.Refused -> {
                     ShapeIcon(Icons.AutoMirrored.Rounded.Logout, MaterialShapes.Cookie6Sided, cs.error, cs.onError, size = 56.dp, iconSize = 26.dp)
@@ -158,7 +172,7 @@ fun LinkCard(link: Link, name: String, onRetry: () -> Unit) {
 }
 
 @Composable
-fun HostSheet(host: SavedHost, conn: HostConnection?, onDismiss: () -> Unit, onSettings: () -> Unit, onForget: () -> Unit) {
+fun HostSheet(host: SavedHost, conn: HostConnection?, onDismiss: () -> Unit, onSettings: () -> Unit, onForget: () -> Unit, onRemoteAddrs: (List<String>) -> Unit = {}) {
     val cs = MaterialTheme.colorScheme
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -190,6 +204,7 @@ fun HostSheet(host: SavedHost, conn: HostConnection?, onDismiss: () -> Unit, onS
                 Spacer(Modifier.height(8.dp))
                 MonoCaption("Fingerprint ${fingerprint(host.pk)}" + (host.os.takeIf { it.isNotBlank() }?.let { "  •  $it" } ?: ""))
             }
+            RemoteAddresses(host.remoteAddrs, onRemoteAddrs)
             SheetRow(Icons.Rounded.Settings, "Settings", "Theme, colours and about", cs.onSurface, onSettings)
             SheetRow(Icons.Rounded.LinkOff, "Forget this computer", "Unpair on both sides", cs.error) { confirm = true }
         }
@@ -208,6 +223,42 @@ fun HostSheet(host: SavedHost, conn: HostConnection?, onDismiss: () -> Unit, onS
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
         )
+    }
+}
+
+/** Extra ways to reach the computer, for a VPN name or a forwarded port. The link stays end-to-end encrypted. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RemoteAddresses(addrs: List<String>, onChange: (List<String>) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    var text by remember { mutableStateOf("") }
+    val ok = text.isBlank() || com.aiyu.switchboard.net.validRemoteAddr(text)
+    SectionCard(color = cs.surfaceContainer) {
+        Text("Remote addresses", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            "To use it away from home, add its VPN name (Tailscale, WireGuard) or a forwarded port, like pc.tailnet.ts.net or 203.0.113.5:9427.",
+            style = MaterialTheme.typography.bodySmall,
+            color = cs.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        addrs.forEach { a ->
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                MonoCaption(a, modifier = Modifier.weight(1f))
+                IconButton(onClick = { onChange(addrs - a) }) { Icon(Icons.Rounded.Close, "Remove $a") }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.trim() },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                isError = !ok,
+                placeholder = { Text("host or host:port") },
+            )
+            Spacer(Modifier.width(8.dp))
+            FilledTonalButton(enabled = text.isNotBlank() && ok, onClick = { onChange(addrs + text); text = "" }) { Text("Add") }
+        }
     }
 }
 

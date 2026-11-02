@@ -36,6 +36,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun select(id: String) = connections.select(id)
 
+    fun setRemoteAddrs(id: String, addrs: List<String>) = connections.setRemoteAddrs(id, addrs)
+
     fun setDynamicColor(on: Boolean) = vault.update { it.copy(dynamicColor = on) }
 
     fun setTheme(mode: String) = vault.update { it.copy(theme = mode) }

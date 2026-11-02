@@ -55,7 +55,7 @@ class Connections(context: Context, val vault: Vault) {
                     if (addrs != saved.addrs || t.port != saved.port) {
                         vault.update { d -> d.copy(hosts = d.hosts.map { if (it.id == id) it.copy(addrs = addrs, port = t.port) else it }) }
                         conns[id]?.let { c ->
-                            c.updateAddresses(addrs, t.port)
+                            c.updateAddresses(addrs + saved.remoteAddrs, t.port)
                             if (c.link.value !is Link.Online) c.retry()
                         }
                     }
@@ -66,11 +66,11 @@ class Connections(context: Context, val vault: Vault) {
 
     private fun connectionFor(h: SavedHost): HostConnection = conns.getOrPut(h.id) {
         HostConnection(
-            PairTarget(h.id, h.name, h.pk, h.addrs, h.port),
+            PairTarget(h.id, h.name, h.pk, h.addrs + h.remoteAddrs, h.port),
             vault.data.value.identity,
             deviceName,
             scope,
-            onWelcome = { name, os -> rename(h.id, name, os) },
+            onWelcome = { name, os, macs -> rename(h.id, name, os, macs) },
         )
     }
 
@@ -93,8 +93,23 @@ class Connections(context: Context, val vault: Vault) {
         discovery.stop()
     }
 
-    private fun rename(id: String, name: String, os: String) {
-        vault.update { d -> d.copy(hosts = d.hosts.map { if (it.id == id && (it.name != name || it.os != os)) it.copy(name = name, os = os) else it }) }
+    private fun rename(id: String, name: String, os: String, macs: List<String>) {
+        vault.update { d ->
+            d.copy(hosts = d.hosts.map {
+                if (it.id == id && (it.name != name || it.os != os || (macs.isNotEmpty() && it.macs != macs))) it.copy(name = name, os = os, macs = macs.ifEmpty { it.macs }) else it
+            })
+        }
+    }
+
+    /** Saves addresses added by hand (VPN name, forwarded port) and reconnects with them. */
+    fun setRemoteAddrs(id: String, addrs: List<String>) {
+        val clean = addrs.map { it.trim() }.filter { validRemoteAddr(it) }.distinct().take(5)
+        vault.update { d -> d.copy(hosts = d.hosts.map { if (it.id == id) it.copy(remoteAddrs = clean) else it }) }
+        val h = vault.data.value.hosts.find { it.id == id } ?: return
+        conns[id]?.let { c ->
+            c.updateAddresses(h.addrs + clean, h.port)
+            if (c.link.value !is Link.Online) c.retry()
+        }
     }
 
     fun select(id: String) = vault.update { it.copy(selected = id) }
@@ -123,9 +138,9 @@ class Connections(context: Context, val vault: Vault) {
             deviceName,
             scope,
             pairing = secret,
-            onWelcome = { name, os ->
-                if (out.value is PairState.Done) return@HostConnection rename(target.id, name, os)
-                val host = SavedHost(target.id, name, target.pk, target.addrs, target.port, os)
+            onWelcome = { name, os, macs ->
+                if (out.value is PairState.Done) return@HostConnection rename(target.id, name, os, macs)
+                val host = SavedHost(target.id, name, target.pk, target.addrs, target.port, os, macs)
                 vault.update { d -> d.copy(hosts = d.hosts.filterNot { it.id == host.id } + host, selected = host.id) }
                 synchronized(this) {
                     conns.remove(host.id)?.takeIf { it !== conn }?.stop()
@@ -155,10 +170,7 @@ class Connections(context: Context, val vault: Vault) {
 
     /** Asks a typed address who it is, for code pairing without discovery. */
     suspend fun probe(address: String, defaultPort: Int): PairTarget? = withContext(Dispatchers.IO) {
-        val (host, port) = address.trim().let { a ->
-            val p = a.substringAfterLast(':', "").toIntOrNull()
-            if (p != null && a.count { it == ':' } == 1) a.substringBeforeLast(':') to p else a to defaultPort
-        }
+        val (host, port) = splitAddr(address, defaultPort)
         runCatching {
             sharedHttp.newCall(Request.Builder().url("http://$host:$port/info").build()).execute().use { r ->
                 val o = Json.parseToJsonElement(r.body!!.string()).jsonObject

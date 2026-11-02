@@ -43,7 +43,7 @@ sealed interface ServerHello {
 @Serializable
 sealed interface Event {
     @Serializable @SerialName("welcome")
-    data class Welcome(@SerialName("host_id") val hostId: String, @SerialName("host_name") val hostName: String, val os: String) : Event
+    data class Welcome(@SerialName("host_id") val hostId: String, @SerialName("host_name") val hostName: String, val os: String, val macs: List<String> = emptyList()) : Event
 
     @Serializable @SerialName("result")
     data class Result(val id: Long, val ok: Boolean, val error: String? = null, val data: String? = null) : Event

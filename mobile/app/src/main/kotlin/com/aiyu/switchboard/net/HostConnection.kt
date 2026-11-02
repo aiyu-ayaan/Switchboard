@@ -54,7 +54,7 @@ class HostConnection(
     private val deviceName: String,
     private val scope: CoroutineScope,
     private var pairing: PairSecret? = null,
-    private val onWelcome: (hostName: String, os: String) -> Unit = { _, _ -> },
+    private val onWelcome: (hostName: String, os: String, macs: List<String>) -> Unit = { _, _, _ -> },
     private val onRevoked: () -> Unit = {},
 ) {
     @Volatile var target: PairTarget = target
@@ -126,8 +126,9 @@ class HostConnection(
     private suspend fun attempt(addr: String): Attempt {
         _link.value = Link.Connecting
         val done = CompletableDeferred<Attempt>()
-        val host = if (addr.contains(':')) "[$addr]" else addr
-        val req = Request.Builder().url("ws://$host:${target.port}/ws").build()
+        val (bare, port) = splitAddr(addr, target.port)
+        val host = if (bare.contains(':')) "[$bare]" else bare
+        val req = Request.Builder().url("ws://$host:$port/ws").build()
         val eph = NativeCore.keypair()
         val staticSk = B64.decode(identity.secretKey)!!
         val staticPk = NativeCore.publicKey(staticSk)!!
@@ -195,7 +196,7 @@ class HostConnection(
                         pairing = null
                         target = target.copy(name = ev.hostName)
                         _link.value = Link.Online(ev.os)
-                        onWelcome(ev.hostName, ev.os)
+                        onWelcome(ev.hostName, ev.os, ev.macs)
                     }
                     is Event.Result -> pending.remove(ev.id)?.complete(ev)
                     is Event.State -> _state.value = ev

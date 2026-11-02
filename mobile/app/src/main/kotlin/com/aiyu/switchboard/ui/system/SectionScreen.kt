@@ -87,7 +87,7 @@ fun SectionScreen(vm: AppViewModel, id: String, section: Section, onBack: () -> 
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (link !is Link.Online || s == null) {
-                item { LinkCard(link, scope.host.name, onRetry = scope.conn::retry) }
+                item { LinkCard(link, scope.host.name, onRetry = scope.conn::retry, wakeMacs = scope.host.macs, wakeAddrs = scope.host.addrs) }
                 // Transfers wait for the link to come back, so keep them in view.
                 if (section == Section.Files) item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { TransfersCard(vm.connections.transfers, scope.host.id) } }
                 return@LazyColumn
