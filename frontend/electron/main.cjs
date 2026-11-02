@@ -1,7 +1,7 @@
 // Switchboard desktop shell: runs the Rust daemon as a child over stdio, keeps
 // a tray icon, and starts with the computer when asked to.
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, nativeTheme, Notification } = require('electron')
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, nativeTheme, Notification, dialog, shell } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -145,6 +145,9 @@ const daemon = {
     if (msg.event === 'paired' && Notification.isSupported() && !(win && win.isFocused())) {
       new Notification({ title: 'Phone paired', body: `${msg.data.name} can now control this computer.`, icon: iconPath() }).show()
     }
+    if (msg.event === 'file_received' && Notification.isSupported() && !(win && win.isFocused())) {
+      new Notification({ title: 'File received', body: `${msg.data.name} from ${msg.data.device}`, icon: iconPath() }).show()
+    }
     broadcast(msg.event === 'ready' ? 'status' : msg.event, msg.data)
   },
 
@@ -272,6 +275,20 @@ const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'renam
 ipcMain.handle('sb:call', (e, cmd, args) => {
   if (!trusted(e) || !ALLOWED.has(cmd)) throw new Error('not allowed')
   return daemon.call(cmd, args)
+})
+// File paths come from the native dialog here, never from the page, so a
+// compromised renderer cannot make the daemon offer an arbitrary file.
+ipcMain.handle('files:send', async (e, device) => {
+  if (!trusted(e) || typeof device !== 'string') throw new Error('not allowed')
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'] })
+  if (r.canceled || !r.filePaths[0]) return null
+  await daemon.call('send_file', { device, path: r.filePaths[0] })
+  return path.basename(r.filePaths[0])
+})
+ipcMain.handle('files:open_inbox', async (e) => {
+  if (!trusted(e)) throw new Error('not allowed')
+  const err = await shell.openPath(await daemon.call('inbox'))
+  if (err) throw new Error(err)
 })
 ipcMain.handle('sb:snapshot', (e) => (trusted(e) ? { status: daemon.status, fatal: daemon.fatal, running: !!daemon.proc } : null))
 ipcMain.handle('app:settings', (e) =>

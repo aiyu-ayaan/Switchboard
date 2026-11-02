@@ -1,7 +1,7 @@
-import { ArrowRight, BatteryCharging, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
+import { ArrowRight, BatteryCharging, FolderOpen, PaperPlaneTilt, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
 import type { Route } from '@/components/Shell'
 import { Button, Ring, ShapeIcon, Slider, StatusDot, useToast } from '@/components/ui'
-import { bytes, run, timeAgo, useHostState, type Control, type Status } from '@/lib/bridge'
+import { bytes, run, sb, timeAgo, useFileEvents, useHostState, type Control, type Status } from '@/lib/bridge'
 import { cn } from '@/lib/cn'
 
 function greeting() {
@@ -35,6 +35,7 @@ const delay = (i: number) => ({ ['--i' as string]: i })
 export function Home({ status, go }: { status: Status | null; go: (r: Route) => void }) {
   const { state, refresh } = useHostState()
   const toast = useToast()
+  const files = useFileEvents()
   const act = (c: Control) =>
     run(c).then(
       () => setTimeout(refresh, 250),
@@ -166,6 +167,52 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* Files: send to a phone, and what arrived. */}
+      <section className={cn(tile, 'col-span-12 flex flex-col gap-4 md:col-span-6 lg:col-span-4')} style={delay(2)}>
+        <div className="flex items-center gap-3">
+          <ShapeIcon icon={<PaperPlaneTilt size={22} weight="fill" />} shape="clover" tone="tertiary" size={44} />
+          <div className="min-w-0 flex-1">
+            <p className="text-title font-medium">Files</p>
+            <p className="text-caption text-muted">Saved to Downloads/Switchboard</p>
+          </div>
+          <Button variant="tonal" size="sm" aria-label="Open the folder" icon={<FolderOpen size={18} />} onClick={() => sb.openInbox().catch((e: Error) => toast(e.message))} />
+        </div>
+        {online.length === 0 ? (
+          <p className="text-body text-muted">Connect a phone to send it files.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {online.map((d) => (
+              <Button
+                key={d.id}
+                variant="tonal"
+                size="sm"
+                icon={<PaperPlaneTilt size={16} />}
+                onClick={() =>
+                  sb.sendFile(d.id).then(
+                    (name) => name && toast(`Asked ${d.name} to take ${name}`),
+                    (e: Error) => toast(e.message),
+                  )
+                }
+              >
+                Send to {d.name}
+              </Button>
+            ))}
+          </div>
+        )}
+        {files.length > 0 && (
+          <ul className="flex flex-col gap-1.5" aria-label="Recent files">
+            {files.slice(0, 4).map((f, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 text-label">
+                <span className="min-w-0 truncate font-medium">{f.name}</span>
+                <span className="shrink-0 text-caption text-muted">
+                  {f.kind === 'received' ? 'from' : f.kind === 'sent' ? 'to' : 'declined by'} {f.device}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

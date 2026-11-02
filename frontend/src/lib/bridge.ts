@@ -64,6 +64,9 @@ export interface AppSettings {
 
 interface Bridge {
   call<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>
+  /** Opens a file dialog, then offers the chosen file to that phone. Resolves to its name, or null if cancelled. */
+  sendFile(device: string): Promise<string | null>
+  openInbox(): Promise<void>
   snapshot(): Promise<{ status: Status | null; fatal: string | null; running: boolean }>
   settings(): Promise<AppSettings>
   set(key: string, value: unknown): Promise<void>
@@ -125,6 +128,30 @@ export function useHostState(everyMs = 3000) {
   }, [everyMs, tick])
   const refresh = useCallback(() => setTick((n) => n + 1), [])
   return { state, refresh }
+}
+
+export interface FileEvent {
+  kind: 'received' | 'sent' | 'declined'
+  device: string
+  name: string
+  size?: number
+  at: number
+}
+
+/** Files that moved since this window opened, newest first. */
+export function useFileEvents() {
+  const [events, setEvents] = useState<FileEvent[]>([])
+  useEffect(
+    () =>
+      sb.onEvent(({ event, data }) => {
+        const kind = ({ file_received: 'received', file_sent: 'sent', file_declined: 'declined' } as const)[event as string]
+        if (!kind) return
+        const d = data as { device: string; name: string; size?: number }
+        setEvents((e) => [{ kind, device: d.device, name: d.name, size: d.size, at: Date.now() }, ...e].slice(0, 20))
+      }),
+    [],
+  )
+  return events
 }
 
 export function useSettings() {

@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('switchboard', {
   call: (cmd, args) => ipcRenderer.invoke('sb:call', cmd, args),
+  sendFile: (device) => ipcRenderer.invoke('files:send', device),
+  openInbox: () => ipcRenderer.invoke('files:open_inbox'),
   snapshot: () => ipcRenderer.invoke('sb:snapshot'),
   settings: () => ipcRenderer.invoke('app:settings'),
   set: (key, value) => ipcRenderer.invoke('app:set', key, value),
