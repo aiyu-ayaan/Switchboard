@@ -59,6 +59,7 @@ sealed interface Event {
         val apps: List<AudioApp> = emptyList(),
         val displays: List<Display> = emptyList(),
         val media: Media? = null,
+        val players: List<MediaPlayer> = emptyList(),
         val stats: Stats = Stats(),
     ) : Event
 
@@ -79,7 +80,25 @@ data class Display(val id: String, val name: String, val kind: String, val brigh
     val external get() = kind == "external"
 }
 
-@Serializable data class Media(val player: String, val title: String, val artist: String, val playing: Boolean)
+@Serializable data class MediaPlayer(val id: String, val name: String, val playing: Boolean)
+
+@Serializable
+data class Media(
+    val id: String = "",
+    val player: String,
+    val title: String,
+    val artist: String,
+    val playing: Boolean,
+    /** Milliseconds into the track and its length, when the player says. */
+    val position: Long? = null,
+    val length: Long? = null,
+    @SerialName("can_seek") val canSeek: Boolean = false,
+    val shuffle: Boolean? = null,
+    /** "off", "track" or "all". */
+    val repeat: String? = null,
+    /** Changes with the cover; fetch the picture with [Cmd.mediaArt]. */
+    val art: String? = null,
+)
 
 @Serializable
 data class Stats(
@@ -103,6 +122,11 @@ object Cmd {
     fun setBrightness(display: String, level: Int) = obj("set_brightness") { put("display", display); put("level", level.coerceIn(0, 100)) }
     fun setContrast(display: String, level: Int) = obj("set_contrast") { put("display", display); put("level", level.coerceIn(0, 100)) }
     fun media(action: String) = obj("media") { put("action", action) }
+    fun seek(positionMs: Long) = obj("seek") { put("position", positionMs.coerceAtLeast(0)) }
+    fun setShuffle(on: Boolean) = obj("set_shuffle") { put("on", on) }
+    fun setRepeat(mode: String) = obj("set_repeat") { put("mode", mode) }
+    fun selectPlayer(id: String) = obj("select_player") { put("player", id) }
+    fun mediaArt() = obj("media_art")
     fun power(action: String) = obj("power") { put("action", action) }
     fun unpair() = obj("unpair")
     fun fileSend(xfer: String, name: String, size: Long) = obj("file_send") { put("xfer", xfer); put("name", name); put("size", size) }

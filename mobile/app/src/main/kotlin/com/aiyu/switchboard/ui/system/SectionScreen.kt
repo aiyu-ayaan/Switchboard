@@ -123,9 +123,12 @@ private fun PlayerCard(s: HostState, conn: HostConnection) {
         if (s.media == null) {
             PodHeader(Icons.Rounded.WbSunny, "Nothing playing", "Start a player on the computer to control it here", shape = MaterialShapes.Sunny)
         } else {
-            NowPlaying(s, art = 72)
-            Spacer(Modifier.height(16.dp))
-            Transport(s.media.playing, conn)
+            NowPlaying(s, conn, art = 72)
+            Spacer(Modifier.height(12.dp))
+            SeekBar(s.media, conn)
+            Spacer(Modifier.height(4.dp))
+            Transport(s.media, conn)
+            PlayerChips(s, conn)
         }
     }
 }

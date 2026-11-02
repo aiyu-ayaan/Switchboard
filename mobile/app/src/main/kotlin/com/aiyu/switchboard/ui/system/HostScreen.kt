@@ -29,7 +29,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Laptop
@@ -237,52 +240,16 @@ fun AudioPod(s: HostState, conn: HostConnection, onOpen: (() -> Unit)?) {
         PodHeader(if (m != null) Icons.Rounded.MusicNote else Icons.AutoMirrored.Rounded.VolumeUp, if (m != null) "Now Playing" else "Audio", action = onOpen?.let { "Mixer" }, onAction = onOpen)
         if (m != null) {
             Spacer(Modifier.height(14.dp))
-            NowPlaying(s)
-            Spacer(Modifier.height(12.dp))
-            Transport(m.playing, conn)
+            NowPlaying(s, conn)
+            Spacer(Modifier.height(8.dp))
+            SeekBar(m, conn)
+            Spacer(Modifier.height(4.dp))
+            Transport(m, conn)
+            PlayerChips(s, conn)
         }
         s.volume?.let { v ->
             Spacer(Modifier.height(14.dp))
             VolumeRow(v.level, v.muted, conn)
-        }
-    }
-}
-
-@Composable
-fun NowPlaying(s: HostState, art: Int = 56) {
-    val cs = MaterialTheme.colorScheme
-    val m = s.media ?: return
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        ShapeIcon(Icons.Rounded.MusicNote, MaterialShapes.Sunny, cs.tertiaryContainer, cs.onTertiaryContainer, size = art.dp, iconSize = (art / 2.4).dp, spin = m.playing)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(m.title.ifBlank { "Unknown title" }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(m.artist.ifBlank { " " }, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(4.dp))
-            MonoBadge(m.player, color = cs.surfaceContainerHighest, content = cs.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-fun Transport(playing: Boolean, conn: HostConnection) {
-    val cs = MaterialTheme.colorScheme
-    val haptic = LocalHapticFeedback.current
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-        FilledTonalIconButton(onClick = { conn.post(Cmd.media("previous")) }, shapes = IconButtonDefaults.shapes(), colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = cs.surfaceContainerHighest)) {
-            Icon(Icons.Rounded.SkipPrevious, "Previous")
-        }
-        // The play button morphs from circle to rounded square while pressed (expressive shapes).
-        FilledIconButton(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                conn.post(Cmd.media("play_pause"))
-            },
-            shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.size(56.dp),
-        ) { Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(28.dp)) }
-        FilledTonalIconButton(onClick = { conn.post(Cmd.media("next")) }, shapes = IconButtonDefaults.shapes(), colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = cs.surfaceContainerHighest)) {
-            Icon(Icons.Rounded.SkipNext, "Next")
         }
     }
 }
@@ -393,12 +360,18 @@ fun PowerPod(conn: HostConnection) {
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     SectionCard {
-        PodHeader(Icons.Rounded.Computer, "Power & session", "Lock, screen off or sleep", shape = MaterialShapes.Clover4Leaf)
+        PodHeader(Icons.Rounded.Computer, "Power & session", "Lock, sleep, log out, restart or shut down", shape = MaterialShapes.Clover4Leaf)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PowerButton(Icons.Rounded.Lock, "Lock", MaterialShapes.Cookie9Sided) { ask = Triple("lock", "Lock the computer?", "Its screen locks; sign in again on the computer.") }
             PowerButton(Icons.Rounded.TvOff, "Screen off", MaterialShapes.Cookie6Sided) { ask = Triple("display_off", "Turn the screen off?", "Move the mouse or press a key on the computer to wake it.") }
             PowerButton(Icons.Rounded.Bedtime, "Sleep", MaterialShapes.Clover4Leaf) { ask = Triple("sleep", "Put the computer to sleep?", "It disconnects until it wakes up.") }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PowerButton(Icons.AutoMirrored.Rounded.Logout, "Log out", MaterialShapes.Cookie9Sided) { ask = Triple("logout", "Log out of the computer?", "Programs on it close. Unsaved work is lost.") }
+            PowerButton(Icons.Rounded.RestartAlt, "Restart", MaterialShapes.Cookie6Sided) { ask = Triple("restart", "Restart the computer?", "Programs on it close and it disconnects until it is back. Unsaved work is lost.") }
+            PowerButton(Icons.Rounded.PowerSettingsNew, "Shut down", MaterialShapes.Clover4Leaf) { ask = Triple("shutdown", "Shut the computer down?", "It turns off and cannot be turned back on from here. Unsaved work is lost.") }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
     }
