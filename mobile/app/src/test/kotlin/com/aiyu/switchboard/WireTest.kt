@@ -6,6 +6,7 @@ import com.aiyu.switchboard.net.Cmd
 import com.aiyu.switchboard.net.Event
 import com.aiyu.switchboard.net.FILE_CHUNK
 import com.aiyu.switchboard.net.ServerHello
+import com.aiyu.switchboard.net.lost
 import com.aiyu.switchboard.net.WireJson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,6 +71,14 @@ class WireTest {
         assertEquals("AAE", r.data)
         assertEquals("""{"type":"file_chunk","xfer":"x","offset":196608,"data":"AAE"}""", Cmd.fileChunk("x", 196608, "AAE").toString())
         assertEquals("""{"type":"file_read","xfer":"x","offset":0,"len":196608}""", Cmd.fileRead("x", 0, FILE_CHUNK).toString())
+    }
+
+    @Test fun lostLinksAreWaitedForButRefusalsAreNot() {
+        assertTrue(Event.Result(1, false, "Disconnected").lost())
+        assertTrue(Event.Result(1, false, "Not connected").lost())
+        assertTrue(Event.Result(1, false, "AiyuWithLinux didn't answer").lost())
+        assertEquals(false, Event.Result(1, false, "unknown transfer").lost())
+        assertEquals(false, Event.Result(1, true).lost())
     }
 
     @Test fun commandShape() {

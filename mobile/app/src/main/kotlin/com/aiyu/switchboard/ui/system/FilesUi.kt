@@ -1,6 +1,9 @@
 package com.aiyu.switchboard.ui.system
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,15 +99,37 @@ fun FilesContent(conn: HostConnection, transfers: Transfers, hostId: String, vau
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         uris.forEach { transfers.upload(conn, hostId, it) }
     }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) transfers.uploadFolder(conn, hostId, tree)
+    }
+    // The transfer notification shows only with this permission; ask once, here, where it matters.
+    val context = LocalContext.current
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val all by transfers.items.collectAsStateWithLifecycle()
     val mine = all.filter { it.hostId == hostId }
     SaveFolderCard(vault)
     SectionCard {
         PodHeader(Icons.Rounded.Upload, "Send to the computer", "Saved in its Downloads/Switchboard folder", shape = MaterialShapes.Cookie6Sided)
         Spacer(Modifier.height(12.dp))
-        Button(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Choose files") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("Choose files") }
+            OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.weight(1f)) { Text("Send a folder") }
+        }
         OfferCards(conn, transfers, hostId)
     }
+    TransfersCard(transfers, hostId)
+}
+
+/** Files moving now and recently; shown even while the computer is out of reach. */
+@Composable
+fun TransfersCard(transfers: Transfers, hostId: String) {
+    val all by transfers.items.collectAsStateWithLifecycle()
+    val mine = all.filter { it.hostId == hostId }
     SectionCard {
         PodHeader(
             Icons.Rounded.Download,
@@ -159,9 +185,13 @@ private fun TransferRow(t: Transfer) {
         }
         Spacer(Modifier.height(6.dp))
         when (t.state) {
-            Transfer.State.Running -> {
+            Transfer.State.Queued -> MonoCaption("Waiting for its turn · ${sizeText(t.total)}")
+            Transfer.State.Running, Transfer.State.Paused -> {
                 LinearWavyProgressIndicator(progress = { t.fraction }, modifier = Modifier.fillMaxWidth())
-                MonoCaption("${sizeText(t.done)} of ${sizeText(t.total)}")
+                MonoCaption(
+                    "${sizeText(t.done)} of ${sizeText(t.total)}" + if (t.state == Transfer.State.Paused) " · waiting for the computer" else "",
+                    color = if (t.state == Transfer.State.Paused) cs.tertiary else cs.onSurfaceVariant,
+                )
             }
             Transfer.State.Done -> MonoCaption("${sizeText(t.total)} · ${if (t.upload) "sent" else "saved"}", color = cs.primary)
             Transfer.State.Failed -> MonoCaption(t.error ?: "Failed", color = cs.error)

@@ -7,6 +7,10 @@
     <!-- mDNS discovery of desktops on the LAN. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Keeps a file transfer going while the app is in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Plain ws:// on the LAN is intended: every frame after the handshake is
@@ -40,6 +44,11 @@
                 <data android:scheme="switchboard" android:host="pair" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".net.TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

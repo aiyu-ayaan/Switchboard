@@ -2,6 +2,7 @@ package com.aiyu.switchboard
 
 import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.aiyu.switchboard.data.Vault
@@ -32,9 +33,15 @@ class App : Application() {
             override fun onStop(owner: LifecycleOwner) {
                 stopper = scope.launch {
                     delay(20_000)
-                    connections.stop()
+                    // Files still moving need the link; the collector below lets go when they finish.
+                    if (!connections.transfers.busy.value) connections.stop()
                 }
             }
         })
+        scope.launch {
+            connections.transfers.busy.collect { busy ->
+                if (!busy && !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) connections.stop()
+            }
+        }
     }
 }

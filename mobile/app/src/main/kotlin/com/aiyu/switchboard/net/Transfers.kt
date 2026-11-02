@@ -13,11 +13,16 @@ import com.aiyu.switchboard.data.B64
 import com.aiyu.switchboard.data.Vault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.InputStream
@@ -34,60 +39,141 @@ data class Transfer(
     val state: State = State.Running,
     val error: String? = null,
 ) {
-    enum class State { Running, Done, Failed }
+    /** Queued waits its turn; Paused waits for the connection to come back. */
+    enum class State { Queued, Running, Paused, Done, Failed }
 
     val fraction get() = if (total <= 0) 1f else (done.toFloat() / total).coerceIn(0f, 1f)
+    val busy get() = state == State.Queued || state == State.Running || state == State.Paused
 }
+
+/** The connection dropped or never answered: worth waiting for, not a refusal. */
+fun Event.Result.lost() = !ok && (error == "Not connected" || error == "Disconnected" || error?.endsWith("didn't answer") == true)
 
 /**
  * Files in flight, both ways. They move one chunk at a time over the
- * connection, so they only run while the app is open and connected.
+ * connection. A transfer that loses it waits for it to come back and carries
+ * on from the byte it reached; a foreground service keeps the app alive
+ * meanwhile.
  */
 class Transfers(private val context: Context, private val scope: CoroutineScope, private val vault: Vault) {
     private val _items = MutableStateFlow<List<Transfer>>(emptyList())
     val items: StateFlow<List<Transfer>> = _items.asStateFlow()
 
-    private fun add(t: Transfer) = _items.update { (listOf(t) + it).take(30) }
+    /** True while anything is moving or waiting; keeps connections and the service up. */
+    val busy: StateFlow<Boolean> = items.map { l -> l.any { it.busy } }.stateIn(scope, SharingStarted.Eagerly, false)
 
-    private fun change(id: String, f: (Transfer) -> Transfer) = _items.update { l -> l.map { if (it.id == id) f(it) else it } }
+    /** The desktop keeps a few uploads open per phone; the rest queue here. */
+    private val slots = Semaphore(2)
 
-    fun clearFinished() = _items.update { l -> l.filter { it.state == Transfer.State.Running } }
-
-    /** Sends one file the user picked to the desktop. */
-    fun upload(conn: HostConnection, hostId: String, uri: Uri) {
+    init {
         scope.launch {
-            val (name, size) = describe(uri)
-            val xfer = UUID.randomUUID().toString()
-            add(Transfer(xfer, hostId, name, true, 0, size ?: 0))
-            runCatching {
-                if (size == null) error("Can't read this file's size")
-                // The system picker covers the app, which drops the link; it is back within a moment.
-                withTimeoutOrNull(10_000) { conn.link.first { it is Link.Online } } ?: error("Not connected to the computer")
-                step(conn.send(Cmd.fileSend(xfer, name, size)))
-                val input = context.contentResolver.openInputStream(uri) ?: error("Can't open this file")
-                input.use { sendAll(conn, xfer, it, size) { sent -> change(xfer) { t -> t.copy(done = sent) } } }
-                step(conn.send(Cmd.fileDone(xfer)))
-            }.fold(
-                onSuccess = { change(xfer) { it.copy(done = it.total, state = Transfer.State.Done) } },
-                onFailure = { e ->
-                    conn.send(Cmd.fileCancel(xfer))
-                    change(xfer) { it.copy(state = Transfer.State.Failed, error = e.message ?: "Failed") }
-                },
-            )
+            items.collect { l ->
+                val live = l.filter { it.busy }
+                if (live.isEmpty()) TransferService.stop(context) else TransferService.show(context, live)
+            }
         }
     }
 
-    private suspend fun sendAll(conn: HostConnection, xfer: String, input: InputStream, size: Long, progress: (Long) -> Unit) {
-        val buf = ByteArray(FILE_CHUNK)
-        var sent = 0L
-        while (true) {
-            val n = fill(input, buf)
-            if (n == 0) break
-            step(conn.send(Cmd.fileChunk(xfer, sent, B64.encode(buf.copyOf(n)))))
-            sent += n
-            progress(sent)
+    private fun add(t: Transfer) = _items.update { (listOf(t) + it).take(60) }
+
+    private fun change(id: String, f: (Transfer) -> Transfer) = _items.update { l -> l.map { if (it.id == id) f(it) else it } }
+
+    fun clearFinished() = _items.update { l -> l.filter { it.busy } }
+
+    /** How long a paused transfer waits for the connection before it gives up. */
+    private suspend fun awaitOnline(conn: HostConnection, id: String): Boolean {
+        change(id) { if (it.state == Transfer.State.Running) it.copy(state = Transfer.State.Paused) else it }
+        val back = withTimeoutOrNull(10 * 60_000L) { conn.link.first { it is Link.Online } } != null
+        if (back) change(id) { it.copy(state = Transfer.State.Running) }
+        return back
+    }
+
+    /** True if online now, or once the connection returns. */
+    private suspend fun awaitOnlineIfNeeded(conn: HostConnection, id: String): Boolean =
+        if (conn.link.value is Link.Online) true else awaitOnline(conn, id)
+
+    // --- Upload -------------------------------------------------------------------
+
+    /** Sends one file to the desktop. [path] keeps its folder (`Trip/day1/a.jpg`) on the other side. */
+    fun upload(conn: HostConnection, hostId: String, uri: Uri, path: String? = null) {
+        scope.launch {
+            val (display, size) = describe(uri)
+            val name = path ?: display
+            val xfer = UUID.randomUUID().toString()
+            add(Transfer(xfer, hostId, display, true, 0, size ?: 0, Transfer.State.Queued))
+            val result = runCatching {
+                if (size == null) error("Can't read this file's size")
+                slots.withPermit {
+                    change(xfer) { it.copy(state = Transfer.State.Running) }
+                    sendFile(conn, xfer, uri, name, size) { sent -> change(xfer) { t -> t.copy(done = sent) } }
+                }
+            }
+            finish(conn, xfer, result)
         }
-        if (sent != size) error("The file changed while sending")
+    }
+
+    /** A link that is up but keeps timing out would otherwise loop forever. */
+    private fun giveUpAfter(misses: Int) {
+        if (misses > 20) error("The computer stopped answering")
+    }
+
+    private suspend fun sendFile(conn: HostConnection, xfer: String, uri: Uri, name: String, size: Long, progress: (Long) -> Unit) {
+        var misses = 0
+        while (true) {
+            giveUpAfter(misses)
+            if (!awaitOnlineIfNeeded(conn, xfer)) error("Not connected to the computer")
+            // The desktop says how much it already has, so a retry carries on instead of starting over.
+            val start = conn.send(Cmd.fileSend(xfer, name, size))
+            if (start.lost()) {
+                misses++
+                continue
+            }
+            step(start)
+            var sent = start.data?.toLongOrNull() ?: 0L
+            val input = context.contentResolver.openInputStream(uri) ?: error("Can't open this file")
+            val dropped = input.use {
+                skip(it, sent)
+                progress(sent)
+                val buf = ByteArray(FILE_CHUNK)
+                var lost = false
+                while (true) {
+                    val n = fill(it, buf)
+                    if (n == 0) break
+                    val r = conn.send(Cmd.fileChunk(xfer, sent, B64.encode(buf.copyOf(n))))
+                    if (r.lost()) {
+                        lost = true
+                        break
+                    }
+                    step(r)
+                    misses = 0
+                    sent += n
+                    progress(sent)
+                }
+                lost
+            }
+            if (dropped) {
+                misses++
+                continue
+            }
+            if (sent != size) error("The file changed while sending")
+            val done = conn.send(Cmd.fileDone(xfer))
+            if (done.lost()) {
+                misses++
+                continue
+            }
+            // "unknown transfer" after a retry means the first Done got through.
+            if (!done.ok && done.error?.contains("unknown transfer") != true) step(done)
+            return
+        }
+    }
+
+    private fun skip(input: InputStream, n: Long) {
+        var left = n
+        while (left > 0) {
+            val s = input.skip(left)
+            if (s <= 0) error("The file changed while sending")
+            left -= s
+        }
     }
 
     /** Reads until the buffer is full or the stream ends, so every chunk but the last is full-sized. */
@@ -101,17 +187,57 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
         return n
     }
 
-    /** Pulls a file the desktop offered into the Downloads folder. */
+    /** Sends every file under a folder the user picked, keeping the folder structure. */
+    fun uploadFolder(conn: HostConnection, hostId: String, tree: Uri) {
+        scope.launch {
+            val rootId = DocumentsContract.getTreeDocumentId(tree)
+            val rootName = describe(DocumentsContract.buildDocumentUriUsingTree(tree, rootId)).first
+            walk(tree, rootId, rootName).forEach { (uri, path) -> upload(conn, hostId, uri, path) }
+        }
+    }
+
+    private fun walk(tree: Uri, parentId: String, prefix: String, depth: Int = 0): List<Pair<Uri, String>> {
+        if (depth > 6) return emptyList()
+        val out = mutableListOf<Pair<Uri, String>>()
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+        val cols = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE)
+        context.contentResolver.query(children, cols, null, null, null)?.use { c ->
+            while (c.moveToNext()) {
+                val id = c.getString(0)
+                val name = c.getString(1) ?: continue
+                if (c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    out += walk(tree, id, "$prefix/$name", depth + 1)
+                } else {
+                    out += DocumentsContract.buildDocumentUriUsingTree(tree, id) to "$prefix/$name"
+                }
+            }
+        }
+        return out
+    }
+
+    // --- Download -----------------------------------------------------------------
+
+    /** Pulls a file the desktop offered into the chosen folder, or Downloads/Switchboard. */
     fun download(conn: HostConnection, hostId: String, offer: Event.FileOffer) {
         conn.dismissOffer(offer.xfer)
+        // The same offer can arrive again after a reconnect; one transfer per offer.
+        if (_items.value.any { it.id == offer.xfer && it.busy }) return
         scope.launch {
             add(Transfer(offer.xfer, hostId, offer.name, false, 0, offer.size))
             var sink: Sink? = null
-            runCatching {
+            val result = runCatching {
                 val s = openSink(offer.name).also { sink = it }
                 var offset = 0L
+                var misses = 0
                 while (offset < offer.size) {
+                    giveUpAfter(misses)
+                    if (!awaitOnlineIfNeeded(conn, offer.xfer)) error("Not connected to the computer")
                     val r = conn.send(Cmd.fileRead(offer.xfer, offset, FILE_CHUNK))
+                    if (r.lost()) {
+                        misses++
+                        continue
+                    }
+                    misses = 0
                     step(r)
                     val bytes = B64.decode(r.data.orEmpty()) ?: error("The computer sent bad data")
                     if (bytes.isEmpty()) error("The computer stopped sending")
@@ -120,15 +246,12 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
                     change(offer.xfer) { it.copy(done = offset) }
                 }
                 s.commit()
-                step(conn.send(Cmd.fileDone(offer.xfer)))
-            }.fold(
-                onSuccess = { change(offer.xfer) { it.copy(done = it.total, state = Transfer.State.Done) } },
-                onFailure = { e ->
-                    sink?.discard()
-                    conn.send(Cmd.fileCancel(offer.xfer))
-                    change(offer.xfer) { it.copy(state = Transfer.State.Failed, error = e.message ?: "Failed") }
-                },
-            )
+                while (awaitOnlineIfNeeded(conn, offer.xfer)) {
+                    if (!conn.send(Cmd.fileDone(offer.xfer)).lost()) break
+                }
+            }
+            if (result.isFailure) sink?.discard()
+            finish(conn, offer.xfer, result)
         }
     }
 
@@ -136,6 +259,16 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
     fun decline(conn: HostConnection, offer: Event.FileOffer) {
         conn.dismissOffer(offer.xfer)
         conn.post(Cmd.fileCancel(offer.xfer))
+    }
+
+    private suspend fun finish(conn: HostConnection, xfer: String, result: Result<Unit>) {
+        result.fold(
+            onSuccess = { change(xfer) { it.copy(done = it.total, state = Transfer.State.Done) } },
+            onFailure = { e ->
+                conn.send(Cmd.fileCancel(xfer))
+                change(xfer) { it.copy(state = Transfer.State.Failed, error = e.message ?: "Failed") }
+            },
+        )
     }
 
     private fun step(r: Event.Result) {
