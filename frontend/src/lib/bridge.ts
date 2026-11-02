@@ -17,6 +17,8 @@ export interface Status {
   port: number
   addresses: string[]
   fingerprint: string
+  /** Whether phones may use this computer's keyboard and mouse. */
+  remote_input: boolean
   pairing: { uri: string; code: string; expires_at: number } | null
   devices: DeviceView[]
 }
@@ -67,6 +69,7 @@ export interface HostState {
   apps: AudioApp[]
   displays: Display[]
   media: Media | null
+  remote_input?: boolean
   players: { id: string; name: string; playing: boolean }[]
   stats: { cpu: number; mem_used: number; mem_total: number; uptime: number; battery: { percent: number; charging: boolean } | null }
 }

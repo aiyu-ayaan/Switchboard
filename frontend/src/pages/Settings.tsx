@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Desktop, Fingerprint, Info, Moon, Power, Sun, SunHorizon, TrayArrowDown } from '@phosphor-icons/react'
+import { Cursor, Desktop, Fingerprint, Info, Moon, Power, Sun, SunHorizon, TrayArrowDown } from '@phosphor-icons/react'
 import { Button, Card, Chip, SectionTitle, Segmented, ShapeIcon, Switch, TextField, useToast } from '@/components/ui'
 import { sb, useSettings, type Status } from '@/lib/bridge'
 
@@ -96,6 +96,18 @@ export function Settings({ status }: { status: Status | null }) {
           text="Phones pin this key when they pair; a different computer pretending to be this one cannot connect."
         >
           <Chip tone="primary"><span className="font-mono tracking-wider">{status?.fingerprint}</span></Chip>
+        </Row>
+        <Row
+          icon={<ShapeIcon icon={<Cursor size={20} weight="bold" />} shape="cookie9" tone="danger" size={40} />}
+          title="Phones can use the keyboard and mouse"
+          text="Lets a paired phone move the pointer and type on this computer. Off by default; anything a phone types runs as you. Works on X11 and Windows, not on Wayland."
+        >
+          <Switch
+            label="Phones can use the keyboard and mouse"
+            checked={!!status?.remote_input}
+            disabled={!status}
+            onChange={(on) => sb.call('set_remote_input', { on }).catch((e: Error) => toast(e.message))}
+          />
         </Row>
         <Row
           icon={<ShapeIcon icon={<Desktop size={20} weight="bold" />} shape="flower" tone="secondary" size={40} />}
