@@ -4,7 +4,6 @@ import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.View
 import android.view.animation.PathInterpolator
 import androidx.activity.ComponentActivity
@@ -30,9 +29,10 @@ class MainActivity : ComponentActivity() {
         splash.setOnExitAnimationListener { provider ->
             val icon: View = provider.iconView
             val ease = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
+            // Wall-clock (epoch) millis, not uptime; 0 before Android 12, so there is nothing to wait for.
             val iconEnd = provider.iconAnimationStartMillis + provider.iconAnimationDurationMillis
             AnimatorSet().apply {
-                startDelay = (iconEnd - SystemClock.uptimeMillis()).coerceAtLeast(0)
+                startDelay = (iconEnd - System.currentTimeMillis()).coerceAtLeast(0)
                 playTogether(
                     ObjectAnimator.ofFloat(icon, View.SCALE_X, 1f, 1.6f),
                     ObjectAnimator.ofFloat(icon, View.SCALE_Y, 1f, 1.6f),
