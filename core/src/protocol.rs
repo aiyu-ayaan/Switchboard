@@ -66,6 +66,10 @@ pub enum Command {
     GetState,
     SetVolume { level: u8 },
     SetMute { muted: bool },
+    /// Make this output device (an `AudioOutput::id`) the default.
+    SetOutput { output: String },
+    SetAppVolume { app: String, level: u8 },
+    SetAppMute { app: String, muted: bool },
     SetBrightness { display: String, level: u8 },
     SetContrast { display: String, level: u8 },
     Media { action: MediaAction },
@@ -105,6 +109,10 @@ pub enum Event {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct HostState {
     pub volume: Option<Volume>,
+    #[serde(default)]
+    pub outputs: Vec<AudioOutput>,
+    #[serde(default)]
+    pub apps: Vec<AudioApp>,
     pub displays: Vec<Display>,
     pub media: Option<Media>,
     pub stats: Stats,
@@ -112,6 +120,25 @@ pub struct HostState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Volume {
+    pub level: u8,
+    pub muted: bool,
+}
+
+/// A speaker, headphone or HDMI output the computer can play through.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioOutput {
+    pub id: String,
+    pub name: String,
+    pub default: bool,
+}
+
+/// One program's audio stream, with its own volume.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioApp {
+    pub id: String,
+    pub name: String,
+    /// What it is playing, when it says (a browser tab title).
+    pub detail: String,
     pub level: u8,
     pub muted: bool,
 }
@@ -180,6 +207,20 @@ mod tests {
         let e = Event::State(Box::default());
         let j = serde_json::to_string(&e).unwrap();
         assert!(j.starts_with(r#"{"type":"state","volume":null"#), "{j}");
+    }
+
+    #[test]
+    fn mixer_requests() {
+        let r: Request = serde_json::from_str(r#"{"id":2,"type":"set_app_volume","app":"202","level":30}"#).unwrap();
+        assert_eq!(r.cmd, Command::SetAppVolume { app: "202".into(), level: 30 });
+        let r: Request = serde_json::from_str(r#"{"id":3,"type":"set_output","output":"alsa_output.x"}"#).unwrap();
+        assert_eq!(r.cmd, Command::SetOutput { output: "alsa_output.x".into() });
+    }
+
+    #[test]
+    fn old_state_without_mixer_still_parses() {
+        let j = r#"{"type":"state","volume":null,"displays":[],"media":null,"stats":{"cpu":0.0,"mem_used":0,"mem_total":0,"uptime":0,"battery":null}}"#;
+        assert!(matches!(serde_json::from_str::<Event>(j).unwrap(), Event::State(s) if s.apps.is_empty()));
     }
 
     #[test]
