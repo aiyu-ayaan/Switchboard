@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:drawable/dialog_holo_dark_frame"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <ImageButton
+        android:id="@+id/widget_mute"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Mute or unmute the computer"
+        android:src="@drawable/ic_quick_mute" />
+
+    <ImageButton
+        android:id="@+id/widget_play"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Play or pause on the computer"
+        android:src="@drawable/ic_quick_play" />
+
+    <ImageButton
+        android:id="@+id/widget_lock"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Lock the computer"
+        android:src="@drawable/ic_quick_lock" />
+</LinearLayout>
