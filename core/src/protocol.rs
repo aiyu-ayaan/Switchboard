@@ -82,6 +82,12 @@ pub enum Command {
     /// The cover art of the current track, returned as the result's `data`
     /// (base64url image bytes).
     MediaArt,
+    /// Turn one of the computer's quick settings on or off.
+    SetToggle { toggle: Toggle, on: bool },
+    /// The computer's clipboard text, returned as the result's `data`.
+    ClipboardGet,
+    /// Put text on the computer's clipboard.
+    ClipboardSet { text: String },
     Power { action: PowerAction },
     Ping,
     /// The phone forgot this desktop; the desktop drops it too.
@@ -125,6 +131,25 @@ pub enum PowerAction {
     Logout,
 }
 
+/// Quick settings a phone can flip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Toggle {
+    DarkMode,
+    DoNotDisturb,
+    Wifi,
+    Bluetooth,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToggleState {
+    pub toggle: Toggle,
+    pub on: bool,
+}
+
+/// Longest clipboard text that travels in one frame, in bytes.
+pub const MAX_CLIPBOARD: usize = 256 * 1024;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Repeat {
@@ -167,6 +192,9 @@ pub struct HostState {
     /// Every player that could be controlled, for switching between them.
     #[serde(default)]
     pub players: Vec<MediaPlayer>,
+    /// Only the quick settings this computer can actually read and change.
+    #[serde(default)]
+    pub toggles: Vec<ToggleState>,
     pub stats: Stats,
 }
 
@@ -317,6 +345,15 @@ mod tests {
         assert_eq!(r.cmd, Command::Seek { position: 90000 });
         let m: Media = serde_json::from_str(r#"{"player":"x","title":"t","artist":"a","playing":true}"#).unwrap();
         assert_eq!((m.position, m.shuffle, m.can_seek), (None, None, false));
+    }
+
+    #[test]
+    fn toggles_and_clipboard() {
+        let r: Request = serde_json::from_str(r#"{"id":1,"type":"set_toggle","toggle":"do_not_disturb","on":true}"#).unwrap();
+        assert_eq!(r.cmd, Command::SetToggle { toggle: Toggle::DoNotDisturb, on: true });
+        let r: Request = serde_json::from_str(r#"{"id":2,"type":"clipboard_set","text":"hi"}"#).unwrap();
+        assert_eq!(r.cmd, Command::ClipboardSet { text: "hi".into() });
+        assert_eq!(serde_json::to_string(&Toggle::DarkMode).unwrap(), r#""dark_mode""#);
     }
 
     #[test]
