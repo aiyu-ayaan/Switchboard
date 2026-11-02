@@ -232,7 +232,14 @@ pub enum Repeat {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
-    Welcome { host_id: String, host_name: String, os: String },
+    Welcome {
+        host_id: String,
+        host_name: String,
+        os: String,
+        /// Hardware addresses of the network cards on the LAN, so the phone can wake this computer later.
+        #[serde(default)]
+        macs: Vec<String>,
+    },
     Result {
         id: u64,
         ok: bool,

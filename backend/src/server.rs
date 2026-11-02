@@ -178,7 +178,7 @@ async fn session(
     device_id: &str,
     rx: &mut mpsc::UnboundedReceiver<Outbound>,
 ) -> Result<()> {
-    send(sock, sess, &Event::Welcome { host_id: app.host_id.clone(), host_name: app.name(), os: app.os.clone() }).await?;
+    send(sock, sess, &Event::Welcome { host_id: app.host_id.clone(), host_name: app.name(), os: app.os.clone(), macs: crate::discovery::lan_macs() }).await?;
     send(sock, sess, &Event::Result { id: hello_id, ok: true, error: None, data: None }).await?;
     let mut state = app.state.subscribe();
     let first = (**state.borrow_and_update()).clone();
