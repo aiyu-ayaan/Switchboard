@@ -101,6 +101,18 @@ pub enum Command {
         #[serde(default)]
         meta: bool,
     },
+    /// A shortcut: one character with modifiers held (Ctrl+C, Alt+Tab is `Key`).
+    Chord {
+        ch: char,
+        #[serde(default)]
+        ctrl: bool,
+        #[serde(default)]
+        alt: bool,
+        #[serde(default)]
+        shift: bool,
+        #[serde(default)]
+        meta: bool,
+    },
     /// Type this text as if on the keyboard.
     TypeText { text: String },
     /// The computer's clipboard text, returned as the result's `data`.

@@ -116,7 +116,7 @@ impl System {
                 Ok(())
             }
             Command::MediaArt | Command::ClipboardGet => Ok(()),
-            Command::MouseMove { .. } | Command::MouseButton { .. } | Command::Scroll { .. } | Command::Key { .. } | Command::TypeText { .. } => {
+            Command::MouseMove { .. } | Command::MouseButton { .. } | Command::Scroll { .. } | Command::Key { .. } | Command::Chord { .. } | Command::TypeText { .. } => {
                 anyhow::ensure!(self.remote_input.load(std::sync::atomic::Ordering::Relaxed), "Remote keyboard and mouse is turned off on the computer");
                 let op = match cmd {
                     Command::MouseMove { dx, dy } => {
@@ -126,6 +126,7 @@ impl System {
                     Command::MouseButton { button, action } => input::Op::Button(*button, *action),
                     Command::Scroll { dx, dy } => input::Op::Scroll((*dx).clamp(-50, 50), (*dy).clamp(-50, 50)),
                     Command::Key { key, ctrl, alt, shift, meta } => input::Op::Key { key: *key, ctrl: *ctrl, alt: *alt, shift: *shift, meta: *meta },
+                    Command::Chord { ch, ctrl, alt, shift, meta } => input::Op::Chord { ch: *ch, ctrl: *ctrl, alt: *alt, shift: *shift, meta: *meta },
                     Command::TypeText { text } => {
                         input::check_text(text)?;
                         input::Op::Text(text.clone())

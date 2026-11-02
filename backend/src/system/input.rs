@@ -13,6 +13,7 @@ pub enum Op {
     Button(MouseButton, ButtonAction),
     Scroll(i32, i32),
     Key { key: KeyName, ctrl: bool, alt: bool, shift: bool, meta: bool },
+    Chord { ch: char, ctrl: bool, alt: bool, shift: bool, meta: bool },
     Text(String),
 }
 
@@ -35,6 +36,19 @@ fn key(k: KeyName) -> Key {
         KeyName::Left => Key::LeftArrow,
         KeyName::Right => Key::RightArrow,
     }
+}
+
+/// Clicks `k` with the modifiers (ctrl, alt, shift, meta) held, and never leaves one stuck down.
+fn with_modifiers(e: &mut Enigo, mods: [bool; 4], k: Key) -> Result<()> {
+    let held: Vec<Key> = [Key::Control, Key::Alt, Key::Shift, Key::Meta].into_iter().zip(mods).filter(|(_, on)| *on).map(|(m, _)| m).collect();
+    for m in &held {
+        e.key(*m, Direction::Press)?;
+    }
+    let r = e.key(k, Direction::Click);
+    for m in held.iter().rev() {
+        let _ = e.key(*m, Direction::Release);
+    }
+    Ok(r?)
 }
 
 fn run(e: &mut Enigo, op: Op) -> Result<()> {
@@ -61,18 +75,8 @@ fn run(e: &mut Enigo, op: Op) -> Result<()> {
                 e.scroll(dx, Axis::Horizontal)?;
             }
         }
-        Op::Key { key: k, ctrl, alt, shift, meta } => {
-            let held: Vec<Key> = [(ctrl, Key::Control), (alt, Key::Alt), (shift, Key::Shift), (meta, Key::Meta)].into_iter().filter(|(on, _)| *on).map(|(_, k)| k).collect();
-            for m in &held {
-                e.key(*m, Direction::Press)?;
-            }
-            let r = e.key(key(k), Direction::Click);
-            // Never leave a modifier stuck down, even if the key failed.
-            for m in held.iter().rev() {
-                let _ = e.key(*m, Direction::Release);
-            }
-            r?
-        }
+        Op::Key { key: k, ctrl, alt, shift, meta } => with_modifiers(e, [ctrl, alt, shift, meta], key(k))?,
+        Op::Chord { ch, ctrl, alt, shift, meta } => with_modifiers(e, [ctrl, alt, shift, meta], Key::Unicode(ch))?,
         Op::Text(t) => e.text(&t)?,
     }
     Ok(())
