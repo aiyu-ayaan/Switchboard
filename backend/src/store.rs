@@ -39,16 +39,23 @@ struct Keychain;
 
 #[cfg(any(target_os = "linux", windows))]
 impl Keychain {
-    /// The Linux backend runs its own async runtime; keep it off ours.
-    fn off_runtime<T: Send>(f: impl FnOnce() -> Result<T> + Send) -> Result<T> {
-        std::thread::scope(|s| s.spawn(f).join().unwrap_or_else(|_| anyhow::bail!("keychain thread panicked")))
+    /// The Linux backend runs its own async runtime; keep it off ours. A session
+    /// bus with no Secret Service on it can stall for many seconds, so give up
+    /// after a few and let the caller fall back.
+    fn off_runtime<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(4)).unwrap_or_else(|_| anyhow::bail!("the keychain did not answer"))
     }
 }
 
 #[cfg(any(target_os = "linux", windows))]
 impl Vault for Keychain {
     fn get(&self, host_id: &str) -> Result<Option<Vec<u8>>> {
-        Self::off_runtime(|| match keyring::Entry::new("switchboard", &format!("host-key:{host_id}"))?.get_secret() {
+        let host_id = host_id.to_owned();
+        Self::off_runtime(move || match keyring::Entry::new("switchboard", &format!("host-key:{host_id}"))?.get_secret() {
             Ok(v) => Ok(Some(v)),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(e.into()),
@@ -56,7 +63,8 @@ impl Vault for Keychain {
     }
 
     fn set(&self, host_id: &str, secret: &[u8]) -> Result<()> {
-        Self::off_runtime(|| Ok(keyring::Entry::new("switchboard", &format!("host-key:{host_id}"))?.set_secret(secret)?))
+        let (host_id, secret) = (host_id.to_owned(), secret.to_vec());
+        Self::off_runtime(move || Ok(keyring::Entry::new("switchboard", &format!("host-key:{host_id}"))?.set_secret(&secret)?))
     }
 }
 
