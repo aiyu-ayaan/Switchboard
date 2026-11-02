@@ -1,7 +1,7 @@
-import { ArrowRight, BatteryCharging, FolderOpen, PaperPlaneTilt, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
+import { ArrowRight, BatteryCharging, Repeat, RepeatOnce, Shuffle, FolderOpen, PaperPlaneTilt, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
 import type { Route } from '@/components/Shell'
 import { Button, Ring, ShapeIcon, Slider, StatusDot, useToast } from '@/components/ui'
-import { bytes, run, sb, timeAgo, useFileEvents, useHostState, type Control, type Status } from '@/lib/bridge'
+import { bytes, clock, run, sb, timeAgo, useCover, useFileEvents, useHostState, type Control, type Status } from '@/lib/bridge'
 import { cn } from '@/lib/cn'
 
 function greeting() {
@@ -36,6 +36,7 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
   const { state, refresh } = useHostState()
   const toast = useToast()
   const files = useFileEvents()
+  const cover = useCover(state?.media?.art)
   const act = (c: Control) =>
     run(c).then(
       () => setTimeout(refresh, 250),
@@ -87,7 +88,11 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
           {media && <span className="rounded-full bg-on-tertiary-container/10 px-2.5 py-1 text-caption font-medium">{media.playing ? 'Playing' : 'Paused'}</span>}
         </div>
         <div className="flex justify-center">
-          <ShapeIcon icon={<MusicNotes size={40} weight="fill" />} shape="sunny" tone="primary" size={104} spin={media?.playing} />
+          {cover ? (
+            <img src={cover} alt="" className="h-[104px] w-[104px] rounded-2xl object-cover" />
+          ) : (
+            <ShapeIcon icon={<MusicNotes size={40} weight="fill" />} shape="sunny" tone="primary" size={104} spin={media?.playing} />
+          )}
         </div>
         <div className="min-w-0 text-center">
           <p className="truncate text-title font-semibold">{media?.title || 'Nothing playing'}</p>
@@ -98,6 +103,56 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
           <Button size="lg" className="w-20" aria-label={media?.playing ? 'Pause' : 'Play'} disabled={!media} icon={media?.playing ? <Pause size={26} weight="fill" /> : <Play size={26} weight="fill" />} onClick={() => act({ type: 'media', action: 'play_pause' })} />
           <Button variant="tonal" aria-label="Next" disabled={!media} icon={<SkipForward size={20} weight="fill" />} onClick={() => act({ type: 'media', action: 'next' })} />
         </div>
+        {media?.length ? (
+          <div className="flex flex-col gap-1">
+            <Slider
+              label="Track position"
+              disabled={!media.can_seek}
+              value={media.position == null ? null : Math.min(100, (media.position / media.length) * 100)}
+              onCommit={(pct) => act({ type: 'seek', position: Math.round((pct / 100) * media.length!) })}
+            />
+            <div className="flex justify-between text-caption tabular opacity-80">
+              <span>{clock(media.position ?? 0)}</span>
+              <span>{clock(media.length)}</span>
+            </div>
+          </div>
+        ) : null}
+        {media && (media.shuffle != null || media.repeat != null) && (
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              variant={media.shuffle ? 'filled' : 'tonal'}
+              size="sm"
+              aria-label="Shuffle"
+              aria-pressed={!!media.shuffle}
+              disabled={media.shuffle == null}
+              icon={<Shuffle size={18} />}
+              onClick={() => act({ type: 'set_shuffle', on: !media.shuffle })}
+            />
+            <Button
+              variant={media.repeat && media.repeat !== 'off' ? 'filled' : 'tonal'}
+              size="sm"
+              aria-label={`Repeat ${media.repeat ?? 'off'}`}
+              disabled={media.repeat == null}
+              icon={media.repeat === 'track' ? <RepeatOnce size={18} /> : <Repeat size={18} />}
+              onClick={() => act({ type: 'set_repeat', mode: media.repeat === 'off' ? 'all' : media.repeat === 'all' ? 'track' : 'off' })}
+            />
+          </div>
+        )}
+        {(state?.players.length ?? 0) > 1 && (
+          <div role="radiogroup" aria-label="Player" className="flex flex-wrap justify-center gap-1.5">
+            {state!.players.map((p) => (
+              <button
+                key={p.id}
+                role="radio"
+                aria-checked={p.id === media?.id}
+                onClick={() => act({ type: 'select_player', player: p.id })}
+                className={cn('state-layer h-8 cursor-pointer rounded-full px-3 text-caption font-medium', p.id === media?.id ? 'bg-on-tertiary-container/20' : 'bg-on-tertiary-container/10 opacity-80')}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Volume. */}

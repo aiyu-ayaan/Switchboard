@@ -43,12 +43,31 @@ export interface AudioApp {
   muted: boolean
 }
 
+export type RepeatMode = 'off' | 'track' | 'all'
+
+export interface Media {
+  id: string
+  player: string
+  title: string
+  artist: string
+  playing: boolean
+  /** Milliseconds. */
+  position: number | null
+  length: number | null
+  can_seek: boolean
+  shuffle: boolean | null
+  repeat: RepeatMode | null
+  /** Changes with the cover; fetch it with `media_art`. */
+  art: string | null
+}
+
 export interface HostState {
   volume: { level: number; muted: boolean } | null
   outputs: AudioOutput[]
   apps: AudioApp[]
   displays: Display[]
-  media: { player: string; title: string; artist: string; playing: boolean } | null
+  media: Media | null
+  players: { id: string; name: string; playing: boolean }[]
   stats: { cpu: number; mem_used: number; mem_total: number; uptime: number; battery: { percent: number; charging: boolean } | null }
 }
 
@@ -189,6 +208,37 @@ export type Control =
   | { type: 'set_brightness'; display: string; level: number }
   | { type: 'set_contrast'; display: string; level: number }
   | { type: 'media'; action: 'play_pause' | 'next' | 'previous' }
+  | { type: 'seek'; position: number }
+  | { type: 'set_shuffle'; on: boolean }
+  | { type: 'set_repeat'; mode: RepeatMode }
+  | { type: 'select_player'; player: string }
+  | { type: 'media_art' }
 
 /** Runs a control on this computer, the same path a phone command takes. */
-export const run = (command: Control) => sb.call('run', { command })
+export const run = <T = unknown>(command: Control) => sb.call<T>('run', { command })
+
+/** The cover of the current track as a data URL, or null while there is none. */
+export function useCover(art: string | null | undefined) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    setUrl(null)
+    if (!art) return
+    let alive = true
+    run<string>({ type: 'media_art' }).then(
+      (b64) => alive && b64 && setUrl(`data:image/*;base64,${b64.replace(/-/g, '+').replace(/_/g, '/')}`),
+      () => {},
+    )
+    return () => {
+      alive = false
+    }
+  }, [art])
+  return url
+}
+
+export function clock(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = String(s % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}

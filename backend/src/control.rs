@@ -75,10 +75,10 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
         }
         Cmd::State => serde_json::to_value(app.system.snapshot().await)?,
         Cmd::Run { command } => {
-            app.system.run(&command).await?;
+            let data = app.system.run(&command).await?;
             // Connected phones see the change on their next state push.
             app.poke.notify_one();
-            Value::Null
+            json!(data)
         }
     })
 }
