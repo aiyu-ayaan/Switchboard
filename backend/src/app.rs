@@ -78,6 +78,8 @@ impl App {
             None => sysinfo::System::host_name().unwrap_or_else(|| "My computer".into()),
         };
         files::sweep(&inbox);
+        let system = System::default();
+        system.remote_input.store(store.remote_input()?, std::sync::atomic::Ordering::Relaxed);
         let os = sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.into());
         Ok(Arc::new(Self {
             store,
@@ -87,7 +89,7 @@ impl App {
             port,
             os,
             pairing: Mutex::new(None),
-            system: System::default(),
+            system,
             conns: Mutex::new(HashMap::new()),
             inbox,
             offers: Mutex::new(HashMap::new()),
@@ -116,6 +118,12 @@ impl App {
         if let Some(a) = a.as_mut() {
             a.publish(&self.host_id, &self.name(), &self.pk_b64(), self.port);
         }
+    }
+
+    pub fn set_remote_input(&self, on: bool) -> anyhow::Result<()> {
+        self.store.set_remote_input(on)?;
+        self.system.remote_input.store(on, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
     }
 
     pub fn rename(&self, name: &str) -> anyhow::Result<()> {
@@ -248,6 +256,7 @@ impl App {
             "port": self.port,
             "addresses": lan_addresses(),
             "fingerprint": fingerprint(self.keys.public.as_bytes()),
+            "remote_input": self.system.remote_input.load(std::sync::atomic::Ordering::Relaxed),
             "pairing": pairing,
             "devices": devices,
         })

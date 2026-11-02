@@ -36,10 +36,12 @@ ddc = "0.2"
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 ddc-i2c = { version = "0.2", features = ["with-linux"] }
+enigo = { version = "0.6", default-features = false, features = ["x11rb"] }
 keyring = { version = "3", default-features = false, features = ["async-secret-service", "tokio", "crypto-rust"] }
 
 [target.'cfg(windows)'.dependencies]
 ddc-winapi = "0.2"
+enigo = "0.6"
 wmi = "0.14"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
 windows = { version = "0.58", features = [

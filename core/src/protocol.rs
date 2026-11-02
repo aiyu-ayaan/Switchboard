@@ -84,6 +84,25 @@ pub enum Command {
     MediaArt,
     /// Turn one of the computer's quick settings on or off.
     SetToggle { toggle: Toggle, on: bool },
+    /// Move the pointer by this many pixels.
+    MouseMove { dx: i32, dy: i32 },
+    MouseButton { button: MouseButton, action: ButtonAction },
+    /// Scroll by whole steps; positive `dy` scrolls down.
+    Scroll { dx: i32, dy: i32 },
+    /// Press and release a named key, with the modifiers held.
+    Key {
+        key: KeyName,
+        #[serde(default)]
+        ctrl: bool,
+        #[serde(default)]
+        alt: bool,
+        #[serde(default)]
+        shift: bool,
+        #[serde(default)]
+        meta: bool,
+    },
+    /// Type this text as if on the keyboard.
+    TypeText { text: String },
     /// The computer's clipboard text, returned as the result's `data`.
     ClipboardGet,
     /// Put text on the computer's clipboard.
@@ -130,6 +149,45 @@ pub enum PowerAction {
     Restart,
     Logout,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ButtonAction {
+    Click,
+    Press,
+    Release,
+}
+
+/// Keys with no character of their own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyName {
+    Enter,
+    Backspace,
+    Tab,
+    Escape,
+    Space,
+    Delete,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+/// Longest text one `TypeText` may carry, in characters.
+pub const MAX_TYPED: usize = 1000;
 
 /// Quick settings a phone can flip.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,6 +253,9 @@ pub struct HostState {
     /// Only the quick settings this computer can actually read and change.
     #[serde(default)]
     pub toggles: Vec<ToggleState>,
+    /// Whether the computer lets phones use its keyboard and mouse.
+    #[serde(default)]
+    pub remote_input: bool,
     pub stats: Stats,
 }
 
@@ -354,6 +415,16 @@ mod tests {
         let r: Request = serde_json::from_str(r#"{"id":2,"type":"clipboard_set","text":"hi"}"#).unwrap();
         assert_eq!(r.cmd, Command::ClipboardSet { text: "hi".into() });
         assert_eq!(serde_json::to_string(&Toggle::DarkMode).unwrap(), r#""dark_mode""#);
+    }
+
+    #[test]
+    fn remote_input_requests() {
+        let r: Request = serde_json::from_str(r#"{"id":1,"type":"mouse_move","dx":-3,"dy":8}"#).unwrap();
+        assert_eq!(r.cmd, Command::MouseMove { dx: -3, dy: 8 });
+        let r: Request = serde_json::from_str(r#"{"id":2,"type":"key","key":"page_down","ctrl":true}"#).unwrap();
+        assert_eq!(r.cmd, Command::Key { key: KeyName::PageDown, ctrl: true, alt: false, shift: false, meta: false });
+        let r: Request = serde_json::from_str(r#"{"id":3,"type":"mouse_button","button":"right","action":"click"}"#).unwrap();
+        assert_eq!(r.cmd, Command::MouseButton { button: MouseButton::Right, action: ButtonAction::Click });
     }
 
     #[test]

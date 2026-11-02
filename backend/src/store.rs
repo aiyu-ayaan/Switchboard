@@ -203,6 +203,15 @@ impl Store {
         self.set_meta("host_sk", sk)
     }
 
+    /// Whether phones may drive the keyboard and mouse. Off unless the person at the computer turned it on.
+    pub fn remote_input(&self) -> Result<bool> {
+        Ok(self.meta("remote_input")?.is_some_and(|v| v == b"1"))
+    }
+
+    pub fn set_remote_input(&self, on: bool) -> Result<()> {
+        self.set_meta("remote_input", if on { b"1" } else { b"0" })
+    }
+
     pub fn host_name(&self) -> Result<Option<String>> {
         Ok(self.meta("host_name")?.and_then(|b| String::from_utf8(b).ok()))
     }
@@ -350,6 +359,16 @@ mod tests {
         assert_eq!(t[0].name, "f504");
         assert_eq!(t.len(), 3);
         assert_eq!(s.transfers(1000).unwrap().len(), 500);
+    }
+
+    #[test]
+    fn remote_input_is_off_until_allowed() {
+        let s = Store::memory().unwrap();
+        assert!(!s.remote_input().unwrap());
+        s.set_remote_input(true).unwrap();
+        assert!(s.remote_input().unwrap());
+        s.set_remote_input(false).unwrap();
+        assert!(!s.remote_input().unwrap());
     }
 
     #[test]

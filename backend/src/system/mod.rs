@@ -2,6 +2,7 @@
 
 pub mod clipboard;
 pub mod displays;
+pub mod input;
 pub mod media;
 pub mod mixer;
 pub mod power;
@@ -21,6 +22,8 @@ pub struct System {
     /// Where the cover of the track in the last snapshot lives.
     art_url: std::sync::Mutex<Option<String>>,
     clipboard: std::sync::Arc<clipboard::Clip>,
+    /// Whether phones may use the keyboard and mouse; off until the person at the computer allows it.
+    pub remote_input: std::sync::atomic::AtomicBool,
     /// Quick settings are read by running programs, so they are cached for a few seconds.
     toggles: std::sync::Mutex<Option<(std::time::Instant, Vec<switchboard_core::protocol::ToggleState>)>>,
 }
@@ -43,7 +46,7 @@ impl System {
             self.toggles(),
         );
         *self.art_url.lock().unwrap() = now.art_url;
-        HostState { volume, outputs, apps, displays, media: now.media, players: now.players, toggles, stats: self.stats.sample() }
+        HostState { volume, outputs, apps, displays, media: now.media, players: now.players, toggles, remote_input: self.remote_input.load(std::sync::atomic::Ordering::Relaxed), stats: self.stats.sample() }
     }
 
     async fn toggles(&self) -> Vec<switchboard_core::protocol::ToggleState> {
@@ -113,6 +116,24 @@ impl System {
                 Ok(())
             }
             Command::MediaArt | Command::ClipboardGet => Ok(()),
+            Command::MouseMove { .. } | Command::MouseButton { .. } | Command::Scroll { .. } | Command::Key { .. } | Command::TypeText { .. } => {
+                anyhow::ensure!(self.remote_input.load(std::sync::atomic::Ordering::Relaxed), "Remote keyboard and mouse is turned off on the computer");
+                let op = match cmd {
+                    Command::MouseMove { dx, dy } => {
+                        let (dx, dy) = input::clamp_move(*dx, *dy);
+                        input::Op::Move(dx, dy)
+                    }
+                    Command::MouseButton { button, action } => input::Op::Button(*button, *action),
+                    Command::Scroll { dx, dy } => input::Op::Scroll((*dx).clamp(-50, 50), (*dy).clamp(-50, 50)),
+                    Command::Key { key, ctrl, alt, shift, meta } => input::Op::Key { key: *key, ctrl: *ctrl, alt: *alt, shift: *shift, meta: *meta },
+                    Command::TypeText { text } => {
+                        input::check_text(text)?;
+                        input::Op::Text(text.clone())
+                    }
+                    _ => unreachable!(),
+                };
+                blocking(move || input::send(op)).await?
+            }
             Command::SetToggle { toggle, on } => {
                 let (t, o) = (*toggle, *on);
                 let r = blocking(move || toggles::set(t, o)).await?;

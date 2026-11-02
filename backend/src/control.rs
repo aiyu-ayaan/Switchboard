@@ -32,6 +32,8 @@ enum Cmd {
     PairCancel,
     Forget { device: String },
     Rename { name: String },
+    /// Let phones use this computer's keyboard and mouse (off by default).
+    SetRemoteInput { on: bool },
     /// What a phone would see right now, for the desktop's own dashboard.
     State,
     /// Offer files and folders (picked in the desktop's own dialog) to a
@@ -62,6 +64,11 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
             let removed = app.forget(&device)?;
             app.emit_status();
             json!({ "removed": removed })
+        }
+        Cmd::SetRemoteInput { on } => {
+            app.set_remote_input(on)?;
+            app.emit_status();
+            Value::Null
         }
         Cmd::Rename { name } => {
             app.rename(&name)?;
