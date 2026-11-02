@@ -104,7 +104,7 @@ fun SectionScreen(vm: AppViewModel, id: String, section: Section, onBack: () -> 
                     if (s.displays.size > 1) item { AllPanels(s, scope.conn) }
                     items(s.displays, key = { it.id }) { DisplayCard(it, scope.conn) }
                 }
-                Section.Files -> item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { FilesContent(scope.conn, vm.connections.transfers, scope.host.id) } }
+                Section.Files -> item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { FilesContent(scope.conn, vm.connections.transfers, scope.host.id, vm.vault) } }
                 Section.System -> {
                     item { Rings(s) }
                     item { Facts(s) }

@@ -1,5 +1,8 @@
 package com.aiyu.switchboard.ui.system
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -25,10 +28,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aiyu.switchboard.data.Vault
 import com.aiyu.switchboard.net.HostConnection
 import com.aiyu.switchboard.net.Transfer
 import com.aiyu.switchboard.net.Transfers
@@ -86,12 +91,13 @@ fun OfferCards(conn: HostConnection, transfers: Transfers, hostId: String) {
 
 /** The Files screen: pick files to send, take offers, watch progress. */
 @Composable
-fun FilesContent(conn: HostConnection, transfers: Transfers, hostId: String) {
+fun FilesContent(conn: HostConnection, transfers: Transfers, hostId: String, vault: Vault) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         uris.forEach { transfers.upload(conn, hostId, it) }
     }
     val all by transfers.items.collectAsStateWithLifecycle()
     val mine = all.filter { it.hostId == hostId }
+    SaveFolderCard(vault)
     SectionCard {
         PodHeader(Icons.Rounded.Upload, "Send to the computer", "Saved in its Downloads/Switchboard folder", shape = MaterialShapes.Cookie6Sided)
         Spacer(Modifier.height(12.dp))
@@ -110,6 +116,37 @@ fun FilesContent(conn: HostConnection, transfers: Transfers, hostId: String) {
     }
 }
 
+/** Where files from the computer are saved: a folder of the user's choosing, or Downloads/Switchboard. */
+@Composable
+private fun SaveFolderCard(vault: Vault) {
+    val context = LocalContext.current
+    val data by vault.data.collectAsStateWithLifecycle()
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            // Keep access across restarts, and let go of the folder it replaces.
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            data.saveFolder?.let { old -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(old), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
+            vault.update { it.copy(saveFolder = uri.toString()) }
+        }
+    }
+    SectionCard {
+        PodHeader(Icons.Rounded.Folder, "Save received files to", folderLabel(data.saveFolder), shape = MaterialShapes.Clover4Leaf)
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { picker.launch(null) }) { Text("Choose folder") }
+            if (data.saveFolder != null) TextButton(onClick = { vault.update { it.copy(saveFolder = null) } }) { Text("Use Downloads") }
+        }
+    }
+}
+
+/** `primary:Documents/Pics` reads as "Internal storage / Documents / Pics". */
+fun folderLabel(tree: String?): String {
+    if (tree == null) return "Downloads/Switchboard"
+    val id = runCatching { DocumentsContract.getTreeDocumentId(Uri.parse(tree)) }.getOrNull() ?: return "Chosen folder"
+    val (volume, path) = id.substringBefore(':') to id.substringAfter(':', "")
+    return (if (volume == "primary") "Internal storage" else volume) + if (path.isEmpty()) "" else " / " + path.replace("/", " / ")
+}
+
 @Composable
 private fun TransferRow(t: Transfer) {
     val cs = MaterialTheme.colorScheme
@@ -126,7 +163,7 @@ private fun TransferRow(t: Transfer) {
                 LinearWavyProgressIndicator(progress = { t.fraction }, modifier = Modifier.fillMaxWidth())
                 MonoCaption("${sizeText(t.done)} of ${sizeText(t.total)}")
             }
-            Transfer.State.Done -> MonoCaption("${sizeText(t.total)} · ${if (t.upload) "sent" else "saved to Downloads/Switchboard"}", color = cs.primary)
+            Transfer.State.Done -> MonoCaption("${sizeText(t.total)} · ${if (t.upload) "sent" else "saved"}", color = cs.primary)
             Transfer.State.Failed -> MonoCaption(t.error ?: "Failed", color = cs.error)
         }
     }

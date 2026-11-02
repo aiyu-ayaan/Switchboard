@@ -27,6 +27,8 @@ data class VaultData(
     val selected: String? = null,
     val dynamicColor: Boolean = true,
     val theme: String = "system",
+    /** Tree URI of the folder received files go to; null means Downloads/Switchboard. */
+    val saveFolder: String? = null,
 )
 
 object B64 {

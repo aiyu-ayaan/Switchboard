@@ -5,15 +5,20 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.aiyu.switchboard.data.B64
+import com.aiyu.switchboard.data.Vault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -38,7 +43,7 @@ data class Transfer(
  * Files in flight, both ways. They move one chunk at a time over the
  * connection, so they only run while the app is open and connected.
  */
-class Transfers(private val context: Context, private val scope: CoroutineScope) {
+class Transfers(private val context: Context, private val scope: CoroutineScope, private val vault: Vault) {
     private val _items = MutableStateFlow<List<Transfer>>(emptyList())
     val items: StateFlow<List<Transfer>> = _items.asStateFlow()
 
@@ -56,6 +61,8 @@ class Transfers(private val context: Context, private val scope: CoroutineScope)
             add(Transfer(xfer, hostId, name, true, 0, size ?: 0))
             runCatching {
                 if (size == null) error("Can't read this file's size")
+                // The system picker covers the app, which drops the link; it is back within a moment.
+                withTimeoutOrNull(10_000) { conn.link.first { it is Link.Online } } ?: error("Not connected to the computer")
                 step(conn.send(Cmd.fileSend(xfer, name, size)))
                 val input = context.contentResolver.openInputStream(uri) ?: error("Can't open this file")
                 input.use { sendAll(conn, xfer, it, size) { sent -> change(xfer) { t -> t.copy(done = sent) } } }
@@ -151,9 +158,10 @@ class Transfers(private val context: Context, private val scope: CoroutineScope)
         fun discard()
     }
 
-    /** Downloads/Switchboard through MediaStore on Android 10+, which needs no permission. */
+    /** The folder the user chose, else Downloads/Switchboard through MediaStore on Android 10+, which needs no permission. */
     private fun openSink(name: String): Sink {
         val safe = name.substringAfterLast('/').substringAfterLast('\\').ifBlank { "file" }
+        vault.data.value.saveFolder?.let { return openFolderSink(Uri.parse(it), safe) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = context.contentResolver
             val values = ContentValues().apply {
@@ -187,6 +195,24 @@ class Transfers(private val context: Context, private val scope: CoroutineScope)
             override fun discard() {
                 runCatching { out.close() }
                 file.delete()
+            }
+        }
+    }
+
+    /** A folder picked with the system folder chooser; the provider renames on a clash. */
+    private fun openFolderSink(tree: Uri, name: String): Sink {
+        val resolver = context.contentResolver
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
+        val doc = runCatching { DocumentsContract.createDocument(resolver, parent, mime, name) }.getOrNull()
+            ?: error("Can't save to the folder you chose. Choose it again in Files.")
+        val out = resolver.openOutputStream(doc) ?: error("Can't write to the folder you chose")
+        return object : Sink {
+            override fun write(b: ByteArray) = out.write(b)
+            override fun commit() = out.close()
+            override fun discard() {
+                runCatching { out.close() }
+                runCatching { DocumentsContract.deleteDocument(resolver, doc) }
             }
         }
     }
