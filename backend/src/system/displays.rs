@@ -49,11 +49,17 @@ impl Displays {
             c.scanned = Some(Instant::now());
         }
         // The backlight is cheap to read and changes from the keyboard too.
-        let mut list = self.cache.lock().unwrap().list.clone();
-        for d in list.iter_mut().filter(|d| d.kind == DisplayKind::Internal) {
-            d.brightness = imp::backlight_percent(&d.id).or(d.brightness);
-        }
-        list
+        // Read off the async threads: on Windows this is a WMI query.
+        let cached = self.cache.lock().unwrap().list.clone();
+        let mut list = cached.clone();
+        tokio::task::spawn_blocking(move || {
+            for d in list.iter_mut().filter(|d| d.kind == DisplayKind::Internal) {
+                d.brightness = imp::backlight_percent(&d.id).or(d.brightness);
+            }
+            list
+        })
+        .await
+        .unwrap_or(cached)
     }
 
     pub async fn set(&self, id: &str, vcp: u8, level: u8) -> Result<()> {
@@ -223,14 +229,64 @@ mod imp {
     use super::*;
     use ddc::Ddc;
 
-    // shortcut: no laptop-panel (WMI) brightness on Windows yet; external
-    // monitors only. Add WmiMonitorBrightnessMethods when someone needs it.
-    pub fn backlight_percent(_: &str) -> Option<u8> { None }
-    pub async fn set_backlight(_: &str, _: u8) -> Result<()> { Err(anyhow!("unsupported on Windows")) }
+    use serde::{Deserialize, Serialize};
+    use wmi::{COMLibrary, WMIConnection};
+
+    // The laptop panel is not a DDC/CI monitor; Windows exposes its backlight
+    // through WMI in the root\wmi namespace.
+    const INTERNAL: &str = "wmi:backlight";
+
+    #[derive(Deserialize)]
+    #[allow(non_snake_case)]
+    struct WmiMonitorBrightness {
+        CurrentBrightness: u8,
+    }
+
+    #[derive(Deserialize)]
+    #[allow(non_snake_case)]
+    struct WmiMonitorBrightnessMethods {
+        __Path: String,
+    }
+
+    #[derive(Serialize)]
+    #[allow(non_snake_case)]
+    struct SetBrightness {
+        Timeout: u32,
+        Brightness: u8,
+    }
+
+    fn wmi() -> Result<WMIConnection> {
+        Ok(WMIConnection::with_namespace_path("ROOT\\WMI", COMLibrary::new()?)?)
+    }
+
+    /// `None` on a desktop: the class has no active instance there.
+    pub fn backlight_percent(id: &str) -> Option<u8> {
+        if id != INTERNAL {
+            return None;
+        }
+        let r: Vec<WmiMonitorBrightness> = wmi().ok()?.raw_query("SELECT CurrentBrightness FROM WmiMonitorBrightness WHERE Active = TRUE").ok()?;
+        r.first().map(|b| b.CurrentBrightness.min(100))
+    }
+
+    pub async fn set_backlight(_: &str, level: u8) -> Result<()> {
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let con = wmi()?;
+            let panels: Vec<WmiMonitorBrightnessMethods> = con.raw_query("SELECT __Path FROM WmiMonitorBrightnessMethods WHERE Active = TRUE")?;
+            let panel = panels.first().ok_or_else(|| anyhow!("no laptop display found"))?;
+            // Never write zero: a black panel looks like a dead laptop.
+            con.exec_instance_method::<WmiMonitorBrightnessMethods, _, ()>("WmiSetBrightness", &panel.__Path, SetBrightness { Timeout: 0, Brightness: level.clamp(1, 100) })?;
+            Ok(())
+        })
+        .await?
+    }
 
     pub fn scan() -> Vec<Display> {
-        let Ok(mons) = ddc_winapi::Monitor::enumerate() else { return vec![] };
-        mons.into_iter()
+        let mut out = Vec::new();
+        if let Some(b) = backlight_percent(INTERNAL) {
+            out.push(Display { id: INTERNAL.into(), name: "Built-in display".into(), kind: DisplayKind::Internal, brightness: Some(b), contrast: None });
+        }
+        let Ok(mons) = ddc_winapi::Monitor::enumerate() else { return out };
+        out.extend(mons.into_iter()
             .enumerate()
             .filter_map(|(i, mut m)| {
                 let b = m.get_vcp_feature(VCP_BRIGHTNESS).ok()?;
@@ -243,8 +299,8 @@ mod imp {
                     brightness: Some(percent(b.value() as u32, b.maximum() as u32)),
                     contrast: c.map(|c| percent(c.value() as u32, c.maximum() as u32)),
                 })
-            })
-            .collect()
+            }));
+        out
     }
 
     pub fn ddc_set(id: &str, vcp: u8, level: u8) -> Result<()> {

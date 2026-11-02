@@ -37,6 +37,7 @@ keyring = { version = "3", default-features = false, features = ["async-secret-s
 
 [target.'cfg(windows)'.dependencies]
 ddc-winapi = "0.2"
+wmi = "0.14"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
 windows = { version = "0.58", features = [
   "Win32_Foundation",
