@@ -15,6 +15,7 @@ pub struct Now {
 }
 
 /// Short stable id for a cover URL, so the phone refetches only when it changes.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn art_id(url: &str) -> String {
     sha2::Sha256::digest(url.as_bytes()).iter().take(6).map(|b| format!("{b:02x}")).collect()
 }

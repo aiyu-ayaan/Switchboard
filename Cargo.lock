@@ -2449,6 +2449,7 @@ dependencies = [
  "tracing-subscriber",
  "ureq",
  "windows 0.58.0",
+ "windows-core 0.58.0",
  "wmi",
  "x25519-dalek",
  "zbus 5.19.0",
