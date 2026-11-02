@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Switchboard</title>
+  <!-- Under 24 px the knob closes up, so the small cut is the track alone. -->
+  <path fill="currentColor" d="M98 34H178A26 26 0 0 1 178 86H98A8 8 0 0 0 98 102H158A60 60 0 0 1 158 222H78A26 26 0 0 1 78 170H158A8 8 0 0 0 158 154H98A60 60 0 0 1 98 34Z"/>
+</svg>

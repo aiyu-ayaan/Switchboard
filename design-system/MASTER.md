@@ -65,10 +65,21 @@ stops under reduced-motion.
 
 ## Brand
 
-`brand/logo-mark.svg`: two jacks joined by a patch cable that reads as an S.
-App tile `brand/app-icon.svg` (prod `#303AA1`/`#E0E0FF`) and
-`brand/app-icon-dev.svg` (amber). `brand/render.sh` renders the desktop PNGs;
-the Android launcher icon is the same paths as a vector drawable.
+`brand/logo-mark.svg` — **Switch-S**: the S is the track of a toggle switch
+and the knob sits at its "on" end. One filled path on a 256 grid: a 52-unit
+track with round ends, 34-unit bends, and the knob a hole of r18 at (178, 60).
+`brand/logo-mark-small.svg` drops the knob for 16–24 px.
+
+The language it seeds: thick rounded tracks and round knobs, the same pills as
+the buttons. The track is the connection, the knob is its state; amber on the
+knob means "on / connected".
+
+App tile `brand/app-icon.svg`: `#303AA1` tile, `#E0E0FF` track, `#FFB784`
+knob. `brand/app-icon-dev.svg` swaps to the amber tile with an indigo knob.
+`brand/render.sh` renders the desktop PNGs; the Android launcher icon and the
+splash are the same path as vector drawables. The splash plays the connection:
+the knob rides the S from the phone end to the PC end, drawing the track
+behind it, then switches on in amber with a ping.
 
 ## Never
 
