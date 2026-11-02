@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { DeviceMobile, GearSix, House, QrCode, type Icon } from '@phosphor-icons/react'
+import { DeviceMobile, Files, GearSix, House, QrCode, type Icon } from '@phosphor-icons/react'
 import { cn } from '@/lib/cn'
 import type { Status } from '@/lib/bridge'
 import { StatusDot } from './ui'
 
-export type Route = '/' | '/pair' | '/devices' | '/settings'
+export type Route = '/' | '/pair' | '/devices' | '/files' | '/settings'
 
 const NAV: { to: Route; label: string; icon: Icon }[] = [
   { to: '/', label: 'Home', icon: House },
   { to: '/pair', label: 'Pair a phone', icon: QrCode },
   { to: '/devices', label: 'Phones', icon: DeviceMobile },
+  { to: '/files', label: 'Files', icon: Files },
   { to: '/settings', label: 'Settings', icon: GearSix },
 ]
 

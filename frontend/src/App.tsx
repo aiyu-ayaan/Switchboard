@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { WarningCircle } from '@phosphor-icons/react'
 import { Shell, type Route } from '@/components/Shell'
 import { Card, ShapeIcon, Toaster } from '@/components/ui'
-import { sb, useSettings, useStatus } from '@/lib/bridge'
+import { sb, useEvent, useSettings, useStatus } from '@/lib/bridge'
 import { Devices } from '@/pages/Devices'
+import { Files } from '@/pages/Files'
 import { Home } from '@/pages/Home'
 import { Pair } from '@/pages/Pair'
 import { Settings } from '@/pages/Settings'
 
-const ROUTES: Route[] = ['/', '/pair', '/devices', '/settings']
+const ROUTES: Route[] = ['/', '/pair', '/devices', '/files', '/settings']
 const fromHash = (): Route => {
   const h = location.hash.slice(1) as Route
   return ROUTES.includes(h) ? h : '/'
@@ -24,6 +25,10 @@ export function App() {
     setRoute(r)
   }
   useEffect(() => sb.onNavigate((r) => go(r as Route)), [])
+  // Dropping files anywhere takes you to where you choose the phone.
+  useEvent((event) => {
+    if (event === 'files_dropped') go('/files')
+  })
   useEffect(() => {
     const f = () => setRoute(fromHash())
     window.addEventListener('hashchange', f)
@@ -45,6 +50,8 @@ export function App() {
           <Pair status={status} go={go} />
         ) : route === '/devices' ? (
           <Devices status={status} go={go} />
+        ) : route === '/files' ? (
+          <Files status={status} />
         ) : route === '/settings' ? (
           <Settings status={status} />
         ) : (

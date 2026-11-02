@@ -83,8 +83,11 @@ export interface AppSettings {
 
 interface Bridge {
   call<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>
-  /** Opens a file dialog, then offers the chosen file to that phone. Resolves to its name, or null if cancelled. */
-  sendFile(device: string): Promise<string | null>
+  /** Opens a file or folder dialog, then offers the choice to that phone. Resolves to how many were offered (0 if cancelled). */
+  sendFiles(device: string, kind: 'files' | 'folder'): Promise<number>
+  /** Offers what the user dropped on the window. */
+  sendDropped(device: string): Promise<number>
+  clearDropped(): Promise<void>
   openInbox(): Promise<void>
   snapshot(): Promise<{ status: Status | null; fatal: string | null; running: boolean }>
   settings(): Promise<AppSettings>
@@ -150,27 +153,66 @@ export function useHostState(everyMs = 3000) {
 }
 
 export interface FileEvent {
-  kind: 'received' | 'sent' | 'declined'
+  kind: 'received' | 'sent' | 'declined' | 'cancelled'
   device: string
   name: string
   size?: number
   at: number
 }
 
-/** Files that moved since this window opened, newest first. */
-export function useFileEvents() {
+export interface FileProgress {
+  xfer: string
+  dir: 'in' | 'out'
+  device: string
+  name: string
+  done: number
+  total: number
+}
+
+export interface HistoryRow {
+  at: number
+  device: string
+  name: string
+  size: number
+  dir: 'in' | 'out'
+  status: 'done' | 'cancelled' | 'declined'
+}
+
+/** Files moving now, and the ones that finished since this window opened. */
+export function useTransfers() {
   const [events, setEvents] = useState<FileEvent[]>([])
+  const [active, setActive] = useState<Record<string, FileProgress>>({})
   useEffect(
     () =>
       sb.onEvent(({ event, data }) => {
-        const kind = ({ file_received: 'received', file_sent: 'sent', file_declined: 'declined' } as const)[event as string]
+        if (event === 'file_progress') {
+          const p = data as FileProgress
+          setActive((a) => ({ ...a, [p.xfer]: p }))
+          return
+        }
+        const kind = ({ file_received: 'received', file_sent: 'sent', file_declined: 'declined', file_cancelled: 'cancelled' } as const)[event as string]
         if (!kind) return
-        const d = data as { device: string; name: string; size?: number }
+        const d = data as { xfer?: string; device: string; name: string; size?: number }
+        const x = d.xfer
+        if (x)
+          setActive((a) => {
+            const { [x]: _gone, ...rest } = a
+            return rest
+          })
         setEvents((e) => [{ kind, device: d.device, name: d.name, size: d.size, at: Date.now() }, ...e].slice(0, 20))
       }),
     [],
   )
-  return events
+  return { events, active: Object.values(active) }
+}
+
+/** Past transfers, reloaded whenever one finishes. */
+export function useHistory(refreshKey: number) {
+  const [rows, setRows] = useState<HistoryRow[]>([])
+  useEffect(() => {
+    sb.call<HistoryRow[]>('history').then(setRows, () => {})
+  }, [refreshKey])
+  return rows
 }
 
 export function useSettings() {

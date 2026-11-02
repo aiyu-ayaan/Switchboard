@@ -270,20 +270,41 @@ function quit() {
 // --- IPC --------------------------------------------------------------------
 
 const trusted = (e) => e.senderFrame && win && e.sender === win.webContents
-const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'rename', 'state', 'run'])
+const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'rename', 'state', 'run', 'history'])
 
 ipcMain.handle('sb:call', (e, cmd, args) => {
   if (!trusted(e) || !ALLOWED.has(cmd)) throw new Error('not allowed')
   return daemon.call(cmd, args)
 })
-// File paths come from the native dialog here, never from the page, so a
-// compromised renderer cannot make the daemon offer an arbitrary file.
-ipcMain.handle('files:send', async (e, device) => {
+// File paths come from the native dialog (or a real drop, seen by the
+// preload) here, never from the page, so a compromised renderer cannot make
+// the daemon offer an arbitrary file.
+ipcMain.handle('files:send', async (e, device, kind) => {
   if (!trusted(e) || typeof device !== 'string') throw new Error('not allowed')
-  const r = await dialog.showOpenDialog(win, { properties: ['openFile'] })
-  if (r.canceled || !r.filePaths[0]) return null
-  await daemon.call('send_file', { device, path: r.filePaths[0] })
-  return path.basename(r.filePaths[0])
+  const props = kind === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections']
+  const r = await dialog.showOpenDialog(win, { properties: props })
+  if (r.canceled || !r.filePaths.length) return 0
+  const { sent } = await daemon.call('send_files', { device, paths: r.filePaths })
+  return sent
+})
+
+// What the user dropped on the window, waiting for them to pick a phone.
+let dropped = null
+ipcMain.on('files:dropped', (e, paths) => {
+  if (!trusted(e) || !Array.isArray(paths) || !paths.length || !paths.every((p) => typeof p === 'string' && p)) return
+  dropped = { paths, at: Date.now() }
+  broadcast('files_dropped', { count: paths.length })
+})
+ipcMain.handle('files:send_dropped', async (e, device) => {
+  if (!trusted(e) || typeof device !== 'string') throw new Error('not allowed')
+  const d = dropped
+  dropped = null
+  if (!d || Date.now() - d.at > 120000) throw new Error('Nothing was dropped. Drop the files again.')
+  const { sent } = await daemon.call('send_files', { device, paths: d.paths })
+  return sent
+})
+ipcMain.handle('files:clear_dropped', (e) => {
+  if (trusted(e)) dropped = null
 })
 ipcMain.handle('files:open_inbox', async (e) => {
   if (!trusted(e)) throw new Error('not allowed')
