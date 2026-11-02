@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash: the connection. The S swings up into place with its route faint, the knob appears at the
+     phone end and rides the track to the PC end drawing it behind, then switches on in amber: the whole
+     S clicks like a pressed switch and two pings go out. Runs 1100ms (the first 200ms wait out the
+     launch transition); keep windowSplashScreenAnimationDuration in step, MainActivity holds the exit
+     until it ends. Same 256 grid as design-system/brand/logo-mark.svg. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="240dp"
+            android:height="240dp"
+            android:viewportWidth="240"
+            android:viewportHeight="240">
+            <group
+                android:scaleX="0.46"
+                android:scaleY="0.46"
+                android:translateX="61.12"
+                android:translateY="61.12">
+                <group
+                    android:name="mark"
+                    android:pivotX="128"
+                    android:pivotY="128"
+                    android:rotation="-30"
+                    android:scaleX="0.6"
+                    android:scaleY="0.6">
+                    <!-- The route, faint until the knob has travelled it. -->
+                    <path
+                        android:name="route"
+                        android:pathData="M78,196H158A34,34 0 0,0 158,128H98A34,34 0 0,1 98,60H178"
+                        android:strokeAlpha="0"
+                        android:strokeColor="@color/brand_mark"
+                        android:strokeLineCap="round"
+                        android:strokeWidth="52" />
+                    <path
+                        android:name="track"
+                        android:pathData="M78,196H158A34,34 0 0,0 158,128H98A34,34 0 0,1 98,60H178"
+                        android:strokeColor="@color/brand_mark"
+                        android:strokeLineCap="round"
+                        android:strokeWidth="52"
+                        android:trimPathEnd="0" />
+                    <group
+                        android:name="ping1"
+                        android:translateX="178"
+                        android:translateY="60">
+                        <path
+                            android:name="ping1_ring"
+                            android:pathData="M-20,0A20,20 0 1,0 20,0A20,20 0 1,0 -20,0Z"
+                            android:strokeAlpha="0"
+                            android:strokeColor="@color/brand_knob"
+                            android:strokeWidth="6" />
+                    </group>
+                    <group
+                        android:name="ping2"
+                        android:translateX="178"
+                        android:translateY="60">
+                        <path
+                            android:name="ping2_ring"
+                            android:pathData="M-20,0A20,20 0 1,0 20,0A20,20 0 1,0 -20,0Z"
+                            android:strokeAlpha="0"
+                            android:strokeColor="@color/brand_knob"
+                            android:strokeWidth="4" />
+                    </group>
+                    <group
+                        android:name="knob"
+                        android:scaleX="0"
+                        android:scaleY="0"
+                        android:translateX="78"
+                        android:translateY="196">
+                        <path
+                            android:name="knob_fill"
+                            android:fillColor="@color/brand_tile"
+                            android:pathData="M-18,0A18,18 0 1,0 18,0A18,18 0 1,0 -18,0Z" />
+                    </group>
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <!-- 200-480 the S swings up into place; 740-1000 it clicks as the switch turns on. -->
+    <target android:name="mark">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:propertyName="rotation" android:valueFrom="-30" android:valueTo="0" android:startOffset="200" android:duration="280" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="0.6" android:valueTo="1" android:startOffset="200" android:duration="280" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="0.6" android:valueTo="1" android:startOffset="200" android:duration="280" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="1" android:valueTo="0.92" android:startOffset="740" android:duration="70" android:interpolator="@android:interpolator/fast_out_linear_in" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="1" android:valueTo="0.92" android:startOffset="740" android:duration="70" android:interpolator="@android:interpolator/fast_out_linear_in" />
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="0.92" android:valueTo="1" android:startOffset="810" android:duration="190" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="0.92" android:valueTo="1" android:startOffset="810" android:duration="190" android:interpolator="@android:interpolator/overshoot" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="route">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="0.18" android:startOffset="200" android:duration="200" android:interpolator="@android:interpolator/linear" />
+        </aapt:attr>
+    </target>
+
+    <!-- 320-740 the knob rides the S; path keyframes are spaced by length, so it stays on the trim's leading edge. -->
+    <target android:name="track">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="trimPathEnd" android:valueFrom="0" android:valueTo="1" android:startOffset="320" android:duration="420" android:interpolator="@android:interpolator/fast_out_slow_in" />
+        </aapt:attr>
+    </target>
+    <target android:name="knob">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="0" android:valueTo="1" android:startOffset="300" android:duration="140" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="0" android:valueTo="1" android:startOffset="300" android:duration="140" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyXName="translateX" android:propertyYName="translateY" android:pathData="M78,196H158A34,34 0 0,0 158,128H98A34,34 0 0,1 98,60H178" android:startOffset="320" android:duration="420" android:interpolator="@android:interpolator/fast_out_slow_in" />
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="1" android:valueTo="1.3" android:startOffset="740" android:duration="90" android:interpolator="@android:interpolator/fast_out_slow_in" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="1" android:valueTo="1.3" android:startOffset="740" android:duration="90" android:interpolator="@android:interpolator/fast_out_slow_in" />
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="1.3" android:valueTo="1" android:startOffset="830" android:duration="170" android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="1.3" android:valueTo="1" android:startOffset="830" android:duration="170" android:interpolator="@android:interpolator/overshoot" />
+            </set>
+        </aapt:attr>
+    </target>
+
+    <!-- 740 on: the knob turns amber and two pings go out from it. -->
+    <target android:name="knob_fill">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:propertyName="fillColor" android:valueFrom="@color/brand_tile" android:valueTo="@color/brand_knob" android:valueType="colorType" android:startOffset="740" android:duration="120" android:interpolator="@android:interpolator/linear" />
+        </aapt:attr>
+    </target>
+    <target android:name="ping1">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="1" android:valueTo="2.6" android:startOffset="760" android:duration="260" android:interpolator="@android:interpolator/decelerate_quad" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="1" android:valueTo="2.6" android:startOffset="760" android:duration="260" android:interpolator="@android:interpolator/decelerate_quad" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="ping1_ring">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" android:startOffset="760" android:duration="10" />
+                <objectAnimator android:propertyName="strokeAlpha" android:valueFrom="1" android:valueTo="0" android:startOffset="770" android:duration="250" android:interpolator="@android:interpolator/decelerate_quad" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="ping2">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:propertyName="scaleX" android:valueFrom="1" android:valueTo="3.2" android:startOffset="860" android:duration="240" android:interpolator="@android:interpolator/decelerate_quad" />
+                <objectAnimator android:propertyName="scaleY" android:valueFrom="1" android:valueTo="3.2" android:startOffset="860" android:duration="240" android:interpolator="@android:interpolator/decelerate_quad" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="ping2_ring">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="0.7" android:startOffset="860" android:duration="10" />
+                <objectAnimator android:propertyName="strokeAlpha" android:valueFrom="0.7" android:valueTo="0" android:startOffset="870" android:duration="230" android:interpolator="@android:interpolator/decelerate_quad" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

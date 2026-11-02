@@ -1,7 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Before Android 12 the splash cannot animate: show where drawable-v31/splash_icon ends, connected. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="240dp" android:height="240dp" android:viewportWidth="240" android:viewportHeight="240">
-    <group android:scaleX="0.46" android:scaleY="0.46" android:translateX="61.1" android:translateY="56.5">
-        <path android:pathData="M172,70 H118 a34,34 0 0 0 0,68 h20 a34,34 0 0 1 0,68 H84" android:strokeColor="@color/brand_mark" android:strokeWidth="26" android:strokeLineCap="round" android:fillColor="#00000000" />
-        <path android:pathData="M158,70 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0 Z" android:fillColor="@color/brand_mark" />
-        <path android:pathData="M46,206 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0 Z" android:fillColor="@color/brand_mark" />
+    <group android:scaleX="0.46" android:scaleY="0.46" android:translateX="61.12" android:translateY="61.12">
+        <path android:pathData="M98,34H178A26,26 0 0,1 178,86H98A8,8 0 0,0 98,102H158A60,60 0 0,1 158,222H78A26,26 0 0,1 78,170H158A8,8 0 0,0 158,154H98A60,60 0 0,1 98,34Z M178,42A18,18 0 0,0 178,78A18,18 0 0,0 178,42Z" android:fillType="evenOdd" android:fillColor="@color/brand_mark" />
+        <path android:pathData="M178,42A18,18 0 0,0 178,78A18,18 0 0,0 178,42Z" android:fillColor="@color/brand_knob" />
     </group>
 </vector>

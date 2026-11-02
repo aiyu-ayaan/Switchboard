@@ -77,9 +77,10 @@ knob means "on / connected".
 App tile `brand/app-icon.svg`: `#303AA1` tile, `#E0E0FF` track, `#FFB784`
 knob. `brand/app-icon-dev.svg` swaps to the amber tile with an indigo knob.
 `brand/render.sh` renders the desktop PNGs; the Android launcher icon and the
-splash are the same path as vector drawables. The splash plays the connection:
-the knob rides the S from the phone end to the PC end, drawing the track
-behind it, then switches on in amber with a ping.
+splash are the same path as vector drawables. The splash plays the connection
+(1.1 s): the S swings up into place with its route faint, the knob rides it
+from the phone end to the PC end drawing the track behind, then switches on in
+amber while the whole S clicks like a pressed switch and two pings go out.
 
 ## Never
 
