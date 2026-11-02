@@ -3,5 +3,7 @@
     <!-- primaryContainer (dark) / the app tile colour. -->
     <color name="brand_tile">#303AA1</color>
     <color name="brand_mark">#E0E0FF</color>
+    <!-- tertiary (dark): the knob, "on". -->
+    <color name="brand_knob">#FFB784</color>
     <color name="splash_background">#FBF8FE</color>
 </resources>
