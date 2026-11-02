@@ -110,6 +110,8 @@ fun SectionScreen(vm: AppViewModel, id: String, section: Section, onBack: () -> 
                 Section.System -> {
                     item { Rings(s) }
                     item { Facts(s) }
+                    item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { QuickSettings(s, scope.conn) } }
+                    item { ClipboardCard(scope.conn) }
                     item { PowerPod(scope.conn) }
                 }
             }

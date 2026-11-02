@@ -81,6 +81,16 @@ class WireTest {
         assertEquals(false, Event.Result(1, true).lost())
     }
 
+    @Test fun togglesAndClipboard() {
+        val s = WireJson.decodeFromString(
+            Event.serializer(),
+            """{"type":"state","volume":null,"toggles":[{"toggle":"wifi","on":true}],"displays":[],"media":null,"stats":{"cpu":0.0,"mem_used":0,"mem_total":0,"uptime":0,"battery":null}}""",
+        ) as Event.State
+        assertEquals("wifi", s.toggles.single().toggle)
+        assertEquals("""{"type":"set_toggle","toggle":"dark_mode","on":true}""", Cmd.setToggle("dark_mode", true).toString())
+        assertEquals("""{"type":"clipboard_set","text":"hi"}""", Cmd.clipboardSet("hi").toString())
+    }
+
     @Test fun commandShape() {
         assertEquals("""{"type":"set_brightness","display":"ddc:i2c-8","level":100}""", Cmd.setBrightness("ddc:i2c-8", 140).toString())
     }

@@ -60,6 +60,7 @@ sealed interface Event {
         val displays: List<Display> = emptyList(),
         val media: Media? = null,
         val players: List<MediaPlayer> = emptyList(),
+        val toggles: List<ToggleState> = emptyList(),
         val stats: Stats = Stats(),
     ) : Event
 
@@ -79,6 +80,9 @@ typealias HostState = Event.State
 data class Display(val id: String, val name: String, val kind: String, val brightness: Int? = null, val contrast: Int? = null) {
     val external get() = kind == "external"
 }
+
+/** `dark_mode`, `do_not_disturb`, `wifi` or `bluetooth`; only the ones the computer supports are sent. */
+@Serializable data class ToggleState(val toggle: String, val on: Boolean)
 
 @Serializable data class MediaPlayer(val id: String, val name: String, val playing: Boolean)
 
@@ -127,6 +131,9 @@ object Cmd {
     fun setRepeat(mode: String) = obj("set_repeat") { put("mode", mode) }
     fun selectPlayer(id: String) = obj("select_player") { put("player", id) }
     fun mediaArt() = obj("media_art")
+    fun setToggle(toggle: String, on: Boolean) = obj("set_toggle") { put("toggle", toggle); put("on", on) }
+    fun clipboardGet() = obj("clipboard_get")
+    fun clipboardSet(text: String) = obj("clipboard_set") { put("text", text) }
     fun power(action: String) = obj("power") { put("action", action) }
     fun unpair() = obj("unpair")
     fun fileSend(xfer: String, name: String, size: Long) = obj("file_send") { put("xfer", xfer); put("name", name); put("size", size) }
