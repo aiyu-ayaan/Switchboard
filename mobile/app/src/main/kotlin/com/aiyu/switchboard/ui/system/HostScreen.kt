@@ -107,7 +107,7 @@ import com.aiyu.switchboard.ui.kit.SectionCard
 import com.aiyu.switchboard.ui.kit.bouncyClickable
 import kotlinx.coroutines.launch
 
-enum class Section(val title: String) { Audio("Audio & Media"), Displays("Displays"), Files("Files"), System("System") }
+enum class Section(val title: String) { Audio("Audio & Media"), Displays("Displays"), Files("Files"), Input("Touchpad & keyboard"), System("System") }
 
 /** The pieces every screen of one computer needs. */
 class HostScope(val host: SavedHost, val conn: HostConnection)
@@ -179,6 +179,7 @@ fun HostScreen(vm: AppViewModel, id: String, onSwitch: () -> Unit, onOpen: (Sect
                 item(key = "audio") { AudioPod(s, scope.conn) { onOpen(Section.Audio) } }
                 if (s.displays.isNotEmpty()) item(key = "displays") { DisplaysPod(s, scope.conn) { onOpen(Section.Displays) } }
                 item(key = "files") { FilesPod(scope.conn, vm.connections.transfers, scope.host.id) { onOpen(Section.Files) } }
+                item(key = "input") { InputPod(s) { onOpen(Section.Input) } }
                 item(key = "bento") { ResourcesBento(s) { onOpen(Section.System) } }
                 item(key = "power") { PowerPod(scope.conn) }
             }

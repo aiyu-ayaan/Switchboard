@@ -61,6 +61,8 @@ sealed interface Event {
         val media: Media? = null,
         val players: List<MediaPlayer> = emptyList(),
         val toggles: List<ToggleState> = emptyList(),
+        /** True when the person at the computer has allowed phones to use its keyboard and mouse. */
+        @SerialName("remote_input") val remoteInput: Boolean = false,
         val stats: Stats = Stats(),
     ) : Event
 
@@ -131,6 +133,15 @@ object Cmd {
     fun setRepeat(mode: String) = obj("set_repeat") { put("mode", mode) }
     fun selectPlayer(id: String) = obj("select_player") { put("player", id) }
     fun mediaArt() = obj("media_art")
+    fun mouseMove(dx: Int, dy: Int) = obj("mouse_move") { put("dx", dx); put("dy", dy) }
+    /** [button] is "left", "right" or "middle"; [action] is "click", "press" or "release". */
+    fun mouseButton(button: String, action: String) = obj("mouse_button") { put("button", button); put("action", action) }
+    fun scroll(dx: Int, dy: Int) = obj("scroll") { put("dx", dx); put("dy", dy) }
+    fun key(key: String, ctrl: Boolean = false, alt: Boolean = false, shift: Boolean = false, meta: Boolean = false) =
+        obj("key") { put("key", key); put("ctrl", ctrl); put("alt", alt); put("shift", shift); put("meta", meta) }
+    fun chord(ch: Char, ctrl: Boolean = false, alt: Boolean = false, shift: Boolean = false, meta: Boolean = false) =
+        obj("chord") { put("ch", ch.toString()); put("ctrl", ctrl); put("alt", alt); put("shift", shift); put("meta", meta) }
+    fun typeText(text: String) = obj("type_text") { put("text", text) }
     fun setToggle(toggle: String, on: Boolean) = obj("set_toggle") { put("toggle", toggle); put("on", on) }
     fun clipboardGet() = obj("clipboard_get")
     fun clipboardSet(text: String) = obj("clipboard_set") { put("text", text) }

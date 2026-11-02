@@ -107,6 +107,7 @@ fun SectionScreen(vm: AppViewModel, id: String, section: Section, onBack: () -> 
                     items(s.displays, key = { it.id }) { DisplayCard(it, scope.conn) }
                 }
                 Section.Files -> item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { FilesContent(scope.conn, vm.connections.transfers, scope.host.id, vm.vault) } }
+                Section.Input -> item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { TouchpadContent(s, scope.conn) } }
                 Section.System -> {
                     item { Rings(s) }
                     item { Facts(s) }

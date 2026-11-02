@@ -91,6 +91,15 @@ class WireTest {
         assertEquals("""{"type":"clipboard_set","text":"hi"}""", Cmd.clipboardSet("hi").toString())
     }
 
+    @Test fun remoteInputCommands() {
+        assertEquals("""{"type":"mouse_move","dx":-3,"dy":8}""", Cmd.mouseMove(-3, 8).toString())
+        assertEquals("""{"type":"mouse_button","button":"left","action":"press"}""", Cmd.mouseButton("left", "press").toString())
+        assertEquals("""{"type":"chord","ch":"c","ctrl":true,"alt":false,"shift":false,"meta":false}""", Cmd.chord('c', ctrl = true).toString())
+        assertEquals("""{"type":"type_text","text":"hi"}""", Cmd.typeText("hi").toString())
+        val s = WireJson.decodeFromString(Event.serializer(), """{"type":"state","volume":null,"remote_input":true,"displays":[],"media":null,"stats":{"cpu":0.0,"mem_used":0,"mem_total":0,"uptime":0,"battery":null}}""") as Event.State
+        assertTrue(s.remoteInput)
+    }
+
     @Test fun commandShape() {
         assertEquals("""{"type":"set_brightness","display":"ddc:i2c-8","level":100}""", Cmd.setBrightness("ddc:i2c-8", 140).toString())
     }
