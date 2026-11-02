@@ -34,6 +34,10 @@ enum Cmd {
     Rename { name: String },
     /// What a phone would see right now, for the desktop's own dashboard.
     State,
+    /// Offer a file (picked in the desktop's own dialog) to a connected phone.
+    SendFile { device: String, path: String },
+    /// The folder phones' uploads are saved to.
+    Inbox,
     /// Run a control (brightness, volume, media) from the desktop itself.
     Run { command: Command },
 }
@@ -60,6 +64,14 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
             app.rename(&name)?;
             app.emit_status();
             Value::Null
+        }
+        Cmd::SendFile { device, path } => {
+            app.offer_file(&device, std::path::Path::new(&path))?;
+            Value::Null
+        }
+        Cmd::Inbox => {
+            std::fs::create_dir_all(&app.inbox)?;
+            json!(app.inbox)
         }
         Cmd::State => serde_json::to_value(app.system.snapshot().await)?,
         Cmd::Run { command } => {

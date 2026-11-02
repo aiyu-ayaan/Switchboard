@@ -19,6 +19,7 @@ use tokio::time::timeout;
 use x25519_dalek::PublicKey;
 
 use crate::app::{App, Outbound};
+use crate::files;
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// The phone pings every 15 s; twice that with nothing means it is gone.
@@ -178,10 +179,14 @@ async fn session(
     rx: &mut mpsc::UnboundedReceiver<Outbound>,
 ) -> Result<()> {
     send(sock, sess, &Event::Welcome { host_id: app.host_id.clone(), host_name: app.name(), os: app.os.clone() }).await?;
-    send(sock, sess, &Event::Result { id: hello_id, ok: true, error: None }).await?;
+    send(sock, sess, &Event::Result { id: hello_id, ok: true, error: None, data: None }).await?;
     let mut state = app.state.subscribe();
     let first = (**state.borrow_and_update()).clone();
     send(sock, sess, &Event::State(Box::new(first))).await?;
+
+    // Uploads are strictly ordered, so file commands run right here in the
+    // loop; they vanish with the connection.
+    let mut uploads = files::Uploads::new(app.inbox.clone());
 
     // Commands run concurrently so a slow DDC write never delays a volume
     // change; their results come back through this channel.
@@ -205,16 +210,22 @@ async fn session(
                 if req.cmd == Command::Unpair {
                     app.forget(device_id)?;
                     app.emit_status();
-                    send(sock, sess, &Event::Result { id: req.id, ok: true, error: None }).await?;
+                    send(sock, sess, &Event::Result { id: req.id, ok: true, error: None, data: None }).await?;
                     // forget() queued a Revoked for this connection; the
                     // next loop turn sends it and closes.
+                    continue;
+                }
+                if matches!(req.cmd, Command::FileSend { .. } | Command::FileChunk { .. } | Command::FileDone { .. } | Command::FileCancel { .. } | Command::FileRead { .. }) {
+                    let r = files::handle(app, device_id, &mut uploads, &req.cmd).await;
+                    let ev = Event::Result { id: req.id, ok: r.is_ok(), error: r.as_ref().err().map(|e| format!("{e:#}")), data: r.ok().flatten() };
+                    send(sock, sess, &ev).await?;
                     continue;
                 }
                 let app = app.clone();
                 let done = done_tx.clone();
                 tokio::spawn(async move {
                     let r = app.system.run(&req.cmd).await;
-                    let _ = done.send(Event::Result { id: req.id, ok: r.is_ok(), error: r.err().map(|e| format!("{e:#}")) });
+                    let _ = done.send(Event::Result { id: req.id, ok: r.is_ok(), error: r.err().map(|e| format!("{e:#}")), data: None });
                     if !matches!(req.cmd, Command::Ping) {
                         app.poke.notify_one();
                     }
@@ -231,6 +242,7 @@ async fn session(
                     let _ = sock.send(Message::Close(None)).await;
                     return Ok(());
                 }
+                Outbound::Offer { xfer, name, size } => send(sock, sess, &Event::FileOffer { xfer, name, size }).await?,
             },
         }
     }

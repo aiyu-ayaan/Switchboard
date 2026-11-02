@@ -35,8 +35,11 @@ impl System {
     /// Runs one phone command. `Hello`, `GetState` and `Ping` carry no action.
     pub async fn run(&self, cmd: &Command) -> Result<()> {
         match cmd {
-            // Unpair is handled by the session, which knows the device.
+            // Unpair and the file commands are handled by the session, which knows the device.
             Command::Hello | Command::GetState | Command::Ping | Command::Unpair => Ok(()),
+            Command::FileSend { .. } | Command::FileChunk { .. } | Command::FileDone { .. } | Command::FileCancel { .. } | Command::FileRead { .. } => {
+                Err(anyhow!("file commands run in the session"))
+            }
             Command::SetVolume { level } => {
                 let l = *level;
                 blocking(move || volume::set_level(l)).await?

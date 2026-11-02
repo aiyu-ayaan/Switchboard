@@ -77,7 +77,25 @@ pub enum Command {
     Ping,
     /// The phone forgot this desktop; the desktop drops it too.
     Unpair,
+    /// Start sending a file to the desktop. `xfer` is the phone's own id for
+    /// it. Chunks follow in order, each waiting for its result.
+    FileSend { xfer: String, name: String, size: u64 },
+    /// Next piece of an upload; `data` is base64url, `offset` must be the
+    /// number of bytes already sent.
+    FileChunk { xfer: String, offset: u64, data: String },
+    /// Upload complete (the desktop checks the size), or the phone is done
+    /// with a file the desktop offered.
+    FileDone { xfer: String },
+    /// Abandon an upload, or decline a file the desktop offered.
+    FileCancel { xfer: String },
+    /// Pull the next piece of a file the desktop offered; the piece comes
+    /// back as the result's `data`.
+    FileRead { xfer: String, offset: u64, len: u32 },
 }
+
+/// Most bytes in one file chunk, before base64. Keeps a frame under the
+/// WebSocket message limit.
+pub const FILE_CHUNK: usize = 192 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -100,7 +118,18 @@ pub enum PowerAction {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     Welcome { host_id: String, host_name: String, os: String },
-    Result { id: u64, ok: bool, #[serde(skip_serializing_if = "Option::is_none")] error: Option<String> },
+    Result {
+        id: u64,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+        /// Payload of a request that returns bytes (`FileRead`), base64url.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        data: Option<String>,
+    },
+    /// The desktop wants to send this phone a file. The phone may pull it
+    /// with `FileRead` or turn it down with `FileCancel`.
+    FileOffer { xfer: String, name: String, size: u64 },
     State(Box<HostState>),
     /// The desktop forgot this phone; it should drop its saved keys.
     Revoked,
@@ -221,6 +250,16 @@ mod tests {
     fn old_state_without_mixer_still_parses() {
         let j = r#"{"type":"state","volume":null,"displays":[],"media":null,"stats":{"cpu":0.0,"mem_used":0,"mem_total":0,"uptime":0,"battery":null}}"#;
         assert!(matches!(serde_json::from_str::<Event>(j).unwrap(), Event::State(s) if s.apps.is_empty()));
+    }
+
+    #[test]
+    fn file_messages() {
+        let r: Request = serde_json::from_str(r#"{"id":4,"type":"file_chunk","xfer":"a","offset":0,"data":"AAE"}"#).unwrap();
+        assert_eq!(r.cmd, Command::FileChunk { xfer: "a".into(), offset: 0, data: "AAE".into() });
+        let e = Event::Result { id: 4, ok: true, error: None, data: Some("AAE".into()) };
+        assert_eq!(serde_json::to_string(&e).unwrap(), r#"{"type":"result","id":4,"ok":true,"data":"AAE"}"#);
+        let old: Event = serde_json::from_str(r#"{"type":"result","id":4,"ok":true}"#).unwrap();
+        assert_eq!(old, Event::Result { id: 4, ok: true, error: None, data: None });
     }
 
     #[test]

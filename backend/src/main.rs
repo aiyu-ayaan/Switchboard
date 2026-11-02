@@ -11,6 +11,7 @@
 mod app;
 mod control;
 mod discovery;
+mod files;
 mod pairing;
 mod server;
 mod store;

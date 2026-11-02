@@ -1,6 +1,7 @@
 //! Shared daemon state and the status the desktop UI renders.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -8,11 +9,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serde_json::json;
 use switchboard_core::b64;
-use switchboard_core::crypto::KeyPair;
+use anyhow::Context;
+use switchboard_core::crypto::{KeyPair, random_bytes};
 use switchboard_core::protocol::{HostState, PROTOCOL_VERSION};
 use tokio::sync::{Notify, mpsc, watch};
 
 use crate::discovery::{Advert, lan_addresses};
+use crate::files::{self, Offer};
 use crate::pairing::Pairing;
 use crate::store::Store;
 use crate::system::System;
@@ -20,6 +23,8 @@ use crate::system::System;
 pub enum Outbound {
     /// The desktop forgot this phone.
     Revoked,
+    /// The desktop is offering this phone a file.
+    Offer { xfer: String, name: String, size: u64 },
 }
 
 pub struct Conn {
@@ -37,6 +42,10 @@ pub struct App {
     pub pairing: Mutex<Option<Pairing>>,
     pub system: System,
     pub conns: Mutex<HashMap<u64, Conn>>,
+    /// Where phones' uploads are saved.
+    pub inbox: PathBuf,
+    /// Files the desktop has offered, by transfer id.
+    offers: Mutex<HashMap<String, Offer>>,
     next_conn: AtomicU64,
     pub state: watch::Sender<Arc<HostState>>,
     /// Ask the poller for a fresh snapshot now (after a command, a connect).
@@ -57,6 +66,10 @@ struct DeviceView {
 
 impl App {
     pub fn new(store: Store, port: u16, ui: mpsc::UnboundedSender<String>) -> anyhow::Result<Arc<Self>> {
+        Self::with_inbox(store, port, ui, files::inbox())
+    }
+
+    pub fn with_inbox(store: Store, port: u16, ui: mpsc::UnboundedSender<String>, inbox: PathBuf) -> anyhow::Result<Arc<Self>> {
         let (host_id, keys) = store.identity()?;
         let host_name = match store.host_name()? {
             Some(n) => n,
@@ -73,6 +86,8 @@ impl App {
             pairing: Mutex::new(None),
             system: System::default(),
             conns: Mutex::new(HashMap::new()),
+            inbox,
+            offers: Mutex::new(HashMap::new()),
             next_conn: AtomicU64::new(1),
             state: watch::channel(Arc::new(HostState::default())).0,
             poke: Notify::new(),
@@ -115,7 +130,38 @@ impl App {
     }
 
     pub fn unregister(&self, id: u64) {
-        self.conns.lock().unwrap().remove(&id);
+        let mut conns = self.conns.lock().unwrap();
+        let Some(gone) = conns.remove(&id) else { return };
+        // A phone that left cannot pull what was offered to it.
+        if !conns.values().any(|c| c.device_id == gone.device_id) {
+            self.offers.lock().unwrap().retain(|_, o| o.device_id != gone.device_id);
+        }
+    }
+
+    /// Offers a local file to a connected phone. The phone is asked; nothing is sent until it pulls.
+    pub fn offer_file(&self, device_id: &str, path: &Path) -> anyhow::Result<()> {
+        let meta = std::fs::metadata(path).context("cannot read that file")?;
+        anyhow::ensure!(meta.is_file(), "that is not a file");
+        let name = files::safe_name(&path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()).context("bad file name")?;
+        let conns = self.conns.lock().unwrap();
+        let live: Vec<_> = conns.values().filter(|c| c.device_id == device_id).collect();
+        anyhow::ensure!(!live.is_empty(), "that phone is not connected");
+        let xfer = b64(&random_bytes::<9>());
+        self.offers.lock().unwrap().insert(xfer.clone(), Offer { device_id: device_id.into(), path: path.into(), name: name.clone(), size: meta.len() });
+        for c in live {
+            let _ = c.tx.send(Outbound::Offer { xfer: xfer.clone(), name: name.clone(), size: meta.len() });
+        }
+        Ok(())
+    }
+
+    /// Path and size of an offer made to this phone.
+    pub fn offer(&self, device_id: &str, xfer: &str) -> Option<(PathBuf, u64)> {
+        self.offers.lock().unwrap().get(xfer).filter(|o| o.device_id == device_id).map(|o| (o.path.clone(), o.size))
+    }
+
+    pub fn take_offer(&self, device_id: &str, xfer: &str) -> Option<Offer> {
+        let mut offers = self.offers.lock().unwrap();
+        if offers.get(xfer).is_some_and(|o| o.device_id == device_id) { offers.remove(xfer) } else { None }
     }
 
     pub fn forget(&self, device_id: &str) -> anyhow::Result<bool> {

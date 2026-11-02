@@ -183,3 +183,117 @@ async fn phone_unpair_removes_device() {
     }
     assert!(app.store.device("bye").unwrap().is_none());
 }
+
+// --- Files ---------------------------------------------------------------------
+
+async fn start_with_inbox(inbox: std::path::PathBuf) -> (Arc<App>, u16, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let app = App::with_inbox(Store::memory().unwrap(), port, tx, inbox).unwrap();
+    tokio::spawn(crate::server::serve(app.clone(), listener));
+    (app, port, rx)
+}
+
+/// Pairs a phone by QR and returns its open, welcomed session.
+async fn paired(app: &Arc<App>, port: u16, id: &str) -> (Ws, Session) {
+    app.start_pairing();
+    let token = app.pairing.lock().unwrap().as_ref().unwrap().token;
+    let (mut ws, mut s) = connect(port, &phone(id), HelloMode::PairQr, token, &app.keys.public).await.unwrap();
+    assert!(matches!(next_event(&mut ws, &mut s).await, Some(Event::Welcome { .. })));
+    (ws, s)
+}
+
+/// Sends one request and waits for its result, skipping pushes in between.
+async fn ask(ws: &mut Ws, s: &mut Session, id: u64, cmd: Command) -> (bool, Option<String>, Option<String>) {
+    ws.send(Message::Binary(s.seal(&serde_json::to_vec(&Request { id, cmd }).unwrap()).unwrap())).await.unwrap();
+    loop {
+        match next_event(ws, s).await {
+            Some(Event::Result { id: i, ok, error, data }) if i == id => return (ok, error, data),
+            Some(_) => continue,
+            None => panic!("no result for request {id}"),
+        }
+    }
+}
+
+fn scratch(tag: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("sb-e2e-{tag}-{}", b64(&switchboard_core::crypto::random_bytes::<6>())));
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+#[tokio::test]
+async fn phone_uploads_a_file() {
+    let inbox = scratch("inbox");
+    let (app, port, mut ui) = start_with_inbox(inbox.clone()).await;
+    let (mut ws, mut s) = paired(&app, port, "up").await;
+
+    let data: Vec<u8> = (0..FILE_CHUNK * 2 + 777).map(|i| (i % 251) as u8).collect();
+    let (ok, ..) = ask(&mut ws, &mut s, 10, Command::FileSend { xfer: "x1".into(), name: "../evil/photo.bin".into(), size: data.len() as u64 }).await;
+    assert!(ok);
+    for (n, chunk) in data.chunks(FILE_CHUNK).enumerate() {
+        let offset = (n * FILE_CHUNK) as u64;
+        let (ok, ..) = ask(&mut ws, &mut s, 11 + n as u64, Command::FileChunk { xfer: "x1".into(), offset, data: b64(chunk) }).await;
+        assert!(ok, "chunk {n}");
+    }
+    let (ok, ..) = ask(&mut ws, &mut s, 20, Command::FileDone { xfer: "x1".into() }).await;
+    assert!(ok);
+
+    // Landed inside the inbox under the cleaned name, byte for byte.
+    assert_eq!(std::fs::read(inbox.join("photo.bin")).unwrap(), data);
+    let mut saw = false;
+    while let Ok(line) = ui.try_recv() {
+        saw |= line.contains("file_received") && line.contains("photo.bin");
+    }
+    assert!(saw, "the desktop UI is told");
+
+    // An out-of-order chunk and an unknown transfer are refused.
+    let (ok, err, _) = ask(&mut ws, &mut s, 30, Command::FileChunk { xfer: "nope".into(), offset: 0, data: "AA".into() }).await;
+    assert!(!ok && err.is_some());
+}
+
+#[tokio::test]
+async fn desktop_offers_a_file_and_only_that_phone_can_pull_it() {
+    let (app, port, mut ui) = start_with_inbox(scratch("unused")).await;
+    let (mut ws, mut s) = paired(&app, port, "owner").await;
+    let (mut ws2, mut s2) = paired(&app, port, "other").await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let src = scratch("src").join("song.mp3");
+    let data: Vec<u8> = (0..FILE_CHUNK + 5000).map(|i| (i * 7 % 256) as u8).collect();
+    std::fs::write(&src, &data).unwrap();
+    assert!(app.offer_file("nobody", &src).is_err(), "offline phones cannot be offered files");
+    app.offer_file("owner", &src).unwrap();
+
+    let (xfer, size) = loop {
+        match next_event(&mut ws, &mut s).await {
+            Some(Event::FileOffer { xfer, name, size }) => {
+                assert_eq!(name, "song.mp3");
+                break (xfer, size);
+            }
+            Some(_) => continue,
+            None => panic!("no offer"),
+        }
+    };
+    assert_eq!(size, data.len() as u64);
+
+    let (ok, ..) = ask(&mut ws2, &mut s2, 5, Command::FileRead { xfer: xfer.clone(), offset: 0, len: 10 }).await;
+    assert!(!ok, "another phone cannot read the offer");
+
+    let mut got = Vec::new();
+    while (got.len() as u64) < size {
+        let (ok, _, piece) = ask(&mut ws, &mut s, 100 + got.len() as u64, Command::FileRead { xfer: xfer.clone(), offset: got.len() as u64, len: FILE_CHUNK as u32 }).await;
+        assert!(ok);
+        got.extend(unb64(&piece.unwrap()).unwrap());
+    }
+    assert_eq!(got, data);
+    let (ok, ..) = ask(&mut ws, &mut s, 900, Command::FileDone { xfer: xfer.clone() }).await;
+    assert!(ok);
+    let (ok, ..) = ask(&mut ws, &mut s, 901, Command::FileRead { xfer, offset: 0, len: 1 }).await;
+    assert!(!ok, "a finished offer is gone");
+    let mut saw = false;
+    while let Ok(line) = ui.try_recv() {
+        saw |= line.contains("file_sent");
+    }
+    assert!(saw);
+}
