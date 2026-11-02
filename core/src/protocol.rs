@@ -73,6 +73,15 @@ pub enum Command {
     SetBrightness { display: String, level: u8 },
     SetContrast { display: String, level: u8 },
     Media { action: MediaAction },
+    /// Jump to a point in the current track, in milliseconds.
+    Seek { position: u64 },
+    SetShuffle { on: bool },
+    SetRepeat { mode: Repeat },
+    /// Control this player (a `MediaPlayer::id`) instead of the automatic pick.
+    SelectPlayer { player: String },
+    /// The cover art of the current track, returned as the result's `data`
+    /// (base64url image bytes).
+    MediaArt,
     Power { action: PowerAction },
     Ping,
     /// The phone forgot this desktop; the desktop drops it too.
@@ -111,6 +120,17 @@ pub enum PowerAction {
     Lock,
     Sleep,
     DisplayOff,
+    Shutdown,
+    Restart,
+    Logout,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Repeat {
+    Off,
+    Track,
+    All,
 }
 
 /// Desktop to phone, inside the encrypted channel.
@@ -144,6 +164,9 @@ pub struct HostState {
     pub apps: Vec<AudioApp>,
     pub displays: Vec<Display>,
     pub media: Option<Media>,
+    /// Every player that could be controlled, for switching between them.
+    #[serde(default)]
+    pub players: Vec<MediaPlayer>,
     pub stats: Stats,
 }
 
@@ -191,11 +214,35 @@ pub struct Display {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MediaPlayer {
+    pub id: String,
+    pub name: String,
+    pub playing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Media {
+    /// The `MediaPlayer::id` this is about.
+    #[serde(default)]
+    pub id: String,
     pub player: String,
     pub title: String,
     pub artist: String,
     pub playing: bool,
+    /// Milliseconds into the track and its length, when the player says.
+    #[serde(default)]
+    pub position: Option<u64>,
+    #[serde(default)]
+    pub length: Option<u64>,
+    #[serde(default)]
+    pub can_seek: bool,
+    #[serde(default)]
+    pub shuffle: Option<bool>,
+    #[serde(default)]
+    pub repeat: Option<Repeat>,
+    /// Changes when the cover changes; fetch the picture with `MediaArt`.
+    #[serde(default)]
+    pub art: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -260,6 +307,16 @@ mod tests {
         assert_eq!(serde_json::to_string(&e).unwrap(), r#"{"type":"result","id":4,"ok":true,"data":"AAE"}"#);
         let old: Event = serde_json::from_str(r#"{"type":"result","id":4,"ok":true}"#).unwrap();
         assert_eq!(old, Event::Result { id: 4, ok: true, error: None, data: None });
+    }
+
+    #[test]
+    fn media_controls() {
+        let r: Request = serde_json::from_str(r#"{"id":1,"type":"set_repeat","mode":"track"}"#).unwrap();
+        assert_eq!(r.cmd, Command::SetRepeat { mode: Repeat::Track });
+        let r: Request = serde_json::from_str(r#"{"id":2,"type":"seek","position":90000}"#).unwrap();
+        assert_eq!(r.cmd, Command::Seek { position: 90000 });
+        let m: Media = serde_json::from_str(r#"{"player":"x","title":"t","artist":"a","playing":true}"#).unwrap();
+        assert_eq!((m.position, m.shuffle, m.can_seek), (None, None, false));
     }
 
     #[test]

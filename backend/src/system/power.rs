@@ -50,6 +50,14 @@ mod linux {
         bail!("this Wayland desktop has no known way to turn the display off")
     }
 
+    /// Ends this login session; the session id is set by logind for graphical logins.
+    pub fn logout() -> Result<()> {
+        match std::env::var("XDG_SESSION_ID") {
+            Ok(id) if !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric()) => run_simple("loginctl", &["terminate-session", &id]),
+            _ => run_simple("loginctl", &["terminate-user", &std::env::var("USER").unwrap_or_default()]),
+        }
+    }
+
     pub fn run_simple(cmd: &str, args: &[&str]) -> Result<()> {
         if !run(cmd, args) {
             bail!("{cmd} failed");
@@ -77,6 +85,9 @@ pub fn run(action: PowerAction) -> Result<()> {
         PowerAction::Lock => linux::run_simple("loginctl", &["lock-sessions"]),
         PowerAction::Sleep => linux::run_simple("systemctl", &["suspend"]),
         PowerAction::DisplayOff => linux::display_off(),
+        PowerAction::Shutdown => linux::run_simple("systemctl", &["poweroff"]),
+        PowerAction::Restart => linux::run_simple("systemctl", &["reboot"]),
+        PowerAction::Logout => linux::logout(),
     }
 }
 
@@ -96,6 +107,15 @@ pub fn run(action: PowerAction) -> Result<()> {
             }
             PowerAction::DisplayOff => {
                 SendMessageW(HWND_BROADCAST, WM_SYSCOMMAND, WPARAM(SC_MONITORPOWER as usize), LPARAM(2));
+            }
+            PowerAction::Shutdown | PowerAction::Restart | PowerAction::Logout => {
+                let flag = match action {
+                    PowerAction::Shutdown => "/s",
+                    PowerAction::Restart => "/r",
+                    _ => "/l",
+                };
+                let st = std::process::Command::new("shutdown").args([flag, "/t", "0"]).status()?;
+                anyhow::ensure!(st.success(), "shutdown failed");
             }
         }
     }

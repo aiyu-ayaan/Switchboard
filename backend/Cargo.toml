@@ -28,6 +28,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 dirs = "6"
+ureq = { version = "2", default-features = false, features = ["tls"] }
 ddc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -48,8 +49,10 @@ windows = { version = "0.58", features = [
   "Win32_System_Shutdown",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Input_KeyboardAndMouse",
+  "Media",
   "Media_Control",
   "Foundation",
+  "Foundation_Collections",
 ] }
 
 [dev-dependencies]

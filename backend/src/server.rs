@@ -225,7 +225,7 @@ async fn session(
                 let done = done_tx.clone();
                 tokio::spawn(async move {
                     let r = app.system.run(&req.cmd).await;
-                    let _ = done.send(Event::Result { id: req.id, ok: r.is_ok(), error: r.err().map(|e| format!("{e:#}")), data: None });
+                    let _ = done.send(Event::Result { id: req.id, ok: r.is_ok(), error: r.as_ref().err().map(|e| format!("{e:#}")), data: r.ok().flatten() });
                     if !matches!(req.cmd, Command::Ping) {
                         app.poke.notify_one();
                     }
