@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import QRCode from 'react-qr-code'
 import { ArrowClockwise, Check, DeviceMobile, Fingerprint, House, Keyboard, QrCode, WifiHigh } from '@phosphor-icons/react'
 import type { Route } from '@/components/Shell'
@@ -100,7 +100,7 @@ export function Pair({ status, go }: { status: Status | null; go: (r: Route) => 
 
   const mins = Math.floor(left / 60000)
   const secs = Math.floor((left % 60000) / 1000)
-  const [a, b] = (pairing?.code ?? '----·----').split(/[-·]/)
+  const groups = (pairing?.code ?? '----·----·----').split(/[-·]/)
 
   return (
     <>
@@ -141,16 +141,18 @@ export function Pair({ status, go }: { status: Status | null; go: (r: Route) => 
             <p className="flex items-center gap-2 text-label font-medium text-muted">
               <Keyboard size={18} aria-hidden /> No camera? Type this code instead
             </p>
-            <div className="mt-4 flex items-center gap-3" aria-label={`Pairing code ${pairing?.code ?? ''}`}>
-              {[a, b].map((part, i) => (
-                <div key={i} className="flex gap-1.5">
-                  {(part ?? '----').split('').map((ch, j) => (
-                    <span key={j} className="grid h-16 w-12 place-items-center rounded-xl bg-tertiary-container font-mono text-[30px] font-semibold text-on-tertiary-container">
-                      {ch}
-                    </span>
-                  ))}
-                  {i === 0 && <span className="mx-1 self-center text-headline text-subtle">–</span>}
-                </div>
+            <div className="mt-4 flex items-center gap-2" aria-label={`Pairing code ${pairing?.code ?? ''}`}>
+              {groups.map((part, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <span className="text-subtle">–</span>}
+                  <div className="flex min-w-0 flex-1 gap-1">
+                    {(part ?? '----').split('').map((ch, j) => (
+                      <span key={j} className="grid h-12 min-w-0 flex-1 place-items-center rounded-lg bg-tertiary-container font-mono text-[22px] font-semibold text-on-tertiary-container">
+                        {ch}
+                      </span>
+                    ))}
+                  </div>
+                </Fragment>
               ))}
             </div>
           </Card>
@@ -158,7 +160,7 @@ export function Pair({ status, go }: { status: Status | null; go: (r: Route) => 
           <Card className="rise p-6" style={{ ['--i' as string]: 2 }}>
             <ol className="flex flex-col gap-5">
               <Step n={1} icon={<WifiHigh size={20} weight="bold" />} title="Same Wi-Fi" text={`Your phone must be on the network this computer uses (${status?.addresses.slice(0, 2).join(', ') || 'no network found'}).`} />
-              <Step n={2} icon={<DeviceMobile size={20} weight="bold" />} title="Scan or type" text="In the app, tap Add computer. Scan the QR code or enter the 8-character code." />
+              <Step n={2} icon={<DeviceMobile size={20} weight="bold" />} title="Scan or type" text="In the app, tap Add computer. Scan the QR code or enter the 12-character code." />
               <Step n={3} icon={<Fingerprint size={20} weight="bold" />} title="Check the fingerprint" text="Your phone shows the same fingerprint as below. If it differs, cancel." />
             </ol>
             <div className="mt-6 flex flex-wrap items-center gap-2">
