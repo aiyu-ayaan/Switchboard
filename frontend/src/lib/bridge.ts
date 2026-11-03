@@ -241,7 +241,10 @@ export function timeAgo(secs: number) {
 
 export function bytes(n: number) {
   const gb = n / 1024 ** 3
-  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`
+  if (gb >= 1) return `${gb.toFixed(1)} GB`
+  if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`
+  return `${n} B`
 }
 
 export type Control =
