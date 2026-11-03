@@ -86,7 +86,10 @@ fun SystemsScreen(vm: AppViewModel, onOpen: (String) -> Unit, onSection: (String
     var fabOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(fabOpen) { fabOpen = false }
     val behavior = TopAppBarDefaults.pinnedScrollBehavior()
-    val online = hosts.count { h -> live[h.id]?.link?.collectAsStateWithLifecycle()?.value is Link.Online }
+    val onlineIds = hosts.filter { h -> live[h.id]?.link?.collectAsStateWithLifecycle()?.value is Link.Online }.map { it.id }.toSet()
+    val online = onlineIds.size
+    // Connected first; sortedBy is stable, so each group keeps its pairing order.
+    val shown = hosts.sortedByDescending { it.id in onlineIds }
 
     Scaffold(
         modifier = Modifier.nestedScroll(behavior.nestedScrollConnection),
@@ -135,7 +138,7 @@ fun SystemsScreen(vm: AppViewModel, onOpen: (String) -> Unit, onSection: (String
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 4.dp, bottom = pad.calculateBottomPadding() + 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(hosts, key = { it.id }) { h ->
+                items(shown, key = { it.id }) { h ->
                     val conn = live[h.id]
                     SystemCard(h, conn, Modifier.animateItem(), onSection = { vm.select(h.id); onSection(h.id, it) }) {
                         vm.select(h.id)
