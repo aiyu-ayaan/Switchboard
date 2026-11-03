@@ -84,6 +84,16 @@ pub fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
+#[cfg(unix)]
+fn owner_only(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+}
+
+// shortcut: Windows files inherit the user profile's ACL, which is already per user.
+#[cfg(not(unix))]
+fn owner_only(_: &Path) {}
+
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(dir) = path.parent() {
@@ -93,7 +103,16 @@ impl Store {
         let vault: Option<Box<dyn Vault>> = Some(Box::new(Keychain));
         #[cfg(not(any(target_os = "linux", windows)))]
         let vault: Option<Box<dyn Vault>> = None;
-        Self::init(Connection::open(path)?, vault)
+        let store = Self::init(Connection::open(path)?, vault)?;
+        // The database can hold the host secret on a machine with no keychain,
+        // and the transfer history names files: for this user only. Also fixes
+        // a file an older version made readable by everyone.
+        for suffix in ["", "-wal", "-shm"] {
+            let mut p = path.as_os_str().to_owned();
+            p.push(suffix);
+            owner_only(Path::new(&p));
+        }
+        Ok(store)
     }
 
     #[cfg(test)]
@@ -347,6 +366,22 @@ mod tests {
         locked.db.lock().unwrap().execute_batch("CREATE TABLE meta (key TEXT PRIMARY KEY, value BLOB NOT NULL);").unwrap();
         locked.set_meta("host_id", b"abc").unwrap();
         assert!(locked.identity().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn database_is_for_this_user_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("sb-store-{}", b64(&switchboard_core::crypto::random_bytes::<6>())));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("switchboard.db");
+        // A database an older version left readable by everyone.
+        std::fs::write(&path, b"").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let s = Store::open(&path).unwrap();
+        s.set_meta("k", b"v").unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
