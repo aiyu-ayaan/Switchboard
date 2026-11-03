@@ -2,6 +2,16 @@
 
 Control your computer from your phone: volume, brightness and contrast for every monitor, media playback and power, over an end-to-end encrypted connection on your own network. No account, no password: pair once with a QR code or a short code.
 
+## Install
+
+Linux (x86_64), no root needed. This puts the app, its logo and a menu entry in your home folder:
+
+```
+curl -fsSL https://raw.githubusercontent.com/aiyu-ayaan/Switchboard/master/scripts/install-linux.sh | sh
+```
+
+Add `-s -- --channel beta` for beta builds, `-s -- --version 0.0.1` for one release, or `-s -- --uninstall` to remove it. Run it again to update. The Windows installer, the `.deb` and the Android APK are on the [Releases](https://github.com/aiyu-ayaan/Switchboard/releases) page.
+
 ## Layout
 
 ```
