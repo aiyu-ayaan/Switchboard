@@ -15,6 +15,13 @@
 # thing with the marker picked from a menu, which is the way to re-cut a
 # release without an empty commit.
 #
+# INSTALLING
+#
+# scripts/install-linux.sh installs the Linux AppImage from the latest Release
+# (stable by default; --channel beta|alpha, --version X). The desktop job runs
+# it against the AppImage it just built, so a release whose logo would not
+# land in the menu fails here rather than on a user's machine.
+#
 # WHAT IT DOES NOT DO
 #
 # No portable desktop build and no macOS build yet; both arrive with the
@@ -255,6 +262,10 @@ jobs:
               ~/.cache/electron
               ~/.cache/electron-builder
     runs-on: ${{ matrix.os }}
+    # shortcut: the Windows build has never run on a real release (it is only
+    # type-checked), so a failure there does not block one. Drop this once a
+    # release has shipped a working installer. `publish` warns when it is missing.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -359,6 +370,34 @@ jobs:
           fi
           ls -la "$RUNNER_TEMP/out"
 
+      # What users run: scripts/install-linux.sh on this very AppImage, in a
+      # throwaway home. It must put the logo, the menu entry and the command
+      # where the desktop looks, and --uninstall must take them away again.
+      - name: Check the install script against this AppImage
+        if: matrix.artifact == 'desktop-linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -eu
+          export HOME="$RUNNER_TEMP/home"
+          unset XDG_DATA_HOME XDG_CONFIG_HOME
+          mkdir -p "$HOME"
+          sh scripts/install-linux.sh --from-file "$RUNNER_TEMP/out/Switchboard-${VERSION}.AppImage"
+
+          icon="$HOME/.local/share/icons/hicolor/512x512/apps/switchboard.png"
+          entry="$HOME/.local/share/applications/switchboard.desktop"
+          [ -f "$icon" ] || { echo "::error::The install script did not place the logo at $icon"; exit 1; }
+          file "$icon" | grep -q 'PNG image data, 512 x 512' || { echo "::error::The installed logo is not the 512 px PNG:"; file "$icon"; exit 1; }
+          grep -qx "Icon=$icon" "$entry" || { echo "::error::The menu entry does not point at the logo."; cat "$entry"; exit 1; }
+          grep -qx 'StartupWMClass=Switchboard' "$entry"
+          [ -L "$HOME/.local/bin/switchboard" ]
+
+          sh scripts/install-linux.sh --uninstall
+          for gone in "$icon" "$entry" "$HOME/.local/bin/switchboard" "$HOME/.local/share/switchboard-desktop/Switchboard.AppImage"; do
+            [ ! -e "$gone" ] || { echo "::error::--uninstall left $gone behind."; exit 1; }
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -388,6 +427,11 @@ jobs:
           merge-multiple: true
 
       - run: ls -la artifacts
+
+      - name: Say so when the Windows installer is missing
+        run: |
+          ls artifacts/Switchboard-Setup-*.exe > /dev/null 2>&1 \
+            || echo "::warning::The Windows installer failed to build; this release ships without it."
 
       # Release notes from the commits themselves.
       #
@@ -423,6 +467,14 @@ jobs:
             git log --no-merges --format='%s' ${previous:+"$previous..HEAD"} \
               | grep -v '^chore(release):' \
               | sed -e 's/ *![a-z]*$//' -e 's/^![a-z]* *: *//' -e 's/^/- /'
+            echo
+            echo "### Install on Linux"
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/master/scripts/install-linux.sh | sh -s -- --version ${VERSION}"
+            echo '```'
+            echo
+            echo "It puts the app and its logo in your applications menu; run it again to update, or add \`--uninstall\` to remove it. Windows and Android: use the files below."
             echo
             if [ -n "$previous" ]; then
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous}...v${VERSION}"
