@@ -119,7 +119,7 @@ async fn pair_with_qr_token() {
 async fn wrong_code_is_counted_and_refused() {
     let (app, port) = start().await;
     app.start_pairing();
-    let (mut ws, mut s) = connect(port, &phone("x"), HelloMode::PairCode, code_psk("AAAA-AAAA"), &app.keys.public).await.unwrap();
+    let (mut ws, mut s) = connect(port, &phone("x"), HelloMode::PairCode, code_psk("AAAA-AAAA-AAAA"), &app.keys.public).await.unwrap();
     assert!(next_event(&mut ws, &mut s).await.is_none());
     assert_eq!(app.pairing.lock().unwrap().as_ref().unwrap().failures, 1);
     assert!(app.store.device("x").unwrap().is_none());

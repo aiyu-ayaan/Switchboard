@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn wrong_code_fails_first_frame() {
-        let (mut c, mut h) = pair(code_psk("AB3D-9KQ2"), code_psk("ab3d9kq3"), false);
+        let (mut c, mut h) = pair(code_psk("AB3D-9KQ2-7XMH"), code_psk("ab3d9kq27xmj"), false);
         assert_eq!(h.open(&c.seal(b"x").unwrap()), Err(CryptoError::BadFrame));
     }
 

@@ -18,11 +18,11 @@ pub struct Pairing {
 
 impl Pairing {
     pub fn new() -> Self {
-        let raw = random_bytes::<8>();
+        let raw = random_bytes::<12>();
         let chars: String = raw.iter().map(|b| ALPHABET[*b as usize % ALPHABET.len()] as char).collect();
         Self {
             token: random_bytes(),
-            code: format!("{}-{}", &chars[..4], &chars[4..]),
+            code: format!("{}-{}-{}", &chars[..4], &chars[4..8], &chars[8..]),
             expires: Instant::now() + TTL,
             failures: 0,
         }
@@ -44,8 +44,8 @@ mod tests {
     #[test]
     fn code_shape() {
         let p = Pairing::new();
-        assert_eq!(p.code.len(), 9);
-        assert_eq!(&p.code[4..5], "-");
+        assert_eq!(p.code.len(), 14);
+        assert_eq!((&p.code[4..5], &p.code[9..10]), ("-", "-"));
         assert!(p.code.chars().filter(|c| *c != '-').all(|c| ALPHABET.contains(&(c as u8))));
         assert!(p.live());
     }
