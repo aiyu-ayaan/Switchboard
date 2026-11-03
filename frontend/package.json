@@ -69,6 +69,7 @@
       "buildResources": "build"
     },
     "linux": {
+      "maintainer": "aiyu-ayaan <aiyu-ayaan@users.noreply.github.com>",
       "target": [
         "AppImage",
         "deb"
