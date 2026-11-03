@@ -35,7 +35,10 @@ fun parsePairUri(raw: String): PairOffer? {
 }
 
 /** Typed codes use the desktop's alphabet; case and dashes do not matter. */
+/** Characters in a typed code; the desktop shows them as three groups of four. */
+const val CODE_LENGTH = 12
+
 const val CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 fun normaliseCode(input: String): String =
-    input.uppercase().filter { it in CODE_ALPHABET }.take(8)
+    input.uppercase().filter { it in CODE_ALPHABET }.take(CODE_LENGTH)

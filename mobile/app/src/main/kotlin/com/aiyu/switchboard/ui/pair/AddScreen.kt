@@ -66,7 +66,7 @@ fun AddScreen(vm: AppViewModel, onBack: () -> Unit, onScan: () -> Unit, onCode: 
     ) { pad ->
         Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Option(Icons.Rounded.QrCodeScanner, MaterialShapes.Cookie9Sided, cs.primaryContainer, cs.onPrimaryContainer, "Scan QR code", "Fastest. Point the camera at the computer's screen.", onScan, big = true)
-            Option(Icons.Rounded.Keyboard, MaterialShapes.Cookie6Sided, cs.tertiaryContainer, cs.onTertiaryContainer, "Enter code", "Type the 8-character code shown on the computer.", onCode)
+            Option(Icons.Rounded.Keyboard, MaterialShapes.Cookie6Sided, cs.tertiaryContainer, cs.onTertiaryContainer, "Enter code", "Type the 12-character code shown on the computer.", onCode)
 
             Row(Modifier.padding(top = 20.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("On this network", style = MaterialTheme.typography.titleMediumEmphasized, modifier = Modifier.weight(1f))

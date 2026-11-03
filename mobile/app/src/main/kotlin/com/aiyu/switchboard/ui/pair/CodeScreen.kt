@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiyu.switchboard.AppViewModel
 import com.aiyu.switchboard.BuildConfig
+import com.aiyu.switchboard.data.CODE_LENGTH
 import com.aiyu.switchboard.data.PairSecret
 import com.aiyu.switchboard.data.fingerprint
 import com.aiyu.switchboard.data.normaliseCode
@@ -86,7 +87,7 @@ fun CodeScreen(vm: AppViewModel, onBack: () -> Unit, onPairing: () -> Unit) {
 
     val submit = {
         val t = target
-        if (t != null && code.length == 8) {
+        if (t != null && code.length == CODE_LENGTH) {
             vm.pair(t, PairSecret.Code(code))
             vm.codeTarget.value = null
             onPairing()
@@ -156,24 +157,27 @@ fun CodeScreen(vm: AppViewModel, onBack: () -> Unit, onPairing: () -> Unit) {
                 keyboardActions = KeyboardActions(onDone = { submit() }),
                 modifier = Modifier.focusRequester(focus).semantics { contentDescription = "Pairing code" },
                 decorationBox = {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        for (i in 0 until 8) {
-                            if (i == 4) Text("–", style = MaterialTheme.typography.headlineSmall, color = cs.outline)
-                            val active = i == code.length
-                            val border by animateColorAsState(if (active) cs.primary else cs.outlineVariant, label = "box")
-                            Box(
-                                Modifier.weight(1f).height(60.dp)
-                                    .border(if (active) 2.dp else 1.dp, border, RoundedCornerShape(14.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(code.getOrNull(i)?.toString() ?: "", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, color = cs.onSurface)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (row in 0 until CODE_LENGTH / 4) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                for (i in row * 4 until row * 4 + 4) {
+                                    val active = i == code.length
+                                    val border by animateColorAsState(if (active) cs.primary else cs.outlineVariant, label = "box")
+                                    Box(
+                                        Modifier.weight(1f).height(60.dp)
+                                            .border(if (active) 2.dp else 1.dp, border, RoundedCornerShape(14.dp)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(code.getOrNull(i)?.toString() ?: "", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, color = cs.onSurface)
+                                    }
+                                }
                             }
                         }
                     }
                 },
             )
             Spacer(Modifier.height(32.dp))
-            Button(onClick = submit, enabled = target != null && code.length == 8, modifier = Modifier.fillMaxWidth().height(60.dp)) {
+            Button(onClick = submit, enabled = target != null && code.length == CODE_LENGTH, modifier = Modifier.fillMaxWidth().height(60.dp)) {
                 Text("Pair", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(Modifier.height(24.dp))

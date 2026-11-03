@@ -41,6 +41,9 @@ class WireTest {
         assertEquals("AB3D9KQ2", normaliseCode("ab3d-9kq2"))
         // 0, O, 1, I and L are not in the alphabet.
         assertEquals("AB", normaliseCode("a0O1ILb"))
+        // Twelve characters, grouped or not; extra input is cut off.
+        assertEquals("AB3D9KQ27XMH", normaliseCode("ab3d-9kq2-7xmh"))
+        assertEquals("AB3D9KQ27XMH", normaliseCode("AB3D9KQ27XMHZZZ"))
     }
 
     @Test fun decodesEvents() {
