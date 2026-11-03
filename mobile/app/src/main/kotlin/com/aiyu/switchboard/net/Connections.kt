@@ -172,7 +172,7 @@ class Connections(context: Context, val vault: Vault) {
     suspend fun probe(address: String, defaultPort: Int): PairTarget? = withContext(Dispatchers.IO) {
         val (host, port) = splitAddr(address, defaultPort)
         runCatching {
-            sharedHttp.newCall(Request.Builder().url("http://$host:$port/info").build()).execute().use { r ->
+            sharedHttp.newCall(Request.Builder().url("https://$host:$port/info").build()).execute().use { r ->
                 val o = Json.parseToJsonElement(r.body!!.string()).jsonObject
                 PairTarget(o["id"]!!.jsonPrimitive.content, o["name"]!!.jsonPrimitive.content, o["pk"]!!.jsonPrimitive.content, listOf(host), port)
             }

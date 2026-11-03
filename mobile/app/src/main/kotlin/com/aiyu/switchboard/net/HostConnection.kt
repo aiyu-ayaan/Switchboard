@@ -1,5 +1,6 @@
 package com.aiyu.switchboard.net
 
+import android.annotation.SuppressLint
 import com.aiyu.switchboard.core.NativeCore
 import com.aiyu.switchboard.data.B64
 import com.aiyu.switchboard.data.Identity
@@ -24,9 +25,13 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import javax.net.ssl.SSLContext
+import javax.net.ssl.X509TrustManager
 
 sealed interface Link {
     data object Connecting : Link
@@ -36,7 +41,26 @@ sealed interface Link {
     data class Refused(val reason: String) : Link
 }
 
+/**
+ * The desktop's TLS certificate is self-signed and made fresh at every start,
+ * so there is nothing to check it against. TLS only hides the plaintext hello
+ * from network observers; the end-to-end handshake with pinned keys is what
+ * authenticates the desktop. Never use this client for anything else.
+ */
+@SuppressLint("CustomX509TrustManager", "TrustAllX509TrustManager", "BadHostnameVerifier")
+private val acceptAnyCertificate = object : X509TrustManager {
+    override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+}
+
+@SuppressLint("BadHostnameVerifier")
 val sharedHttp: OkHttpClient = OkHttpClient.Builder()
+    .sslSocketFactory(
+        SSLContext.getInstance("TLS").apply { init(null, arrayOf(acceptAnyCertificate), SecureRandom()) }.socketFactory,
+        acceptAnyCertificate,
+    )
+    .hostnameVerifier { _, _ -> true }
     .connectTimeout(3, TimeUnit.SECONDS)
     .readTimeout(0, TimeUnit.SECONDS)
     // The desktop drops a phone after 40 s of silence.
@@ -128,7 +152,7 @@ class HostConnection(
         val done = CompletableDeferred<Attempt>()
         val (bare, port) = splitAddr(addr, target.port)
         val host = if (bare.contains(':')) "[$bare]" else bare
-        val req = Request.Builder().url("ws://$host:$port/ws").build()
+        val req = Request.Builder().url("wss://$host:$port/ws").build()
         val eph = NativeCore.keypair()
         val staticSk = B64.decode(identity.secretKey)!!
         val staticPk = NativeCore.publicKey(staticSk)!!

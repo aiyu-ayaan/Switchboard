@@ -9,7 +9,7 @@ import kotlinx.serialization.json.put
 
 // Mirrors core/src/protocol.rs. Keep the two in step.
 
-const val PROTOCOL_VERSION = 1
+const val PROTOCOL_VERSION = 2
 
 /** Bytes per file chunk before base64; core/src/protocol.rs FILE_CHUNK. */
 const val FILE_CHUNK = 192 * 1024
