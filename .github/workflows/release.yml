@@ -449,9 +449,10 @@ jobs:
         run: |
           set -eu
 
-          # --match 'v*', because the only tags that bound a release are ours.
+          # The newest release tag, not the nearest ancestor: this history was
+          # rebuilt after v1.2.0, so `git describe` would reach back to v1.1.7.
           # Absent on the very first release, where the range is all of history.
-          previous="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          previous="$(git tag --list 'v*' --sort=-creatordate | head -n 1)"
           if [ -n "$previous" ]; then
             echo "Collecting commits since $previous"
           else
