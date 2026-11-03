@@ -96,8 +96,28 @@ else
     }' | sort | tail -n 1)"
   [ -n "$newest" ] || die "no Linux build found for ${VERSION:-the $CHANNEL channel}. Try --channel alpha, or see the releases page."
   label="$(printf '%s' "$newest" | cut -d' ' -f2)"
+  url="$(printf '%s' "$newest" | cut -d' ' -f3)"
   echo "Downloading Switchboard $label..."
-  fetch_to "$(printf '%s' "$newest" | cut -d' ' -f3)" "$APP.part" || die "the download failed. Nothing was changed."
+  fetch_to "$url" "$APP.part" || die "the download failed. Nothing was changed."
+
+  # SHA256SUMS sits next to the AppImage in the release. It catches a corrupt or swapped
+  # download; whoever can replace the release can replace it too, so it is not a signature.
+  sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"
+    elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1"
+    else return 1
+    fi | cut -d' ' -f1
+  }
+  asset="${url##*/}"
+  if sums="$(fetch "${url%/*}/SHA256SUMS" 2>/dev/null)"; then
+    want="$(printf '%s\n' "$sums" | awk -v f="$asset" '$2 == f || $2 == "*" f { print $1; exit }')"
+    [ -n "$want" ] || die "SHA256SUMS does not list $asset. Nothing was changed."
+    got="$(sha256 "$APP.part")" || die "sha256sum or shasum is needed to check the download."
+    [ "$got" = "$want" ] || die "the download does not match SHA256SUMS. Nothing was changed."
+    echo "Checksum OK."
+  else
+    echo "warning: this release has no SHA256SUMS, so the download was not checked." >&2
+  fi
 fi
 
 # An error page saved under the right name must not become the app.
