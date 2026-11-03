@@ -41,8 +41,8 @@
     "dev:electron": "SWITCHBOARD_DEV=1 SWITCHBOARD_PROFILE=dev electron . --no-sandbox",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "package:linux": "electron-builder --linux",
-    "package:win": "electron-builder --win"
+    "package:linux": "electron-builder --linux --publish never",
+    "package:win": "electron-builder --win --publish never"
   },
   "build": {
     "appId": "com.switchboard.desktop",
