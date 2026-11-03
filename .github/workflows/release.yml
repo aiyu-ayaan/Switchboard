@@ -474,7 +474,7 @@ jobs:
             echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/master/scripts/install-linux.sh | sh -s -- --version ${VERSION}"
             echo '```'
             echo
-            echo "It puts the app and its logo in your applications menu; run it again to update, or add \`--uninstall\` to remove it. Windows and Android: use the files below."
+            echo "It checks the download against \`SHA256SUMS\`, puts the app and its logo in your applications menu, and updates when run again (\`--uninstall\` removes it). Windows and Android: use the files below; \`sha256sum -c SHA256SUMS\` checks them."
             echo
             if [ -n "$previous" ]; then
               echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous}...v${VERSION}"
@@ -483,6 +483,16 @@ jobs:
 
           cat "$RUNNER_TEMP/notes.md"
           echo "path=$RUNNER_TEMP/notes.md" >> "$GITHUB_OUTPUT"
+
+      # One line per file: `sha256sum -c SHA256SUMS` checks a download, and the
+      # install script reads it. Part of the Release, so it is made last, from
+      # exactly the files that will be uploaded.
+      - name: Checksums
+        working-directory: artifacts
+        run: |
+          set -eu
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
 
       # The version in the manifests is what the next release bumps from, so it
       # has to land on master. Pre-release suffixes included: `plan` reads them
