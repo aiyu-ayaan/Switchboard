@@ -1,6 +1,6 @@
 {
   "name": "switchboard",
-  "version": "2.0.0-alpha.0",
+  "version": "2.0.0-alpha.1",
   "packageManager": "pnpm@12.4.2",
   "private": true,
   "description": "Cross-platform system control and file transfer via mobile device",
@@ -11,6 +11,12 @@
     "test:backend": "cargo test --workspace",
     "android:build": "cd mobile && ./gradlew assembleDebug"
   },
-  "keywords": ["switchboard", "remote-control", "electron", "android", "rust"],
+  "keywords": [
+    "switchboard",
+    "remote-control",
+    "electron",
+    "android",
+    "rust"
+  ],
   "license": "MIT"
 }
