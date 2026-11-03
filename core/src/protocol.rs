@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 pub const DEFAULT_PORT: u16 = 9427;
 pub const MDNS_SERVICE: &str = "_switchboard._tcp.local.";
 

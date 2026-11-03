@@ -15,6 +15,7 @@ use switchboard_core::crypto::{HandshakeKeys, KeyPair, Role, Session, to_array, 
 use switchboard_core::protocol::{ClientHello, Command, Event, HelloMode, PROTOCOL_VERSION, RejectReason, Request, ServerHello};
 use switchboard_core::{b64, unb64};
 use tokio::sync::mpsc;
+use tower::Service;
 use tokio::time::timeout;
 use x25519_dalek::PublicKey;
 
@@ -29,9 +30,35 @@ pub fn router(app: Arc<App>) -> Router {
     Router::new().route("/ws", get(ws)).route("/info", get(info)).with_state(app)
 }
 
+/// Serves `wss://` and `https://` on one port. Plain connections are not
+/// accepted: the phone always dials TLS first, so a network observer sees
+/// only a TLS handshake, never the hello.
 pub async fn serve(app: Arc<App>, listener: tokio::net::TcpListener) -> Result<()> {
-    axum::serve(listener, router(app).into_make_service_with_connect_info::<SocketAddr>()).await?;
-    Ok(())
+    let tls = crate::tls::acceptor()?;
+    let router = router(app);
+    loop {
+        let (tcp, peer) = match listener.accept().await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("accept: {e}");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        };
+        let tls = tls.clone();
+        let router = router.clone().layer(axum::Extension(ConnectInfo(peer)));
+        tokio::spawn(async move {
+            let Ok(Ok(stream)) = timeout(HANDSHAKE_TIMEOUT, tls.accept(tcp)).await else { return };
+            let svc = hyper::service::service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                let mut router = router.clone();
+                async move { router.call(req).await }
+            });
+            let conn = hyper::server::conn::http1::Builder::new().serve_connection(hyper_util::rt::TokioIo::new(stream), svc).with_upgrades();
+            if let Err(e) = conn.await {
+                tracing::debug!("{peer}: {e}");
+            }
+        });
+    }
 }
 
 /// Unauthenticated probe: lets a phone confirm an address is this desktop

@@ -16,6 +16,7 @@ mod pairing;
 mod server;
 mod store;
 mod system;
+mod tls;
 #[cfg(test)]
 mod e2e_tests;
 

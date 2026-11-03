@@ -35,7 +35,8 @@ async fn start() -> (Arc<App>, u16) {
 
 /// Returns the open session, or the server's reject reason.
 async fn connect(port: u16, phone: &Phone, mode: HelloMode, psk: [u8; 32], host_pk: &PublicKey) -> Result<(Ws, Session), String> {
-    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}/ws")).await.unwrap();
+    let tls = tokio_tungstenite::Connector::Rustls(crate::tls::trust_all_client());
+    let (mut ws, _) = tokio_tungstenite::connect_async_tls_with_config(format!("wss://127.0.0.1:{port}/ws"), None, false, Some(tls)).await.unwrap();
     let eph = KeyPair::generate();
     let ch = serde_json::to_string(&ClientHello {
         v: PROTOCOL_VERSION,
