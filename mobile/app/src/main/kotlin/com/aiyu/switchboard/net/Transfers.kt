@@ -12,6 +12,7 @@ import android.webkit.MimeTypeMap
 import com.aiyu.switchboard.data.B64
 import com.aiyu.switchboard.data.Vault
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +46,10 @@ data class Transfer(
     val fraction get() = if (total <= 0) 1f else (done.toFloat() / total).coerceIn(0f, 1f)
     val busy get() = state == State.Queued || state == State.Running || state == State.Paused
 }
+
+/** What the computer answers while its user has not yet accepted the file. */
+private const val WAITING = "waiting for approval"
+private const val APPROVAL_WAIT = 125_000L
 
 /** The connection dropped or never answered: worth waiting for, not a refusal. */
 fun Event.Result.lost() = !ok && (error == "Not connected" || error == "Disconnected" || error?.endsWith("didn't answer") == true)
@@ -119,6 +124,7 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
 
     private suspend fun sendFile(conn: HostConnection, xfer: String, uri: Uri, name: String, size: Long, progress: (Long) -> Unit) {
         var misses = 0
+        val askedAt = System.currentTimeMillis()
         while (true) {
             giveUpAfter(misses)
             if (!awaitOnlineIfNeeded(conn, xfer)) error("Not connected to the computer")
@@ -128,7 +134,15 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
                 misses++
                 continue
             }
+            // The computer asks its user first; keep asking, for as long as it keeps the request open.
+            if (start.error?.contains(WAITING) == true) {
+                if (System.currentTimeMillis() - askedAt > APPROVAL_WAIT) error("Not accepted on the computer in time")
+                change(xfer) { it.copy(state = Transfer.State.Paused) }
+                delay(1_000)
+                continue
+            }
             step(start)
+            change(xfer) { if (it.state == Transfer.State.Paused) it.copy(state = Transfer.State.Running) else it }
             var sent = start.data?.toLongOrNull() ?: 0L
             val input = context.contentResolver.openInputStream(uri) ?: error("Can't open this file")
             val dropped = input.use {
@@ -220,6 +234,7 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
     /** Pulls a file the desktop offered into the chosen folder, or Downloads/Switchboard. */
     fun download(conn: HostConnection, hostId: String, offer: Event.FileOffer) {
         conn.dismissOffer(offer.xfer)
+        OfferNotifier.cancel(context, offer.xfer)
         // The same offer can arrive again after a reconnect; one transfer per offer.
         if (_items.value.any { it.id == offer.xfer && it.busy }) return
         scope.launch {
@@ -234,7 +249,6 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
                     if (!awaitOnlineIfNeeded(conn, offer.xfer)) error("Not connected to the computer")
                     val r = conn.send(Cmd.fileRead(offer.xfer, offset, FILE_CHUNK))
                     if (r.lost()) {
-        OfferNotifier.cancel(context, offer.xfer)
                         misses++
                         continue
                     }
@@ -259,6 +273,7 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
     /** Turns the offer down; the desktop is told so it can stop waiting. */
     fun decline(conn: HostConnection, offer: Event.FileOffer) {
         conn.dismissOffer(offer.xfer)
+        OfferNotifier.cancel(context, offer.xfer)
         conn.post(Cmd.fileCancel(offer.xfer))
     }
 
@@ -273,7 +288,6 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
     }
 
     private fun step(r: Event.Result) {
-        OfferNotifier.cancel(context, offer.xfer)
         if (!r.ok) error(r.error ?: "The computer refused")
     }
 
