@@ -81,21 +81,27 @@ fun ScanScreen(onBack: () -> Unit, onCode: () -> Unit, onFound: (PairOffer) -> U
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     var wrong by remember { mutableStateOf(false) }
+    var cameraFailed by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        if (granted) {
-            Camera(onCode = { raw ->
+        if (granted && !cameraFailed) {
+            Camera(onFailed = { cameraFailed = true }, onCode = { raw ->
                 val offer = parsePairUri(raw)
                 if (offer != null) onFound(offer) else wrong = true
                 offer != null
             })
             Viewfinder()
+        } else if (granted) {
+            Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Camera unavailable", style = MaterialTheme.typography.headlineMediumEmphasized, color = MaterialTheme.colorScheme.onSurface)
+                Text("This device has no usable camera. Enter the code from your computer instead.", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
         } else {
             Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 val cs = MaterialTheme.colorScheme
                 ShapeIcon(Icons.Rounded.PhotoCamera, MaterialShapes.Cookie9Sided, cs.primaryContainer, cs.onPrimaryContainer, size = 120.dp, iconSize = 48.dp)
                 Spacer(Modifier.height(24.dp))
-                Text("Camera access", style = MaterialTheme.typography.headlineMediumEmphasized)
+                Text("Camera access", style = MaterialTheme.typography.headlineMediumEmphasized, color = cs.onSurface)
                 Text("Switchboard uses the camera only to read the pairing code on your computer's screen.", textAlign = TextAlign.Center, color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = { ask.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
@@ -144,7 +150,7 @@ private fun Viewfinder() {
 /** CameraX preview plus ML Kit; [onCode] returns true to stop scanning. */
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @Composable
-private fun Camera(onCode: (String) -> Boolean) {
+private fun Camera(onFailed: () -> Unit, onCode: (String) -> Boolean) {
     val ctx = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
@@ -162,7 +168,7 @@ private fun Camera(onCode: (String) -> Boolean) {
             val view = PreviewView(c).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
             val future = ProcessCameraProvider.getInstance(c)
             future.addListener({
-                val provider = future.get()
+                val provider = try { future.get() } catch (_: Exception) { onFailed(); return@addListener }
                 val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
                 val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                 analysis.setAnalyzer(executor) { proxy ->
@@ -180,8 +186,13 @@ private fun Camera(onCode: (String) -> Boolean) {
                         }
                         .addOnCompleteListener { proxy.close() }
                 }
-                provider.unbindAll()
-                provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                // Emulators, tablets and Chromebooks may have no back camera.
+                val lens = listOf(CameraSelector.DEFAULT_BACK_CAMERA, CameraSelector.DEFAULT_FRONT_CAMERA).firstOrNull { provider.hasCamera(it) }
+                if (lens == null) { onFailed(); return@addListener }
+                try {
+                    provider.unbindAll()
+                    provider.bindToLifecycle(owner, lens, preview, analysis)
+                } catch (_: Exception) { onFailed() }
             }, ContextCompat.getMainExecutor(c))
             view
         },
