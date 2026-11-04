@@ -19,6 +19,10 @@ export interface Status {
   fingerprint: string
   /** Whether phones may use this computer's keyboard and mouse. */
   remote_input: boolean
+  /** Whether files phones send are saved without asking. */
+  auto_accept_files: boolean
+  /** Files phones want to send and are waiting for an answer on. */
+  requests: { xfer: string; device: string; name: string; size: number }[]
   pairing: { uri: string; code: string; expires_at: number } | null
   devices: DeviceView[]
 }

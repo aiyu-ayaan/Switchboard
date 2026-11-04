@@ -97,6 +97,7 @@ const daemon = {
   status: null,
   fatal: null,
   restarts: 0,
+  asked: new Set(),
 
   start() {
     const bin = daemonPath()
@@ -137,6 +138,15 @@ const daemon = {
       return msg.ok ? p.resolve(msg.data) : p.reject(new Error(msg.error))
     }
     if (msg.event === 'status' || msg.event === 'ready') {
+      // A phone wants to send a file and is waiting for a yes: say so even when the window is hidden.
+      const waiting = (msg.data.requests || []).filter((r) => !this.asked.has(r.xfer))
+      this.asked = new Set((msg.data.requests || []).map((r) => r.xfer))
+      if (waiting.length && Notification.isSupported()) {
+        const first = waiting[0]
+        const n = new Notification({ title: `${first.device} wants to send a file`, body: waiting.length > 1 ? `${first.name} and ${waiting.length - 1} more` : first.name, icon: iconPath() })
+        n.on('click', () => show('/files'))
+        n.show()
+      }
       this.status = msg.data
       this.restarts = 0
       renderTray()
@@ -270,7 +280,7 @@ function quit() {
 // --- IPC --------------------------------------------------------------------
 
 const trusted = (e) => e.senderFrame && win && e.sender === win.webContents
-const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'rename', 'state', 'run', 'history', 'set_remote_input'])
+const ALLOWED = new Set(['status', 'pair_start', 'pair_cancel', 'forget', 'rename', 'state', 'run', 'history', 'set_remote_input', 'approve', 'set_auto_accept'])
 
 ipcMain.handle('sb:call', (e, cmd, args) => {
   if (!trusted(e) || !ALLOWED.has(cmd)) throw new Error('not allowed')

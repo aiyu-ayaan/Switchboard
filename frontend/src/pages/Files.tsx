@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, File, FolderOpen, Files as FilesIcon, PaperPlaneTilt, X } from '@phosphor-icons/react'
-import { Button, Card, Meter, SectionTitle, ShapeIcon, useToast } from '@/components/ui'
+import { ArrowDown, ArrowUp, Check, File, FolderOpen, Files as FilesIcon, PaperPlaneTilt, X } from '@phosphor-icons/react'
+import { Button, Card, Meter, SectionTitle, ShapeIcon, Switch, useToast } from '@/components/ui'
 import { bytes, sb, timeAgo, useEvent, useHistory, useTransfers, type Status } from '@/lib/bridge'
 
 const verb = { done: '', cancelled: 'cancelled', declined: 'declined' } as const
@@ -23,9 +23,58 @@ export function Files({ status }: { status: Status | null }) {
   const online = (status?.devices ?? []).filter((d) => d.online)
   const report = (n: number, phone: string) => n && toast(`Asked ${phone} to take ${n === 1 ? 'a file' : `${n} items`}`)
   const fail = (e: Error) => toast(e.message)
+  const requests = status?.requests ?? []
+  const answer = (xfer: string | undefined, accept: boolean) => sb.call('approve', { xfer, accept }).catch(fail)
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
+      {requests.length > 0 && (
+        <Card className="rise flex flex-col gap-3 bg-primary-container p-5 text-on-primary-container">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="min-w-0 flex-1 font-medium">
+              {requests.length === 1 ? 'A phone wants to send you a file' : `${requests.length} files are waiting for you`}
+            </p>
+            {requests.length > 1 && (
+              <>
+                <Button size="sm" icon={<Check size={16} />} onClick={() => answer(undefined, true)}>
+                  Accept all
+                </Button>
+                <Button variant="text" size="sm" icon={<X size={16} />} onClick={() => answer(undefined, false)}>
+                  Decline all
+                </Button>
+              </>
+            )}
+          </div>
+          {requests.slice(0, 5).map((r) => (
+            <div key={r.xfer} className="flex flex-wrap items-center gap-2 rounded-2xl bg-surface/60 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{r.name}</p>
+                <p className="text-caption">
+                  from {r.device} · {bytes(r.size)}
+                </p>
+              </div>
+              <Button size="sm" icon={<Check size={16} />} onClick={() => answer(r.xfer, true)}>
+                Accept
+              </Button>
+              <Button variant="text" size="sm" icon={<X size={16} />} onClick={() => answer(r.xfer, false)}>
+                Decline
+              </Button>
+            </div>
+          ))}
+          {requests.length > 5 && <p className="text-caption">and {requests.length - 5} more</p>}
+        </Card>
+      )}
+
+      <Card className="rise flex items-center gap-3 p-5">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">Accept files from phones automatically</p>
+          <p className="text-caption text-muted">
+            {status?.auto_accept_files === false ? 'You are asked before each file is saved.' : "Files are saved to Downloads/Switchboard without asking."}
+          </p>
+        </div>
+        <Switch label="Accept files from phones automatically" checked={status?.auto_accept_files !== false} disabled={!status} onChange={(on) => sb.call('set_auto_accept', { on }).catch(fail)} />
+      </Card>
+
       <Card className="rise flex flex-col gap-4 p-6">
         <div className="flex items-center gap-3">
           <ShapeIcon icon={<FilesIcon size={22} weight="fill" />} shape="clover" tone="tertiary" size={44} />
