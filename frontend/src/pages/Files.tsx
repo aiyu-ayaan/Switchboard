@@ -1,18 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ArrowDown, ArrowUp, Check, File, FolderOpen, Files as FilesIcon, PaperPlaneTilt, X } from '@phosphor-icons/react'
 import { Button, Card, Meter, SectionTitle, ShapeIcon, Switch, useToast } from '@/components/ui'
-import { bytes, sb, timeAgo, useEvent, useHistory, useTransfers, type Status } from '@/lib/bridge'
+import { bytes, sb, timeAgo, useHistory, useTransfers, type Status } from '@/lib/bridge'
 
 const verb = { done: '', cancelled: 'cancelled', declined: 'declined' } as const
 
-export function Files({ status }: { status: Status | null }) {
+export function Files({ status, dropped, setDropped }: { status: Status | null; dropped: number; setDropped: (n: number) => void }) {
   const toast = useToast()
   const { events, active } = useTransfers()
   const history = useHistory(events.length)
-  const [dropped, setDropped] = useState(0)
-  useEvent((event, data) => {
-    if (event === 'files_dropped') setDropped((data as { count: number }).count)
-  })
   // A drop only lasts a couple of minutes; stop offering it after that.
   useEffect(() => {
     if (!dropped) return
@@ -23,6 +19,16 @@ export function Files({ status }: { status: Status | null }) {
   const online = (status?.devices ?? []).filter((d) => d.online)
   const report = (n: number, phone: string) => n && toast(`Asked ${phone} to take ${n === 1 ? 'a file' : `${n} items`}`)
   const fail = (e: Error) => toast(e.message)
+  // With one phone connected there is nothing to choose: send the drop straight to it.
+  const only = online.length === 1 ? online[0] : null
+  useEffect(() => {
+    if (dropped > 0 && only) {
+      setDropped(0)
+      sb.sendDropped(only.id).then((n) => report(n, only.name), fail)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dropped, only?.id])
+
   const requests = status?.requests ?? []
   const answer = (xfer: string | undefined, accept: boolean) => sb.call('approve', { xfer, accept }).catch(fail)
 
