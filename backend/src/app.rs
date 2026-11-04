@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -48,6 +48,10 @@ pub struct App {
     offers: Mutex<HashMap<String, Offer>>,
     /// Half-finished uploads waiting for their phone to reconnect.
     pub parked: files::ParkedMap,
+    /// Take files phones send without asking.
+    pub auto_accept: AtomicBool,
+    /// Uploads a phone has announced that the person at this computer has not answered yet.
+    asks: Mutex<HashMap<(String, String), files::Ask>>,
     next_conn: AtomicU64,
     pub state: watch::Sender<Arc<HostState>>,
     /// Ask the poller for a fresh snapshot now (after a command, a connect).
@@ -78,6 +82,7 @@ impl App {
             None => sysinfo::System::host_name().unwrap_or_else(|| "My computer".into()),
         };
         files::sweep(&inbox);
+        let auto_accept = store.auto_accept_files()?;
         let system = System::default();
         system.remote_input.store(store.remote_input()?, std::sync::atomic::Ordering::Relaxed);
         let os = sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.into());
@@ -94,6 +99,8 @@ impl App {
             inbox,
             offers: Mutex::new(HashMap::new()),
             parked: Default::default(),
+            auto_accept: AtomicBool::new(auto_accept),
+            asks: Mutex::new(HashMap::new()),
             next_conn: AtomicU64::new(1),
             state: watch::channel(Arc::new(HostState::default())).0,
             poke: Notify::new(),
@@ -126,6 +133,64 @@ impl App {
         Ok(())
     }
 
+    pub fn set_auto_accept(&self, on: bool) -> anyhow::Result<()> {
+        self.store.set_auto_accept_files(on)?;
+        self.auto_accept.store(on, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Lets an announced upload start, asks the person the first time, and says
+    /// "waiting" until they answer. The phone keeps asking until then.
+    pub fn gate_upload(&self, device_id: &str, xfer: &str, name: &str, size: u64) -> anyhow::Result<()> {
+        if self.auto_accept.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let key = (device_id.to_owned(), xfer.to_owned());
+        let mut asks = self.asks.lock().unwrap();
+        asks.retain(|_, a| a.at.elapsed() < files::ASK_FOR);
+        let decision = match asks.get(&key) {
+            None => {
+                asks.insert(key, files::Ask { name: name.to_owned(), size, at: Instant::now(), accepted: None });
+                drop(asks);
+                self.emit_status();
+                anyhow::bail!("{}", files::WAITING);
+            }
+            Some(a) => a.accepted,
+        };
+        match decision {
+            None => anyhow::bail!("{}", files::WAITING),
+            Some(accepted) => {
+                asks.remove(&key);
+                drop(asks);
+                self.emit_status();
+                anyhow::ensure!(accepted, "declined on the computer");
+                Ok(())
+            }
+        }
+    }
+
+    /// Answers one waiting upload, or all of them when `xfer` is `None`. Returns how many.
+    pub fn answer_uploads(&self, xfer: Option<&str>, accept: bool) -> usize {
+        let mut n = 0;
+        for ((_, x), a) in self.asks.lock().unwrap().iter_mut() {
+            if a.accepted.is_none() && xfer.is_none_or(|w| w == x) {
+                a.accepted = Some(accept);
+                n += 1;
+            }
+        }
+        self.emit_status();
+        n
+    }
+
+    /// The phone gave up before an answer.
+    pub fn withdraw_upload(&self, device_id: &str, xfer: &str) -> bool {
+        let gone = self.asks.lock().unwrap().remove(&(device_id.to_owned(), xfer.to_owned())).is_some();
+        if gone {
+            self.emit_status();
+        }
+        gone
+    }
+
     pub fn rename(&self, name: &str) -> anyhow::Result<()> {
         let name = name.trim();
         anyhow::ensure!(!name.is_empty() && name.len() <= 64, "name must be 1-64 characters");
@@ -152,6 +217,7 @@ impl App {
         }
         // A forgotten phone leaves nothing waiting for it.
         self.offers.lock().unwrap().retain(|_, o| o.device_id != device_id);
+        self.asks.lock().unwrap().retain(|(d, _), _| d != device_id);
         self.parked.lock().unwrap().retain(|(owner, _), p| {
             let keep = owner != device_id;
             if !keep {
@@ -249,6 +315,14 @@ impl App {
                 "expires_at": expires_at.duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
             })
         });
+        let requests: Vec<_> = {
+            let names: HashMap<String, String> = self.store.devices().unwrap_or_default().into_iter().map(|d| (d.id, d.name)).collect();
+            let mut asks = self.asks.lock().unwrap();
+            asks.retain(|_, a| a.at.elapsed() < files::ASK_FOR);
+            let mut v: Vec<_> = asks.iter().filter(|(_, a)| a.accepted.is_none()).map(|((d, x), a)| (a.at, json!({ "xfer": x, "device": names.get(d).cloned().unwrap_or_default(), "name": a.name, "size": a.size }))).collect();
+            v.sort_by_key(|(at, _)| *at);
+            v.into_iter().map(|(_, j)| j).collect()
+        };
         json!({
             "host_id": self.host_id,
             "name": self.name(),
@@ -256,6 +330,8 @@ impl App {
             "port": self.port,
             "addresses": lan_addresses(),
             "fingerprint": fingerprint(self.keys.public.as_bytes()),
+            "auto_accept_files": self.auto_accept.load(Ordering::Relaxed),
+            "requests": requests,
             "remote_input": self.system.remote_input.load(std::sync::atomic::Ordering::Relaxed),
             "pairing": pairing,
             "devices": devices,

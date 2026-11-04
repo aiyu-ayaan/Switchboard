@@ -231,6 +231,15 @@ impl Store {
         self.set_meta("remote_input", if on { b"1" } else { b"0" })
     }
 
+    /// Whether files phones send are taken without asking. On unless the person at the computer turned it off.
+    pub fn auto_accept_files(&self) -> Result<bool> {
+        Ok(self.meta("auto_accept_files")?.is_none_or(|v| v == b"1"))
+    }
+
+    pub fn set_auto_accept_files(&self, on: bool) -> Result<()> {
+        self.set_meta("auto_accept_files", if on { b"1" } else { b"0" })
+    }
+
     pub fn host_name(&self) -> Result<Option<String>> {
         Ok(self.meta("host_name")?.and_then(|b| String::from_utf8(b).ok()))
     }

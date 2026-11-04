@@ -33,6 +33,10 @@ const WINDOWS_RESERVED: [&str; 12] = ["CON", "PRN", "AUX", "NUL", "COM1", "COM2"
 const PARK_FOR: Duration = Duration::from_secs(24 * 3600);
 /// How long an offer waits to be taken.
 pub const OFFER_FOR: Duration = Duration::from_secs(3600);
+/// How long a phone's upload waits for the person at this computer to answer.
+pub const ASK_FOR: Duration = Duration::from_secs(120);
+/// The error a phone sees while it waits; it asks again until it gets an answer.
+pub const WAITING: &str = "waiting for approval on the computer";
 /// Progress events no faster than this, per transfer.
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
 
@@ -127,6 +131,14 @@ fn reap(parked: &ParkedMap) {
         }
         keep
     });
+}
+
+/// An upload a phone announced and the person has not answered yet.
+pub struct Ask {
+    pub name: String,
+    pub size: u64,
+    pub at: Instant,
+    pub accepted: Option<bool>,
 }
 
 pub struct Received {
@@ -325,7 +337,14 @@ pub async fn handle(app: &App, device_id: &str, uploads: &mut Uploads, cmd: &Com
         let _ = app.store.add_transfer(&who(), name, size, dir, status);
     };
     match cmd {
-        Command::FileSend { xfer, name, size } => Ok(Some(uploads.start(xfer, name, *size).await?.to_string())),
+        Command::FileSend { xfer, name, size } => {
+            // A parked upload was approved when it began; resuming it asks nothing new.
+            let resuming = app.parked.lock().unwrap().contains_key(&(device_id.to_owned(), xfer.clone()));
+            if !resuming && !uploads.has(xfer) {
+                app.gate_upload(device_id, xfer, name, *size)?;
+            }
+            Ok(Some(uploads.start(xfer, name, *size).await?.to_string()))
+        }
         Command::FileChunk { xfer, offset, data } => {
             uploads.chunk(xfer, *offset, data).await?;
             if let Some((name, done, total)) = uploads.progress(xfer) {
@@ -347,6 +366,9 @@ pub async fn handle(app: &App, device_id: &str, uploads: &mut Uploads, cmd: &Com
             Ok(None)
         }
         Command::FileCancel { xfer } => {
+            if app.withdraw_upload(device_id, xfer) {
+                return Ok(None);
+            }
             if let Some(name) = uploads.cancel(xfer) {
                 record(&name, 0, "in", "cancelled");
                 app.emit("file_cancelled", json!({ "device": who(), "xfer": xfer, "name": name }));

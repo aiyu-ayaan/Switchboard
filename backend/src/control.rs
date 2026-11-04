@@ -39,6 +39,10 @@ enum Cmd {
     /// Offer files and folders (picked in the desktop's own dialog) to a
     /// connected phone. A folder is zipped first.
     SendFiles { device: String, paths: Vec<String> },
+    /// Answer files phones are waiting to send: one, or all when `xfer` is absent.
+    Approve { xfer: Option<String>, accept: bool },
+    /// Take files phones send without asking.
+    SetAutoAccept { on: bool },
     /// Recent transfers, newest first.
     History,
     /// The folder phones' uploads are saved to.
@@ -67,6 +71,12 @@ async fn handle(app: &Arc<App>, cmd: Cmd) -> anyhow::Result<Value> {
         }
         Cmd::SetRemoteInput { on } => {
             app.set_remote_input(on)?;
+            app.emit_status();
+            Value::Null
+        }
+        Cmd::Approve { xfer, accept } => json!({ "answered": app.answer_uploads(xfer.as_deref(), accept) }),
+        Cmd::SetAutoAccept { on } => {
+            app.set_auto_accept(on)?;
             app.emit_status();
             Value::Null
         }

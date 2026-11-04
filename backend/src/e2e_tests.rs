@@ -364,3 +364,42 @@ async fn upload_and_offer_survive_a_dropped_connection() {
     assert_eq!(unb64(&rest.unwrap()).unwrap(), &data[100..150]);
     let _ = offered_again; // the offer may arrive before or after the result; reading it above proves it is still there
 }
+
+#[tokio::test]
+async fn uploads_wait_for_approval_when_auto_accept_is_off() {
+    let inbox = scratch("approve");
+    let (app, port, _ui) = start_with_inbox(inbox.clone()).await;
+    assert!(app.auto_accept.load(std::sync::atomic::Ordering::Relaxed), "on by default");
+    app.set_auto_accept(false).unwrap();
+    assert!(!app.store.auto_accept_files().unwrap(), "the choice is saved");
+    let (mut ws, mut s) = paired(&app, port, "ask").await;
+    let send = |x: &str| Command::FileSend { xfer: x.into(), name: format!("{x}.bin"), size: 1 };
+
+    // The phone is told to wait, the desktop sees the request, and asking again changes nothing.
+    let (ok, err, _) = ask(&mut ws, &mut s, 101, send("a")).await;
+    assert!(!ok && err.as_deref().is_some_and(|e| e.contains(crate::files::WAITING)));
+    ask(&mut ws, &mut s, 102, send("b")).await;
+    let (ok, err, _) = ask(&mut ws, &mut s, 103, send("a")).await;
+    assert!(!ok && err.as_deref().is_some_and(|e| e.contains(crate::files::WAITING)));
+    assert_eq!(app.status()["requests"].as_array().unwrap().len(), 2);
+
+    // Approved: the next ask starts the upload. Declined: it is refused once, then asks anew.
+    assert_eq!(app.answer_uploads(Some("a"), true), 1);
+    let (ok, _, offset) = ask(&mut ws, &mut s, 104, send("a")).await;
+    assert!(ok && offset.as_deref() == Some("0"));
+    assert_eq!(app.answer_uploads(None, false), 1, "decline all");
+    let (ok, err, _) = ask(&mut ws, &mut s, 105, send("b")).await;
+    assert!(!ok && err.as_deref().is_some_and(|e| e.contains("declined")));
+    assert!(app.status()["requests"].as_array().unwrap().is_empty());
+
+    // A phone that gives up withdraws its request.
+    ask(&mut ws, &mut s, 106, send("c")).await;
+    assert_eq!(app.status()["requests"].as_array().unwrap().len(), 1);
+    let (ok, ..) = ask(&mut ws, &mut s, 107, Command::FileCancel { xfer: "c".into() }).await;
+    assert!(ok && app.status()["requests"].as_array().unwrap().is_empty());
+
+    // Auto-accept back on: no questions.
+    app.set_auto_accept(true).unwrap();
+    let (ok, ..) = ask(&mut ws, &mut s, 108, send("d")).await;
+    assert!(ok);
+}
