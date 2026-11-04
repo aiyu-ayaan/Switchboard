@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -25,6 +26,7 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -112,6 +114,7 @@ fun FilesContent(conn: HostConnection, transfers: Transfers, hostId: String, vau
     }
     val all by transfers.items.collectAsStateWithLifecycle()
     val mine = all.filter { it.hostId == hostId }
+    AutoAcceptCard(vault)
     SaveFolderCard(vault)
     SectionCard {
         PodHeader(Icons.Rounded.Upload, "Send to the computer", "Saved in its Downloads/Switchboard folder", shape = MaterialShapes.Cookie6Sided)
@@ -139,6 +142,21 @@ fun TransfersCard(transfers: Transfers, hostId: String) {
             trailing = { if (mine.any { it.state != Transfer.State.Running }) TextButton(onClick = transfers::clearFinished) { Text("Clear") } },
         )
         mine.forEach { t -> TransferRow(t) }
+    }
+}
+
+/** Whether files the computer offers are saved at once or wait for a tap on the notification. */
+@Composable
+private fun AutoAcceptCard(vault: Vault) {
+    val data by vault.data.collectAsStateWithLifecycle()
+    SectionCard {
+        PodHeader(
+            Icons.Rounded.TaskAlt,
+            "Accept files automatically",
+            if (data.autoAccept) "Saved without asking" else "You get a notification to save or decline",
+            shape = MaterialShapes.Cookie9Sided,
+            trailing = { Switch(checked = data.autoAccept, onCheckedChange = { on -> vault.update { it.copy(autoAccept = on) } }) },
+        )
     }
 }
 

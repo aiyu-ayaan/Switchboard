@@ -33,6 +33,8 @@ data class VaultData(
     val theme: String = "system",
     /** Tree URI of the folder received files go to; null means Downloads/Switchboard. */
     val saveFolder: String? = null,
+    /** Take files the computer offers without asking. */
+    val autoAccept: Boolean = false,
 )
 
 object B64 {

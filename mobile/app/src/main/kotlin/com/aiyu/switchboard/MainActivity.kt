@@ -2,7 +2,10 @@ package com.aiyu.switchboard
 
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.animation.PathInterpolator
@@ -45,6 +48,10 @@ class MainActivity : ComponentActivity() {
             }
         }
         enableEdgeToEdge()
+        // Incoming-file and transfer notifications need this on Android 13+; ask once, up front.
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         handle(intent)
         setContent { SwitchboardApp(vm, deepLink) }
     }

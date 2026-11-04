@@ -234,6 +234,7 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
                     if (!awaitOnlineIfNeeded(conn, offer.xfer)) error("Not connected to the computer")
                     val r = conn.send(Cmd.fileRead(offer.xfer, offset, FILE_CHUNK))
                     if (r.lost()) {
+        OfferNotifier.cancel(context, offer.xfer)
                         misses++
                         continue
                     }
@@ -272,6 +273,7 @@ class Transfers(private val context: Context, private val scope: CoroutineScope,
     }
 
     private fun step(r: Event.Result) {
+        OfferNotifier.cancel(context, offer.xfer)
         if (!r.ok) error(r.error ?: "The computer refused")
     }
 

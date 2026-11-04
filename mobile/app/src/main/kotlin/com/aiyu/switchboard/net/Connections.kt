@@ -33,6 +33,7 @@ sealed interface PairState {
  * once the desktop has accepted.
  */
 class Connections(context: Context, val vault: Vault) {
+    private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val discovery = Discovery(context)
     val transfers = Transfers(context.applicationContext, scope, vault)
@@ -71,7 +72,19 @@ class Connections(context: Context, val vault: Vault) {
             deviceName,
             scope,
             onWelcome = { name, os, macs -> rename(h.id, name, os, macs) },
+            onOffer = { offered(h.id, it) },
         )
+    }
+
+    /** A computer offered a file: take it if the user said to, otherwise ask with a notification. */
+    private fun offered(hostId: String, offer: Event.FileOffer) {
+        val conn = conns[hostId] ?: return
+        if (vault.data.value.autoAccept) {
+            transfers.download(conn, hostId, offer)
+        } else {
+            val name = vault.data.value.hosts.find { it.id == hostId }?.name ?: conn.target.name
+            OfferNotifier.post(appContext, hostId, name, offer)
+        }
     }
 
     private fun publish() {
@@ -149,6 +162,7 @@ class Connections(context: Context, val vault: Vault) {
                 publish()
                 out.value = PairState.Done(host)
             },
+            onOffer = { offered(target.id, it) },
         )
         scope.launch {
             conn.start()

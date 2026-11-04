@@ -80,6 +80,7 @@ class HostConnection(
     private var pairing: PairSecret? = null,
     private val onWelcome: (hostName: String, os: String, macs: List<String>) -> Unit = { _, _, _ -> },
     private val onRevoked: () -> Unit = {},
+    private val onOffer: (Event.FileOffer) -> Unit = {},
 ) {
     @Volatile var target: PairTarget = target
         private set
@@ -224,7 +225,13 @@ class HostConnection(
                     }
                     is Event.Result -> pending.remove(ev.id)?.complete(ev)
                     is Event.State -> _state.value = ev
-                    is Event.FileOffer -> _offers.value = (_offers.value + ev).takeLast(10)
+                    is Event.FileOffer -> {
+                        // The desktop re-sends open offers after a reconnect; show each once.
+                        if (_offers.value.none { it.xfer == ev.xfer }) {
+                            _offers.value = (_offers.value + ev).takeLast(10)
+                            onOffer(ev)
+                        }
+                    }
                     Event.Revoked -> {
                         _link.value = Link.Refused("${target.name} forgot this phone")
                         onRevoked()

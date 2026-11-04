@@ -46,6 +46,10 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".net.OfferReceiver"
+            android:exported="false" />
+
         <service
             android:name=".net.TransferService"
             android:exported="false"
