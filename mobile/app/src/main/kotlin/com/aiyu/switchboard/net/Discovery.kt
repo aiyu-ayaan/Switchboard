@@ -59,7 +59,8 @@ class Discovery(context: Context) {
                     val attr = i.attributes.mapValues { (_, v) -> v?.decodeToString().orEmpty() }
                     val id = attr["id"].orEmpty()
                     val pk = attr["pk"].orEmpty()
-                    val addrs = if (Build.VERSION.SDK_INT >= 34) i.hostAddresses.mapNotNull { it.hostAddress } else listOfNotNull(i.host?.hostAddress)
+                    val addrs = (if (Build.VERSION.SDK_INT >= 34) i.hostAddresses.mapNotNull { it.hostAddress } else listOfNotNull(i.host?.hostAddress))
+                        .filter(::urlSafeAddr)
                     if (id.isNotEmpty() && pk.isNotEmpty() && addrs.isNotEmpty()) {
                         val t = PairTarget(id, attr["name"].orEmpty().ifEmpty { i.serviceName }, pk, addrs.sortedBy { ':' in it }, i.port)
                         _found.update { it + (id to t) }

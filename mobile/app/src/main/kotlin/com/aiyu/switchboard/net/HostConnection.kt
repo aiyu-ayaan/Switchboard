@@ -153,7 +153,8 @@ class HostConnection(
         val done = CompletableDeferred<Attempt>()
         val (bare, port) = splitAddr(addr, target.port)
         val host = if (bare.contains(':')) "[$bare]" else bare
-        val req = Request.Builder().url("wss://$host:$port/ws").build()
+        // Hosts saved before link-local filtering may still hold a zoned address; skip it.
+        val req = runCatching { Request.Builder().url("wss://$host:$port/ws").build() }.getOrNull() ?: return Attempt.Failed
         val eph = NativeCore.keypair()
         val staticSk = B64.decode(identity.secretKey)!!
         val staticPk = NativeCore.publicKey(staticSk)!!

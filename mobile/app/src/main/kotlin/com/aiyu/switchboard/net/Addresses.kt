@@ -23,3 +23,9 @@ fun validRemoteAddr(addr: String): Boolean {
     val (host, port) = splitAddr(addr, 1)
     return host.isNotBlank() && host.length <= 253 && port in 1..65535 && host.all { it.isLetterOrDigit() || it in ".-:_" }
 }
+
+/**
+ * Whether an address can go in a URL. Link-local IPv6 from discovery carries a zone
+ * (`fe80::1%wlan0`), which OkHttp rejects, and it would not route without one.
+ */
+fun urlSafeAddr(addr: String): Boolean = '%' !in addr

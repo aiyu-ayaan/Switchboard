@@ -9,6 +9,7 @@ import com.aiyu.switchboard.net.ServerHello
 import com.aiyu.switchboard.net.lost
 import com.aiyu.switchboard.net.magicPacket
 import com.aiyu.switchboard.net.splitAddr
+import com.aiyu.switchboard.net.urlSafeAddr
 import com.aiyu.switchboard.net.validRemoteAddr
 import com.aiyu.switchboard.net.wakeTargets
 import com.aiyu.switchboard.net.WireJson
@@ -125,5 +126,11 @@ class WireTest {
 
     @Test fun commandShape() {
         assertEquals("""{"type":"set_brightness","display":"ddc:i2c-8","level":100}""", Cmd.setBrightness("ddc:i2c-8", 140).toString())
+    }
+
+    @Test fun dropsZonedLinkLocal() {
+        assertTrue(urlSafeAddr("192.168.1.15"))
+        assertTrue(urlSafeAddr("fd7a:115c:a1e0::1"))
+        assertTrue(!urlSafeAddr("fe80::8237:a76f:d154:e254%wlan0"))
     }
 }
