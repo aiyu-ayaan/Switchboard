@@ -314,6 +314,8 @@ jobs:
             for (const p of ['package.json', 'frontend/package.json']) {
               const j = JSON.parse(fs.readFileSync(p, 'utf8'));
               j.version = '$core';
+              // The app reads this to show, and update from, the real release.
+              j.releaseVersion = '$VERSION';
               fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
             }
           "
