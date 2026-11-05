@@ -1,7 +1,7 @@
-// The version a release build carries comes from CI; a local build keeps the
-// checked-in default so `assembleDebug` needs no environment at all.
+// The version a release build carries comes from CI; a local build takes the
+// root package.json's, which the release workflow bumps with every release.
 val releaseVersionName: String = System.getenv("SWITCHBOARD_VERSION_NAME")?.takeIf { it.isNotBlank() }
-    ?: "0.0.0"
+    ?: (groovy.json.JsonSlurper().parse(rootProject.file("../package.json")) as Map<*, *>)["version"] as String
 
 // Derived from the name so a rebuild of a version yields the same code and every
 // later version a higher one. The pre-release counter is part of it: Play refuses
