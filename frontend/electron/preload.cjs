@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('switchboard', {
   snapshot: () => ipcRenderer.invoke('sb:snapshot'),
   settings: () => ipcRenderer.invoke('app:settings'),
   set: (key, value) => ipcRenderer.invoke('app:set', key, value),
+  updateInfo: () => ipcRenderer.invoke('update:info'),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  skipUpdate: () => ipcRenderer.invoke('update:skip'),
+  setUpdateChannel: (channel) => ipcRenderer.invoke('update:set_channel', channel),
   onEvent: (fn) => {
     const h = (_e, msg) => fn(msg)
     ipcRenderer.on('sb:event', h)

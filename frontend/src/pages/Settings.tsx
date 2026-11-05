@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Cursor, Desktop, Fingerprint, Info, Moon, Power, Sun, SunHorizon, TrayArrowDown } from '@phosphor-icons/react'
 import { Button, Card, Chip, SectionTitle, Segmented, ShapeIcon, Switch, TextField, useToast } from '@/components/ui'
+import { UpdatesCard } from '@/components/Updates'
 import { sb, useSettings, type Status } from '@/lib/bridge'
 
 function Row({ icon, title, text, children }: { icon: ReactNode; title: string; text: ReactNode; children: ReactNode }) {
@@ -118,8 +119,11 @@ export function Settings({ status }: { status: Status | null }) {
         </Row>
       </Card>
 
+      <SectionTitle>Updates</SectionTitle>
+      <UpdatesCard style={{ ['--i' as string]: 5 }} />
+
       <SectionTitle>About</SectionTitle>
-      <Card className="rise p-5" style={{ ['--i' as string]: 5 }}>
+      <Card className="rise p-5" style={{ ['--i' as string]: 6 }}>
         <div className="flex items-center gap-4">
           <img src="./favicon.svg" alt="" className="h-12 w-12" />
           <div className="flex-1">
