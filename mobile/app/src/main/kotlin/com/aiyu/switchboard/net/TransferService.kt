@@ -25,7 +25,11 @@ class TransferService : Service() {
         val text = intent?.getStringExtra(TEXT) ?: "Moving files"
         val percent = intent?.getIntExtra(PERCENT, -1) ?: -1
         val n = notification(this, text, percent)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(ID, n)
+        // The app may have left the screen between asking and now; Android 12+ then refuses
+        // and the throw would kill the app. The transfer carries on without the notification.
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(ID, n)
+        }.onFailure { stopSelf() }
         return START_NOT_STICKY
     }
 
