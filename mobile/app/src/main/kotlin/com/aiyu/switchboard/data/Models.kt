@@ -35,6 +35,10 @@ data class VaultData(
     val saveFolder: String? = null,
     /** Take files the computer offers without asking. */
     val autoAccept: Boolean = false,
+    /** Update channel name (Alpha, Beta, Stable); null follows the installed build. */
+    val updateChannel: String? = null,
+    /** The version "Later" was chosen for at start; it is not offered again. */
+    val skippedUpdate: String? = null,
 )
 
 object B64 {

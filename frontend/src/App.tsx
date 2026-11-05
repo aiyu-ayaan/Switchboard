@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { UploadSimple, WarningCircle } from '@phosphor-icons/react'
 import { Shell, type Route } from '@/components/Shell'
 import { Card, ShapeIcon, Toaster } from '@/components/ui'
+import { UpdatePrompt } from '@/components/Updates'
 import { sb, useEvent, useSettings, useStatus } from '@/lib/bridge'
 import { Devices } from '@/pages/Devices'
 import { Files } from '@/pages/Files'
@@ -86,6 +87,7 @@ export function App() {
           <Home status={status} go={go} />
         )}
       </Shell>
+      <UpdatePrompt />
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-primary/15 p-6 backdrop-blur-sm" role="status">
           <div className="flex items-center gap-3 rounded-3xl border-2 border-dashed border-primary bg-surface px-8 py-6 text-primary shadow-lg">

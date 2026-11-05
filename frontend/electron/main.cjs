@@ -7,10 +7,16 @@ const fs = require('node:fs')
 const os = require('node:os')
 const readline = require('node:readline')
 const { spawn } = require('node:child_process')
+const { Readable } = require('node:stream')
+const { pipeline } = require('node:stream/promises')
+const updates = require('./updates.cjs')
 
 const isDev = !!process.env.SWITCHBOARD_DEV
 const flavor = process.env.SWITCHBOARD_PROFILE === 'dev' ? 'dev' : 'prod'
 if (flavor === 'dev') app.setName('Switchboard Dev')
+// The installer's own version drops a pre-release suffix (NSIS takes numbers only);
+// the release workflow keeps the full one here.
+const version = require('../package.json').releaseVersion || app.getVersion()
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -328,7 +334,7 @@ ipcMain.handle('app:settings', (e) =>
         autostart: autostartEnabled(),
         closeToTray: settings.closeToTray,
         theme: settings.theme,
-        version: app.getVersion(),
+        version,
         platform: process.platform,
         flavor,
         tray: !!tray,
@@ -345,6 +351,115 @@ ipcMain.handle('app:set', (e, key, value) => {
   } else return
   writeSettings()
 })
+
+// --- Updates ------------------------------------------------------------------
+// GitHub releases on a channel (alpha / beta / stable). An AppImage replaces its
+// own file and restarts; a .deb or Windows installer is downloaded and opened.
+
+let offer = null // the last check's answer; install takes it from here, never from the page
+const updateChannel = () => (settings.channel in updates.STAGE ? settings.channel : updates.channelOf(version))
+// A dev build or an unpackaged run updates by rebuilding it.
+const canUpdate = () => app.isPackaged && !isDev && flavor === 'prod' && !!updates.versionKey(version)
+
+async function checkForUpdate() {
+  if (!canUpdate()) return (offer = null)
+  const res = await fetch(updates.RELEASES, { headers: { Accept: 'application/vnd.github+json' } })
+  if (!res.ok) throw new Error(`GitHub answered ${res.status}`)
+  // What this install can take: its own AppImage, else the installer for the platform.
+  const suffix = process.env.APPIMAGE ? '.AppImage' : process.platform === 'win32' ? '.exe' : '.deb'
+  offer = updates.pick(await res.json(), version, updateChannel(), suffix)
+  return offer
+}
+
+/** Download progress for the page and the taskbar: 0..1, null once it is over. */
+function report(fraction) {
+  if (!win || win.isDestroyed()) return
+  win.setProgressBar(fraction ?? -1)
+  broadcast('update_progress', fraction)
+}
+
+let installing = false
+/** Returns why it failed, or '' (the app restarts, or the installer was opened from Downloads). */
+async function installUpdate() {
+  if (!offer) return 'No update to install'
+  if (installing) return ''
+  installing = true
+  const appImage = process.env.APPIMAGE
+  const target = appImage ?? path.join(app.getPath('downloads'), path.basename(new URL(offer.url).pathname))
+  const part = `${target}.part`
+  try {
+    report(0)
+    const res = await fetch(offer.url)
+    if (!res.ok) throw new Error(`The download answered ${res.status}`)
+    // shortcut: without a Content-Length the bar stays at 0; GitHub's release assets always send one.
+    const total = Number(res.headers.get('content-length')) || 0
+    let done = 0
+    let shown = 0
+    await pipeline(
+      Readable.fromWeb(res.body),
+      async function* (chunks) {
+        for await (const chunk of chunks) {
+          done += chunk.length
+          const percent = total ? Math.floor((done * 100) / total) : 0
+          if (percent !== shown) report((shown = percent) / 100)
+          yield chunk
+        }
+      },
+      fs.createWriteStream(part, { mode: appImage ? 0o755 : 0o644 }),
+    )
+    if (appImage) {
+      // An error page saved under the right name must not become the app.
+      const head = Buffer.alloc(4)
+      const fd = fs.openSync(part, 'r')
+      fs.readSync(fd, head, 0, 4, 0)
+      fs.closeSync(fd)
+      if (head.toString('latin1') !== '\x7fELF') throw new Error('The download is not an AppImage')
+    }
+    // A rename within one directory: a failure before it leaves the old build in place.
+    fs.renameSync(part, target)
+  } catch (error) {
+    fs.rmSync(part, { force: true })
+    return `The update failed: ${error.message}`
+  } finally {
+    installing = false
+    report(null)
+  }
+  if (appImage) {
+    app.relaunch({ execPath: target })
+    quit()
+  } else if (await shell.openPath(target)) {
+    // Nothing on this computer opens the installer: show where it is.
+    shell.showItemInFolder(target)
+  }
+  return ''
+}
+
+ipcMain.handle('update:info', (e) => (trusted(e) ? { version, channel: updateChannel(), canUpdate: canUpdate(), selfInstall: !!process.env.APPIMAGE, skipped: settings.skipped ?? null, offer: offer && offer.version !== settings.skipped ? offer : null } : null))
+ipcMain.handle('update:check', (e) => (trusted(e) ? checkForUpdate() : null))
+ipcMain.handle('update:install', (e) => (trusted(e) ? installUpdate() : ''))
+// "Later" on the offer at start is remembered for that version.
+ipcMain.handle('update:skip', (e) => {
+  if (!trusted(e) || !offer) return
+  settings.skipped = offer.version
+  writeSettings()
+})
+ipcMain.handle('update:set_channel', (e, channel) => {
+  if (!trusted(e) || !(channel in updates.STAGE)) return
+  settings.channel = channel
+  writeSettings()
+})
+
+/** At start: tell the page (and, when it is hidden in the tray, the desktop) about a newer release. */
+async function offerUpdateAtStart() {
+  const found = await checkForUpdate().catch(() => null)
+  if (!found || found.version === settings.skipped) return
+  broadcast('update_available', found)
+  if ((!win || !win.isVisible()) && Notification.isSupported()) {
+    const n = new Notification({ title: 'Switchboard update', body: `Version ${found.version} is ready to install.`, icon: iconPath() })
+    n.on('click', () => show('/settings'))
+    n.show()
+  }
+}
 
 // --- Lifecycle --------------------------------------------------------------
 
@@ -363,4 +478,6 @@ app.whenReady().then(() => {
   daemon.start()
   createTray()
   createWindow()
+  // Give the page time to load so it can hear the offer.
+  setTimeout(offerUpdateAtStart, 8000)
 })

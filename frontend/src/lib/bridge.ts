@@ -88,6 +88,23 @@ export interface AppSettings {
   tray: boolean
 }
 
+export type UpdateChannel = 'alpha' | 'beta' | 'stable'
+export interface UpdateOffer {
+  version: string
+  url: string
+}
+export interface UpdateInfo {
+  version: string
+  channel: UpdateChannel
+  /** False for a dev or unpackaged build: those update by rebuilding. */
+  canUpdate: boolean
+  /** An AppImage replaces itself and restarts; other installs open the downloaded installer. */
+  selfInstall: boolean
+  skipped: string | null
+  /** What the check at start found, unless it was put off with Later. */
+  offer: UpdateOffer | null
+}
+
 interface Bridge {
   call<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T>
   /** Opens a file or folder dialog, then offers the choice to that phone. Resolves to how many were offered (0 if cancelled). */
@@ -99,6 +116,12 @@ interface Bridge {
   snapshot(): Promise<{ status: Status | null; fatal: string | null; running: boolean }>
   settings(): Promise<AppSettings>
   set(key: string, value: unknown): Promise<void>
+  updateInfo(): Promise<UpdateInfo>
+  checkUpdate(): Promise<UpdateOffer | null>
+  /** Resolves to why it failed, or '' (the app restarts, or the installer opens). */
+  installUpdate(): Promise<string>
+  skipUpdate(): Promise<void>
+  setUpdateChannel(channel: UpdateChannel): Promise<void>
   onEvent(fn: (m: { event: string; data: unknown }) => void): () => void
   onNavigate(fn: (route: string) => void): () => void
 }
@@ -293,4 +316,11 @@ export function clock(ms: number) {
   const m = Math.floor((s % 3600) / 60)
   const sec = String(s % 60).padStart(2, '0')
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+/** Download progress of an update: 0..1 while it runs, null otherwise. */
+export function useUpdateProgress() {
+  const [progress, setProgress] = useState<number | null>(null)
+  useEffect(() => sb.onEvent(({ event, data }) => event === 'update_progress' && setProgress(data as number | null)), [])
+  return progress
 }

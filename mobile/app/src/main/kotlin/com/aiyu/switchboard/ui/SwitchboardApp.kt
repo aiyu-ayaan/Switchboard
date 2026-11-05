@@ -26,6 +26,7 @@ import com.aiyu.switchboard.ui.pair.CodeScreen
 import com.aiyu.switchboard.ui.pair.PairingScreen
 import com.aiyu.switchboard.ui.pair.ScanScreen
 import com.aiyu.switchboard.ui.settings.SettingsScreen
+import com.aiyu.switchboard.ui.settings.UpdatePrompt
 import com.aiyu.switchboard.ui.theme.SwitchboardTheme
 import com.aiyu.switchboard.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -127,5 +128,6 @@ fun SwitchboardApp(vm: AppViewModel, deepLink: MutableStateFlow<String?>) {
                 SettingsScreen(vm, onBack = { nav.popBackStack() })
             }
         }
+        UpdatePrompt(vm.vault)
     }
 }
