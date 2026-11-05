@@ -97,6 +97,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
             SettingRow(icon = Icons.Rounded.PhoneAndroid, shape = MaterialShapes.Cookie6Sided, title = "This phone", text = vm.connections.deviceName) {}
             SettingRow(icon = Icons.Rounded.Security, shape = MaterialShapes.Clover4Leaf, title = "End-to-end encrypted", text = "X25519 key exchange, ChaCha20-Poly1305 frames. Keys stay in the Android Keystore-protected vault on this phone.") {}
+            UpdatesGroup(vm.vault)
             Text(
                 "Switchboard ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
