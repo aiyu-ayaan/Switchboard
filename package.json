@@ -1,6 +1,6 @@
 {
   "name": "switchboard",
-  "version": "2.0.0-alpha.2",
+  "version": "2.0.0-alpha.3",
   "packageManager": "pnpm@12.4.2",
   "private": true,
   "description": "Cross-platform system control and file transfer via mobile device",
