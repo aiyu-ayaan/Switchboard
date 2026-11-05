@@ -19,7 +19,7 @@ import org.junit.Test
 
 class WireTest {
     // A real URI from the dev daemon (backend/src/app.rs pair_uri).
-    private val uri = "switchboard://pair?v=1&id=bQh_hqE5LDkDn940&n=Ayaan%27s%20PC&k=moMjmEH45-WJGkOxpEb0_WfMbeF1XkTsRJh6MMkZ6TM" +
+    private val uri = "switchboard://pair?v=2&id=bQh_hqE5LDkDn940&n=Ayaan%27s%20PC&k=moMjmEH45-WJGkOxpEb0_WfMbeF1XkTsRJh6MMkZ6TM" +
         "&t=nhlShUARwvxmHq5p0QaMJSyBxhtOo0w-sXW4ZE0UcUg&a=172.16.0.2,192.168.1.15&p=9428"
 
     @Test fun parsesPairUri() {
@@ -33,7 +33,7 @@ class WireTest {
 
     @Test fun rejectsOtherUris() {
         assertNull(parsePairUri("https://example.com"))
-        assertNull(parsePairUri(uri.replace("v=1", "v=2")))
+        assertNull(parsePairUri(uri.replace("v=2", "v=1")))
         assertNull(parsePairUri(uri.replace("&t=nhlShUARwvxmHq5p0QaMJSyBxhtOo0w-sXW4ZE0UcUg", "")))
     }
 
