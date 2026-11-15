@@ -15,6 +15,10 @@ use switchboard_core::protocol::{Display, DisplayKind};
 
 pub const VCP_BRIGHTNESS: u8 = 0x10;
 pub const VCP_CONTRAST: u8 = 0x12;
+/// MCCS power mode: 1 is on, 4 is standby (the panel goes dark and wakes again over DDC).
+pub const VCP_POWER: u8 = 0xD6;
+const POWER_ON: u16 = 1;
+const POWER_STANDBY: u16 = 4;
 const RESCAN_EVERY: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
@@ -45,6 +49,11 @@ impl Displays {
             .await
             .unwrap_or_default();
             let mut c = self.cache.lock().unwrap();
+            // A monitor in standby often stops answering DDC and drops out of the
+            // scan. Keep it listed so the phone can still switch it back on.
+            let mut found = found;
+            let gone: Vec<Display> = c.list.iter().filter(|d| d.power == Some(false) && !found.iter().any(|f| f.id == d.id)).cloned().collect();
+            found.extend(gone);
             c.list = found;
             c.scanned = Some(Instant::now());
         }
@@ -98,6 +107,35 @@ impl Displays {
                 VCP_CONTRAST => d.contrast = Some(level),
                 _ => d.brightness = Some(level),
             }
+        }
+        Ok(())
+    }
+
+    /// Switch one external monitor on or off. Not coalesced: it is a one-off
+    /// command, not a slider stream.
+    pub async fn set_power(&self, id: &str, on: bool) -> Result<()> {
+        let kind = self
+            .cache
+            .lock()
+            .unwrap()
+            .list
+            .iter()
+            .find(|d| d.id == id)
+            .map(|d| d.kind)
+            .ok_or_else(|| anyhow!("unknown display {id}"))?;
+        if kind == DisplayKind::Internal {
+            return Err(anyhow!("the built-in display cannot be switched off on its own"));
+        }
+        let me = self.clone();
+        let key = id.to_owned();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let _bus = me.bus.lock().unwrap();
+            imp::ddc_power(&key, if on { POWER_ON } else { POWER_STANDBY })
+        })
+        .await??;
+        let mut c = self.cache.lock().unwrap();
+        if let Some(d) = c.list.iter_mut().find(|d| d.id == id) {
+            d.power = Some(on);
         }
         Ok(())
     }
@@ -190,6 +228,7 @@ mod imp {
                     name: "Built-in display".into(),
                     kind: DisplayKind::Internal,
                     contrast: None,
+                    power: None,
                 }
             })
             .collect();
@@ -210,7 +249,8 @@ mod imp {
             // bus has an EDID but no DDC and drops out here.
             let Some(brightness) = get_pct(&mut ddc, VCP_BRIGHTNESS) else { continue };
             let contrast = get_pct(&mut ddc, VCP_CONTRAST);
-            out.push(Display { id: format!("ddc:{bus}"), name, kind: DisplayKind::External, brightness: Some(brightness), contrast });
+            let power = ddc.get_vcp_feature(VCP_POWER).ok().map(|v| v.value() == POWER_ON);
+            out.push(Display { id: format!("ddc:{bus}"), name, kind: DisplayKind::External, brightness: Some(brightness), contrast, power });
         }
         out
     }
@@ -221,6 +261,11 @@ mod imp {
         let max = ddc.get_vcp_feature(vcp).map(|v| v.maximum()).unwrap_or(100).max(1);
         let raw = (max as u32 * level as u32 / 100) as u16;
         ddc.set_vcp_feature(vcp, raw).map_err(|e| anyhow!("DDC write failed: {e}"))
+    }
+
+    pub fn ddc_power(id: &str, mode: u16) -> Result<()> {
+        let bus = id.strip_prefix("ddc:").ok_or_else(|| anyhow!("not a DDC display"))?;
+        open(bus)?.set_vcp_feature(VCP_POWER, mode).map_err(|e| anyhow!("DDC write failed: {e}"))
     }
 }
 
@@ -283,7 +328,7 @@ mod imp {
     pub fn scan() -> Vec<Display> {
         let mut out = Vec::new();
         if let Some(b) = backlight_percent(INTERNAL) {
-            out.push(Display { id: INTERNAL.into(), name: "Built-in display".into(), kind: DisplayKind::Internal, brightness: Some(b), contrast: None });
+            out.push(Display { id: INTERNAL.into(), name: "Built-in display".into(), kind: DisplayKind::Internal, brightness: Some(b), contrast: None, power: None });
         }
         let Ok(mons) = ddc_winapi::Monitor::enumerate() else { return out };
         out.extend(mons.into_iter()
@@ -291,6 +336,7 @@ mod imp {
             .filter_map(|(i, mut m)| {
                 let b = m.get_vcp_feature(VCP_BRIGHTNESS).ok()?;
                 let c = m.get_vcp_feature(VCP_CONTRAST).ok();
+                let power = m.get_vcp_feature(VCP_POWER).ok().map(|v| v.value() == POWER_ON);
                 let desc = m.description();
                 Some(Display {
                     id: format!("ddc:{i}"),
@@ -298,6 +344,7 @@ mod imp {
                     kind: DisplayKind::External,
                     brightness: Some(percent(b.value() as u32, b.maximum() as u32)),
                     contrast: c.map(|c| percent(c.value() as u32, c.maximum() as u32)),
+                    power,
                 })
             }));
         out
@@ -309,6 +356,12 @@ mod imp {
         let max = m.get_vcp_feature(vcp).map(|v| v.maximum()).unwrap_or(100).max(1);
         m.set_vcp_feature(vcp, (max as u32 * level as u32 / 100) as u16).map_err(|e| anyhow!("DDC write failed: {e}"))
     }
+
+    pub fn ddc_power(id: &str, mode: u16) -> Result<()> {
+        let i: usize = id.strip_prefix("ddc:").and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad id"))?;
+        let mut m = ddc_winapi::Monitor::enumerate()?.into_iter().nth(i).ok_or_else(|| anyhow!("monitor gone"))?;
+        m.set_vcp_feature(VCP_POWER, mode).map_err(|e| anyhow!("DDC write failed: {e}"))
+    }
 }
 
 #[cfg(not(any(target_os = "linux", windows)))]
@@ -318,6 +371,7 @@ mod imp {
     pub async fn set_backlight(_: &str, _: u8) -> Result<()> { Err(anyhow!("unsupported")) }
     pub fn scan() -> Vec<Display> { vec![] }
     pub fn ddc_set(_: &str, _: u8, _: u8) -> Result<()> { Err(anyhow!("unsupported")) }
+    pub fn ddc_power(_: &str, _: u16) -> Result<()> { Err(anyhow!("unsupported")) }
 }
 
 #[cfg(test)]

@@ -27,6 +27,8 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.BrightnessMedium
@@ -39,6 +41,7 @@ import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -234,6 +237,10 @@ private fun DisplayCard(d: Display, conn: HostConnection) {
             Spacer(Modifier.width(12.dp))
             Text(d.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             MonoBadge(if (d.external) "DDC/CI" else "Internal", color = cs.surfaceContainerHighest, content = cs.onSurfaceVariant)
+            d.power?.let { on ->
+                Spacer(Modifier.width(8.dp))
+                Switch(checked = on, onCheckedChange = { conn.post(Cmd.setDisplayPower(d.id, it)) }, modifier = Modifier.semantics { contentDescription = "${d.name} power" })
+            }
         }
         Spacer(Modifier.height(14.dp))
         LevelRow(d.brightness, "${d.name} brightness", { conn.post(Cmd.setBrightness(d.id, it)) }, icon = Icons.Rounded.WbSunny)

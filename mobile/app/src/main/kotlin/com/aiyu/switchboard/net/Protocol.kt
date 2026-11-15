@@ -79,7 +79,7 @@ typealias HostState = Event.State
 @Serializable data class AudioApp(val id: String, val name: String, val detail: String = "", val level: Int, val muted: Boolean)
 
 @Serializable
-data class Display(val id: String, val name: String, val kind: String, val brightness: Int? = null, val contrast: Int? = null) {
+data class Display(val id: String, val name: String, val kind: String, val brightness: Int? = null, val contrast: Int? = null, val power: Boolean? = null) {
     val external get() = kind == "external"
 }
 
@@ -127,6 +127,7 @@ object Cmd {
     fun setAppMute(app: String, muted: Boolean) = obj("set_app_mute") { put("app", app); put("muted", muted) }
     fun setBrightness(display: String, level: Int) = obj("set_brightness") { put("display", display); put("level", level.coerceIn(0, 100)) }
     fun setContrast(display: String, level: Int) = obj("set_contrast") { put("display", display); put("level", level.coerceIn(0, 100)) }
+    fun setDisplayPower(display: String, on: Boolean) = obj("set_display_power") { put("display", display); put("on", on) }
     fun media(action: String) = obj("media") { put("action", action) }
     fun seek(positionMs: Long) = obj("seek") { put("position", positionMs.coerceAtLeast(0)) }
     fun setShuffle(on: Boolean) = obj("set_shuffle") { put("on", on) }

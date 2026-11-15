@@ -33,6 +33,8 @@ export interface Display {
   kind: 'internal' | 'external'
   brightness: number | null
   contrast: number | null
+  /** `null` when this display cannot be switched from here. */
+  power: boolean | null
 }
 
 export interface AudioOutput {
@@ -282,6 +284,7 @@ export type Control =
   | { type: 'set_app_mute'; app: string; muted: boolean }
   | { type: 'set_brightness'; display: string; level: number }
   | { type: 'set_contrast'; display: string; level: number }
+  | { type: 'set_display_power'; display: string; on: boolean }
   | { type: 'media'; action: 'play_pause' | 'next' | 'previous' }
   | { type: 'seek'; position: number }
   | { type: 'set_shuffle'; on: boolean }

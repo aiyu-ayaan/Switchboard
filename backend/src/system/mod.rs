@@ -107,6 +107,7 @@ impl System {
             }
             Command::SetBrightness { display, level } => self.displays.set(display, displays::VCP_BRIGHTNESS, *level).await,
             Command::SetContrast { display, level } => self.displays.set(display, displays::VCP_CONTRAST, *level).await,
+            Command::SetDisplayPower { display, on } => self.displays.set_power(display, *on).await,
             Command::Media { action } => media::control(selected(), *action).await,
             Command::Seek { position } => media::seek(selected(), *position).await,
             Command::SetShuffle { on } => media::set_shuffle(selected(), *on).await,

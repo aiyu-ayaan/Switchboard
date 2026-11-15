@@ -1,4 +1,4 @@
-import { ArrowRight, BatteryCharging, Repeat, RepeatOnce, Shuffle, FolderOpen, PaperPlaneTilt, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
+import { ArrowRight, BatteryCharging, Repeat, RepeatOnce, Shuffle, FolderOpen, PaperPlaneTilt, BatteryHigh, CircleHalf, Clock, Cpu, DeviceMobile, Fingerprint, Headphones, LockKey, Monitor, MusicNotes, Pause, Play, Power, QrCode, SkipBack, SkipForward, SpeakerHigh, SpeakerSlash, Sun } from '@phosphor-icons/react'
 import type { Route } from '@/components/Shell'
 import { Button, Ring, ShapeIcon, Slider, StatusDot, useToast } from '@/components/ui'
 import { bytes, clock, run, sb, timeAgo, useCover, useTransfers, useHostState, type Control, type Status } from '@/lib/bridge'
@@ -293,6 +293,16 @@ export function Home({ status, go }: { status: Status | null; go: (r: Route) => 
               <p className="truncate text-title font-medium">{d.name}</p>
               <p className="text-caption text-muted">{d.kind === 'internal' ? 'Built-in · backlight' : 'External · DDC/CI'}</p>
             </div>
+            {d.power !== null ? (
+              <Button
+                variant={d.power ? 'tonal' : 'text'}
+                size="sm"
+                aria-label={`${d.name} ${d.power ? 'turn off' : 'turn on'}`}
+                aria-pressed={d.power}
+                icon={<Power size={18} weight={d.power ? 'fill' : 'regular'} />}
+                onClick={() => act({ type: 'set_display_power', display: d.id, on: !d.power })}
+              />
+            ) : null}
             <span className="text-page font-semibold tabular">{d.brightness ?? '—'}</span>
           </div>
           <Slider label={`${d.name} brightness`} icon={<Sun size={20} />} value={d.brightness} onCommit={(level) => act({ type: 'set_brightness', display: d.id, level })} />

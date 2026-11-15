@@ -126,6 +126,7 @@ class WireTest {
 
     @Test fun commandShape() {
         assertEquals("""{"type":"set_brightness","display":"ddc:i2c-8","level":100}""", Cmd.setBrightness("ddc:i2c-8", 140).toString())
+        assertEquals("""{"type":"set_display_power","display":"ddc:i2c-8","on":false}""", Cmd.setDisplayPower("ddc:i2c-8", false).toString())
     }
 
     @Test fun dropsZonedLinkLocal() {

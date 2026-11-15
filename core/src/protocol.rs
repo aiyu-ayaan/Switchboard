@@ -72,6 +72,8 @@ pub enum Command {
     SetAppMute { app: String, muted: bool },
     SetBrightness { display: String, level: u8 },
     SetContrast { display: String, level: u8 },
+    /// Switch one monitor on or off (DDC/CI standby); the built-in panel cannot.
+    SetDisplayPower { display: String, on: bool },
     Media { action: MediaAction },
     /// Jump to a point in the current track, in milliseconds.
     Seek { position: u64 },
@@ -319,6 +321,9 @@ pub struct Display {
     pub kind: DisplayKind,
     pub brightness: Option<u8>,
     pub contrast: Option<u8>,
+    /// Whether the monitor is on; `None` when it cannot be switched from here.
+    #[serde(default)]
+    pub power: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -425,6 +430,15 @@ mod tests {
         assert_eq!(r.cmd, Command::Seek { position: 90000 });
         let m: Media = serde_json::from_str(r#"{"player":"x","title":"t","artist":"a","playing":true}"#).unwrap();
         assert_eq!((m.position, m.shuffle, m.can_seek), (None, None, false));
+    }
+
+    #[test]
+    fn display_power() {
+        let r: Request = serde_json::from_str(r#"{"id":1,"type":"set_display_power","display":"ddc:0","on":false}"#).unwrap();
+        assert_eq!(r.cmd, Command::SetDisplayPower { display: "ddc:0".into(), on: false });
+        // An older host sends no `power`; it reads as "cannot be switched".
+        let d: Display = serde_json::from_str(r#"{"id":"ddc:0","name":"M","kind":"external","brightness":5,"contrast":null}"#).unwrap();
+        assert_eq!(d.power, None);
     }
 
     #[test]
